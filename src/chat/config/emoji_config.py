@@ -40,12 +40,23 @@ _HALLOWEEN_GHOST_EMOJI_MAPPINGS = [
     (re.compile(r"\<呆\>"), ["<:dai:1430196922039402548>"]),
 ]
 
+# 万圣节 2025 - 吸血鬼派系
+_HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS = [
+    (re.compile(r"\<得意\>"), ["<:de_yi_x:1430506851946201120>"]),
+    (re.compile(r"\<害羞\>"), ["<:hai_xiu_x:1430506905792413828>"]),
+    (re.compile(r"\<生气\>"), ["<:sheng_qi_x:1430506963581534321>"]),
+    (re.compile(r"\<惊慌\>"), ["<:jing_huang:1430506696219820134>"]),
+    (re.compile(r"\<思考\>"), ["<:si_kao_x:1430506590800318515>"]),
+    (re.compile(r"\<无奈\>"), ["<:wu_nai:1430507004014755850>"]),
+    (re.compile(r"\<挑衅\>"), ["<:tiao_xing:1430506499184263228>"]),
+    (re.compile(r"\<坏笑\>"), ["<:huai_xiao:1430506761529593906>"]),
+]
+
 # --- 派系表情总配置 ---
 # 结构: { "event_id": { "faction_id": MAPPING_LIST } }
 FACTION_EMOJI_MAPPINGS = {
     "halloween_2025": {
         "ghost": _HALLOWEEN_GHOST_EMOJI_MAPPINGS,
-        # 未来可以轻松在这里添加其他派系，例如:
-        # "vampire": _HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS,
+        "vampire": _HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS,
     }
 }
