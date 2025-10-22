@@ -127,7 +127,8 @@ class ConfessionCog(commands.Cog):
                 color=discord.Color.purple(),
             )
             embed.set_author(
-                name=interaction.user.display_name, icon_url=interaction.user.avatar.url
+                name=interaction.user.display_name,
+                icon_url=interaction.user.display_avatar.url,
             )
 
             if affection_change != 0:
