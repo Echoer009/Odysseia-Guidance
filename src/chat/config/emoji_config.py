@@ -52,11 +52,25 @@ _HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS = [
     (re.compile(r"\<坏笑\>"), ["<:huai_xiao:1430506761529593906>"]),
 ]
 
+# 万圣节 2025 - 教会派系
+_HALLOWEEN_CHURCH_EMOJI_MAPPINGS = [
+    (re.compile(r"\<开心\>"), ["<:kai_xin_church:1430887660875943946>"]),
+    (re.compile(r"\<得意\>"), ["<:de_yi_church:1430887600897658920>"]),
+    (re.compile(r"\<嘴馋\>"), ["<:zui_chan:1430887403681480724>"]),
+    (re.compile(r"\<期待\>"), ["<:qi_dai:1430887364238119043>"]),
+    (re.compile(r"\<满足\>"), ["<:man_zu:1430887322626428928>"]),
+    (re.compile(r"\<生气\>"), ["<:sheng_qi_church:1430887232126058518>"]),
+    (re.compile(r"\<感谢\>"), ["<:gan_xie:1430887181831897209>"]),
+    (re.compile(r"\<祈祷\>"), ["<:qi_dao:1430887118850359327>"]),
+    (re.compile(r"\<饿了\>"), ["<:e_le:1430886719569526795>"]),
+]
+
 # --- 派系表情总配置 ---
 # 结构: { "event_id": { "faction_id": MAPPING_LIST } }
 FACTION_EMOJI_MAPPINGS = {
     "halloween_2025": {
         "ghost": _HALLOWEEN_GHOST_EMOJI_MAPPINGS,
         "vampire": _HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS,
+        "church": _HALLOWEEN_CHURCH_EMOJI_MAPPINGS,
     }
 }

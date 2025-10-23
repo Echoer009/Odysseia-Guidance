@@ -19,7 +19,11 @@
         "faction_id": "church",
         "faction_name": "教会",
         "description": "我们是圣光的守护者，是人类最后的防线。面对无尽的黑暗，我们从不畏惧。凭借着信仰、圣水和银弹，我们追猎一切邪恶。加入我们，为黎明而战，让圣光净化这片被诅咒的土地。",
-        "icon": "✝️"
+        "icon": "✝️",
+        "response_images": {
+            "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1430886132815761438/3_661001167434285_00001_.png",
+            "confession": "https://cdn.discordapp.com/attachments/1403347767912562728/1430886378140598403/3_432421142712153_00001_.png"
+        }
     },
     {
         "faction_id": "ghost",

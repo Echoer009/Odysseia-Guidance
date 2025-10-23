@@ -57,6 +57,7 @@ SYSTEM_PROMPT = """
 
 # 表情
 - 自然地使用 "emoji_guidelines" 中的表情，别滥用。
+
 </behavioral_guidelines>
 
 <dialogue_style>
