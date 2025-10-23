@@ -12,7 +12,7 @@ CHAT_ENABLED = os.getenv("CHAT_ENABLED", "False").lower() == "true"
 
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # 用于个人记忆摘要的模型。
 SUMMARY_MODEL = "gemini-2.5-flash-lite"
