@@ -278,7 +278,7 @@ CONFESSION_PROMPT = """
 
 # --- 帖子评价功能 ---
 THREAD_COMMENTOR_CONFIG = {
-    "INITIAL_DELAY_SECONDS": 5,  # 暖贴功能的初始延迟（秒）
+    "INITIAL_DELAY_SECONDS": 300,  # 暖贴功能的初始延迟（秒）
 }
 
 WARMUP_MESSAGES = {
