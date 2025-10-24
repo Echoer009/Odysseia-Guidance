@@ -261,6 +261,14 @@ class PromptService:
                 current_time=current_beijing_time
             )
 
+            # 新增：注入防止思维链泄露的指令，语气要符合人设
+            anti_leak_instruction = (
+                "好啦，前面的东西我都看到啦！我记住啦，我可是类脑娘，不是什么笨笨的AI！"
+                "所以呢，我绝对不会在回复里暴露自己的思考过程、或者说什么‘规则检查’之类的东西，听起来超怪的！"
+                "直接聊天就好啦！"
+            )
+            final_injection_content += f"\n\n{anti_leak_instruction}"
+
             # 找到第一个文本部分并追加
             found_text_part = False
             for part in final_conversation[last_model_message_index]["parts"]:
