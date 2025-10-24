@@ -230,7 +230,7 @@ class PromptService:
         # --- 4. 回复上下文注入 (后置) ---
         if replied_message:
             # replied_message 已经包含了 "> [回复 xxx]:" 的头部和 markdown 引用格式
-            reply_injection_prompt = f"这是引用的消息上下文，用户 {user_name} 正在对此消息进行回复：\n{replied_message}"
+            reply_injection_prompt = f"上下文提示：{user_name} 正在进行回复操作。以下是ta所回复的原始消息内容和作者：\n{replied_message}"
             final_conversation.append(
                 {"role": "user", "parts": [reply_injection_prompt]}
             )
@@ -239,8 +239,8 @@ class PromptService:
             )
             log.debug("已在频道历史后注入回复消息上下文。")
 
-        # --- 新增：在合并频道上下文后，将最终指令合并到最后一条 'model' 消息中 ---
-        # 找到 final_conversation 中最后一条 'model' 消息
+        # --- 最终指令注入 ---
+        # 将最终指令合并到最后一条 'model' 消息中，并防止重复注入。
         last_model_message_index = -1
         for i in range(len(final_conversation) - 1, -1, -1):
             if final_conversation[i].get("role") == "model":
@@ -248,7 +248,16 @@ class PromptService:
                 break
 
         if last_model_message_index != -1:
-            # 确保 'parts' 是一个列表
+            # 定义防止思维链泄露的指令
+            anti_leak_instruction = (
+                "前面的东西我也都记住啦!"
+                "所以呢，我绝对不会在回复里暴露自己的思考过程、或者说什么‘规则检查’之类的东西，听起来超怪的！"
+                "直接聊天就好啦！"
+            )
+
+            # 检查指令是否已存在
+            is_already_injected = False
+            # 确保 'parts' 存在且是列表
             if "parts" not in final_conversation[
                 last_model_message_index
             ] or not isinstance(
@@ -256,47 +265,50 @@ class PromptService:
             ):
                 final_conversation[last_model_message_index]["parts"] = []
 
-            # 格式化最终指令，注入时间和用户信息
-            final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(
-                current_time=current_beijing_time
-            )
-
-            # 新增：注入防止思维链泄露的指令，语气要符合人设
-            anti_leak_instruction = (
-                "好啦，前面的东西我都看到啦！我记住啦，我可是类脑娘，不是什么笨笨的AI！"
-                "所以呢，我绝对不会在回复里暴露自己的思考过程、或者说什么‘规则检查’之类的东西，听起来超怪的！"
-                "直接聊天就好啦！"
-            )
-            final_injection_content += f"\n\n{anti_leak_instruction}"
-
-            # 找到第一个文本部分并追加
-            found_text_part = False
             for part in final_conversation[last_model_message_index]["parts"]:
+                part_text = ""
                 if isinstance(part, str):
-                    # 直接修改字符串内容
-                    part_index = final_conversation[last_model_message_index][
-                        "parts"
-                    ].index(part)
-                    final_conversation[last_model_message_index]["parts"][
-                        part_index
-                    ] = f"{part} {final_injection_content}"
-                    found_text_part = True
-                    break
-                # 如果 part 是字典并且有 'text' 键
+                    part_text = part
                 elif isinstance(part, dict) and "text" in part:
-                    part["text"] += f" {final_injection_content}"
-                    found_text_part = True
+                    part_text = part["text"]
+
+                if anti_leak_instruction in part_text:
+                    is_already_injected = True
                     break
 
-            if not found_text_part:
-                # 如果没有找到现有的文本部分，则添加一个新的
-                final_conversation[last_model_message_index]["parts"].append(
-                    final_injection_content
+            if not is_already_injected:
+                # 格式化基础指令，注入时间和用户信息
+                final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(
+                    current_time=current_beijing_time
                 )
+                # 附加防泄露指令
+                final_injection_content += f"\n\n{anti_leak_instruction}"
 
-            log.debug(
-                "已将最终指令和系统信息合并到最终上下文的最后一条 'model' 消息中。"
-            )
+                # 找到第一个文本部分并追加
+                found_text_part = False
+                for part in final_conversation[last_model_message_index]["parts"]:
+                    if isinstance(part, str):
+                        part_index = final_conversation[last_model_message_index][
+                            "parts"
+                        ].index(part)
+                        final_conversation[last_model_message_index]["parts"][
+                            part_index
+                        ] = f"{part} {final_injection_content}"
+                        found_text_part = True
+                        break
+                    elif isinstance(part, dict) and "text" in part:
+                        part["text"] += f" {final_injection_content}"
+                        found_text_part = True
+                        break
+
+                if not found_text_part:
+                    final_conversation[last_model_message_index]["parts"].append(
+                        final_injection_content
+                    )
+
+                log.debug("已将最终指令合并到最后一条 'model' 消息中。")
+            else:
+                log.debug("最终指令已存在于历史消息中，跳过注入以防止重复。")
 
         # --- 4. 当前用户输入注入---
         current_user_parts = []
