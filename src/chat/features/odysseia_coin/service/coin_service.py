@@ -721,6 +721,52 @@ class CoinService:
             else False
         )
 
+    async def has_made_warmup_choice(self, user_id: int) -> bool:
+        """检查用户是否已经对暖贴功能做出过选择（同意或拒绝）"""
+        query = "SELECT has_withered_sunflower FROM user_coins WHERE user_id = ?"
+        result = await chat_db_manager._execute(
+            chat_db_manager._db_transaction, query, (user_id,), fetch="one"
+        )
+        # 如果记录存在且 has_withered_sunflower 不是 NULL，则用户已做出选择
+        return result is not None and result["has_withered_sunflower"] is not None
+
+    async def set_warmup_preference(self, user_id: int, wants_warmup: bool):
+        """
+        直接设置用户的暖贴偏好。
+        wants_warmup = True  -> 允许暖贴 (has_withered_sunflower = 0)
+        wants_warmup = False -> 禁止暖贴 (has_withered_sunflower = 1)
+        """
+        has_withered_sunflower = 0 if wants_warmup else 1
+
+        def _transaction():
+            import sqlite3
+
+            conn = None
+            try:
+                conn = sqlite3.connect(chat_db_manager.db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO user_coins (user_id, has_withered_sunflower)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        has_withered_sunflower = excluded.has_withered_sunflower;
+                """,
+                    (user_id, has_withered_sunflower),
+                )
+                conn.commit()
+                log.info(f"用户 {user_id} 的暖贴偏好已设置为: {wants_warmup}")
+            except Exception as e:
+                if conn:
+                    conn.rollback()
+                log.error(f"为用户 {user_id} 设置暖贴偏好时出错: {e}")
+                raise
+            finally:
+                if conn:
+                    conn.close()
+
+        await chat_db_manager._execute(_transaction)
+
     async def transfer_coins(
         self, sender_id: int, receiver_id: int, amount: int
     ) -> tuple[bool, str, Optional[int]]:

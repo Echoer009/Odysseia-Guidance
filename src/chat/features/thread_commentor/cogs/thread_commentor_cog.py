@@ -11,7 +11,9 @@ from src.chat.features.thread_commentor.services.thread_commentor_service import
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
-from src.chat.config.chat_config import THREAD_COMMENTOR_CONFIG
+from src.chat.config.chat_config import THREAD_COMMENTOR_CONFIG, WARMUP_MESSAGES
+from src.chat.features.thread_commentor.ui.warmup_consent_view import WarmupConsentView
+from src.chat.features.odysseia_coin.service.coin_service import coin_service
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +68,29 @@ class ThreadCommentorCog(commands.Cog):
             if praise_text:
                 await thread.send(praise_text)
                 log.info(f"成功发送对帖子 '{thread.name}' 的评价。")
+
+                # 检查用户是否已经做过选择
+                if not await coin_service.has_made_warmup_choice(user_id):
+                    try:
+                        user = await self.bot.fetch_user(user_id)
+                        if user:
+                            view = WarmupConsentView(user_id)
+                            message_content = WARMUP_MESSAGES["consent_dm"].format(
+                                user_mention=f"<@{user_id}>"
+                            )
+                            await user.send(message_content, view=view)
+                            log.info(
+                                f"已向用户 {user_nickname} (ID: {user_id}) 发送暖贴意见征求私信。"
+                            )
+                    except discord.errors.Forbidden:
+                        log.warning(
+                            f"无法向用户 {user_nickname} (ID: {user_id}) 发送私信，可能已被屏蔽或关闭私信。"
+                        )
+                    except Exception as e:
+                        log.error(
+                            f"向用户 {user_nickname} (ID: {user_id}) 发送私信时发生错误: {e}",
+                            exc_info=True,
+                        )
             else:
                 log.warning(f"未能为帖子 '{thread.name}' 生成评价，或评价为空。")
 

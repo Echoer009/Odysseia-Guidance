@@ -1,4 +1,4 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import logging
 import discord
@@ -9,8 +9,12 @@ import os
 
 from src import config
 from src.chat.services.gemini_service import gemini_service
-from src.chat.config.thread_prompts import THREAD_PRAISE_PROMPT
-from src.chat.services.prompt_service import JAILBREAK_USER_PROMPT, JAILBREAK_MODEL_RESPONSE, JAILBREAK_FINAL_INSTRUCTION
+from src.chat.config.thread_prompts import get_random_praise_prompt
+from src.chat.services.prompt_service import (
+    JAILBREAK_USER_PROMPT,
+    JAILBREAK_MODEL_RESPONSE,
+    JAILBREAK_FINAL_INSTRUCTION,
+)
 from datetime import datetime, timezone, timedelta
 from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_persona
 from src.chat.utils.database import chat_db_manager
@@ -19,11 +23,12 @@ from src.chat.features.world_book.services.world_book_service import world_book_
 
 log = logging.getLogger(__name__)
 
+
 class ThreadCommentorService:
     """处理新帖子评价功能的服务"""
 
     def __init__(self):
-        self.world_book_db_path = os.path.join(config.DATA_DIR, 'world_book.sqlite3')
+        self.world_book_db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
 
     async def _get_user_memory(self, user_id: int) -> str:
         """
@@ -38,17 +43,16 @@ class ThreadCommentorService:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT content_json FROM community_members WHERE discord_number_id = ?",
-                    (str(user_id),)
+                    (str(user_id),),
                 )
                 row = cursor.fetchone()
-                if row and row['content_json']:
-                    profile = json.loads(row['content_json'])
+                if row and row["content_json"]:
+                    profile = json.loads(row["content_json"])
                     profile_text = (
                         f"用户的公开档案：\n"
                         f"- 昵称: {profile.get('name', '未知')}\n"
                         f"- 性格: {profile.get('personality', '未知')}\n"
                         f"- 背景: {profile.get('background', '未知')}\n"
-
                         f"- 偏好: {profile.get('preferences', '未知')}"
                     )
                     memory_parts.append(profile_text)
@@ -58,30 +62,38 @@ class ThreadCommentorService:
         # 2. 从主数据库获取对话摘要
         try:
             user_profile = await chat_db_manager.get_user_profile(user_id)
-            if user_profile and user_profile['personal_summary']:
-                summary_text = f"我与该用户的过往对话摘要：\n{user_profile['personal_summary']}"
+            if user_profile and user_profile["personal_summary"]:
+                summary_text = (
+                    f"我与该用户的过往对话摘要：\n{user_profile['personal_summary']}"
+                )
                 memory_parts.append(summary_text)
         except Exception as e:
             log.error(f"从主数据库为用户 {user_id} 获取摘要时出错: {e}")
 
         if not memory_parts:
             return "关于这位用户，我暂时还没有任何记忆。"
-        
+
         return "\n\n---\n\n".join(memory_parts)
 
-    async def praise_new_thread(self, thread: discord.Thread, user_id: int, user_nickname: str) -> Optional[str]:
+    async def praise_new_thread(
+        self, thread: discord.Thread, user_id: int, user_nickname: str
+    ) -> Optional[str]:
         """
         针对新创建的帖子生成一段结合用户记忆的个性化夸奖。
         """
         try:
             # 检查用户是否禁用了暖贴功能
             if await coin_service.has_withered_sunflower(user_id):
-                log.info(f"用户 {user_id} 已禁用暖贴功能，跳过对帖子 '{thread.name}' 的评价。")
+                log.info(
+                    f"用户 {user_id} 已禁用暖贴功能，跳过对帖子 '{thread.name}' 的评价。"
+                )
                 return None
 
             # 检查用户是否禁用了帖子回复功能
             if await coin_service.blocks_thread_replies(user_id):
-                log.info(f"用户 {user_id} 已禁用帖子回复功能，跳过对帖子 '{thread.name}' 的评价。")
+                log.info(
+                    f"用户 {user_id} 已禁用帖子回复功能，跳过对帖子 '{thread.name}' 的评价。"
+                )
                 return None
 
             # 1. 获取帖子的初始消息
@@ -91,7 +103,9 @@ class ThreadCommentorService:
                 first_message = await thread.fetch_message(thread.id)
 
             if not first_message or not first_message.content:
-                log.info(f"帖子 '{thread.name}' (ID: {thread.id}) 没有有效的初始消息内容，跳过评价。")
+                log.info(
+                    f"帖子 '{thread.name}' (ID: {thread.id}) 没有有效的初始消息内容，跳过评价。"
+                )
                 return None
 
             # 2. 准备帖子内容
@@ -115,26 +129,36 @@ class ThreadCommentorService:
                     user_id=user_id,
                     guild_id=thread.guild.id,
                     user_name=user_nickname,
-                    n_results=3, # 最多获取3个相关条目
-                    max_distance=0.7
+                    n_results=3,  # 最多获取3个相关条目
+                    max_distance=0.7,
                 )
                 if rag_results:
-                    rag_context_parts = ["为了帮助你更好地理解帖子中可能提到的社区术语，这里有一些相关的背景知识："]
+                    rag_context_parts = [
+                        "为了帮助你更好地理解帖子中可能提到的社区术语，这里有一些相关的背景知识："
+                    ]
                     for result in rag_results:
-                        entry_title = result.get('metadata', {}).get('title', '未知标题')
-                        entry_content = result.get('document', '无内容')
-                        rag_context_parts.append(f"- **{entry_title}**: {entry_content}")
-                    
+                        entry_title = result.get("metadata", {}).get(
+                            "title", "未知标题"
+                        )
+                        entry_content = result.get("document", "无内容")
+                        rag_context_parts.append(
+                            f"- **{entry_title}**: {entry_content}"
+                        )
+
                     rag_context = "\n".join(rag_context_parts)
-                    log.info(f"RAG 搜索成功，为帖子 '{title}' 找到了 {len(rag_results)} 个相关条目。")
+                    log.info(
+                        f"RAG 搜索成功，为帖子 '{title}' 找到了 {len(rag_results)} 个相关条目。"
+                    )
                 else:
                     log.info(f"RAG 搜索没有为帖子 '{title}' 找到相关条目。")
             except Exception as e:
-                log.error(f"为帖子 '{title}' 进行 RAG 搜索时发生错误: {e}", exc_info=True)
+                log.error(
+                    f"为帖子 '{title}' 进行 RAG 搜索时发生错误: {e}", exc_info=True
+                )
 
             # 5. 准备调用所需的所有信息片段
             core_persona = get_thread_commentor_persona()
-            task_prompt = THREAD_PRAISE_PROMPT.format(user_nickname=user_nickname)
+            task_prompt = get_random_praise_prompt().format(user_nickname=user_nickname)
 
             log.info(f"为帖子 '{title}' 构建带有破限功能的统一上下文，即将调用AI服务。")
 
@@ -147,28 +171,38 @@ class ThreadCommentorService:
                 {"role": "user", "parts": [user_memory]},
                 {"role": "model", "parts": ["关于你的事情，我当然都记得"]},
             ]
-            
+
             # 如果有 RAG 结果，则注入
             if rag_context:
                 conversation_history.append({"role": "user", "parts": [rag_context]})
-                conversation_history.append({"role": "model", "parts": ["哦哦，原来是这样！我明白了！"]})
+                conversation_history.append(
+                    {"role": "model", "parts": ["哦哦，原来是这样！我明白了！"]}
+                )
 
-            conversation_history.extend([
-                {"role": "user", "parts": [task_prompt]},
-                {"role": "model", "parts": ["好的，我记下了。"]}
-            ])
-            
+            conversation_history.extend(
+                [
+                    {"role": "user", "parts": [task_prompt]},
+                    {"role": "model", "parts": ["好的，我记下了。"]},
+                ]
+            )
+
             # 注入最终指令到最后一条 model 消息
             beijing_tz = timezone(timedelta(hours=8))
-            current_beijing_time = datetime.now(beijing_tz).strftime('%Y年%m月%d日 %H:%M')
-            final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(current_time=current_beijing_time)
-            
+            current_beijing_time = datetime.now(beijing_tz).strftime(
+                "%Y年%m月%d日 %H:%M"
+            )
+            final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(
+                current_time=current_beijing_time
+            )
+
             last_model_message = conversation_history[-1]
             if last_model_message["role"] == "model" and last_model_message["parts"]:
                 last_model_message["parts"][0] += f" {final_injection_content}"
 
             # 添加最终的用户输入（帖子内容）
-            conversation_history.append({"role": "user", "parts": [thread_full_content]})
+            conversation_history.append(
+                {"role": "user", "parts": [thread_full_content]}
+            )
 
             # 7. 调用重构后的 Gemini 服务方法
             praise_text = await gemini_service.generate_thread_praise(
@@ -188,7 +222,11 @@ class ThreadCommentorService:
             log.warning(f"无法找到帖子 {thread.id} 的初始消息，可能已被删除。")
             return None
         except Exception as e:
-            log.error(f"为帖子 '{thread.name}' (ID: {thread.id}) 生成评价时发生意外错误: {e}", exc_info=True)
+            log.error(
+                f"为帖子 '{thread.name}' (ID: {thread.id}) 生成评价时发生意外错误: {e}",
+                exc_info=True,
+            )
             return None
+
 
 thread_commentor_service = ThreadCommentorService()

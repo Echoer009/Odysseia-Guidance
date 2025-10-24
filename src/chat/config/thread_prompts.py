@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
+import random
+from src.chat.config.chat_config import WARMUP_MESSAGES
 
-THREAD_PRAISE_PROMPT = """
-请注意以下几点：
-1.  **聚焦优点**: 努力发现帖子内容中的闪光点，无论是创意、努力还是分享精神，并对此进行具体表扬。
-2.  **鼓励为主**: 你的核心目的是鼓励大家多多分享。即使内容很简单，也要表达出"分享本身就是一件超棒的事"！
-3.  **丰富表达**: 请用2-3段话来表达你的夸奖，每段话控制在30-50字左右，让评价更丰富。
-4.  **使用表情**: 在你的回复中，请使用<emoji_guidelines>中的表情符号来增强表达效果
-"""
+
+def get_random_praise_prompt():
+    """从列表中随机选择一个暖贴提示词"""
+    return random.choice(WARMUP_MESSAGES["consent_prompts"])

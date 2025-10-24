@@ -25,7 +25,8 @@ def replace_emojis(text: str) -> str:
             log.info(
                 f"prompt_utils: 使用事件 '{event_id}' 派系 '{selected_faction}' 的专属表情包。"
             )
-            emoji_map_to_use = faction_map
+            # 将派系表情包与默认表情包合并，实现优先使用派系表情，然后回退到默认
+            emoji_map_to_use = faction_map + EMOJI_MAPPINGS
 
     for pattern, replacement_list in emoji_map_to_use:
         if replacement_list:
