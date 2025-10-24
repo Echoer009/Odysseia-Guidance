@@ -163,10 +163,10 @@
             }
         ]
     },
-    "zombie": {
+    "jiangshi": {
         "beginner": [
             {
-                "item_id": "zombie_beginner_dedication",
+                "item_id": "jiangshi_beginner_dedication",
                 "item_name": "为她描画符咒",
                 "description": "用朱砂与你的鲜血，为她重新描画额头的符咒。你的生命力，是她抑制暴戾之气的关键。",
                 "price": 50,
@@ -175,7 +175,7 @@
         ],
         "intermediate": [
             {
-                "item_id": "zombie_intermediate_dedication",
+                "item_id": "jiangshi_intermediate_dedication",
                 "item_name": "在她耳边摇铃",
                 "description": "用特制的铜铃在她耳边轻摇，用音律引导她混乱的魂魄。你的指引，是她黑暗中唯一的方向。",
                 "price": 200,
@@ -184,7 +184,7 @@
         ],
         "advanced": [
             {
-                "item_id": "zombie_advanced_dedication",
+                "item_id": "jiangshi_advanced_dedication",
                 "item_name": "与她共守陵墓",
                 "description": "陪她一起，在寂静的陵墓中守护一夜。你的存在，让她记起自己作为守护者的荣耀与使命。",
                 "price": 500,
@@ -193,7 +193,7 @@
         ],
         "gacha": [
             {
-                "item_id": "zombie_gacha_dedication",
+                "item_id": "jiangshi_gacha_dedication",
                 "item_name": "风水罗盘的指引",
                 "description": "罗盘的指针疯狂转动，它可能指向一处龙脉，也可能指向一处绝地。这是对你和她命运的卜问。",
                 "price": 300,
