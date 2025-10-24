@@ -15,56 +15,51 @@ logging.basicConfig(
 
 async def fix_faction_ids():
     """
-    Corrects the faction_id from 'zombie' to 'jiangshi' in the database tables.
+    将数据库表中的 faction_id 从 'zombie' 修正为 'jiangshi'。
     """
     db = chat_db_manager
-    await db.connect()
 
     updated_faction_points = 0
     updated_contribution_logs = 0
 
     try:
-        # Use a transaction to ensure atomicity
-        async with db._db_transaction.connection.transaction():
-            logging.info("Starting data migration for faction IDs...")
+        logging.info("开始阵营 ID 的数据迁移...")
 
-            # 1. Update event_faction_points table
-            logging.info("Updating 'event_faction_points' table...")
-            points_query = "UPDATE event_faction_points SET faction_id = 'jiangshi' WHERE faction_id = 'zombie';"
-            result_points = await db._execute(
-                db._db_transaction, points_query, commit=False
-            )
-            updated_faction_points = result_points if result_points is not None else 0
-            logging.info(
-                f"Updated {updated_faction_points} records in 'event_faction_points'."
-            )
+        # 1. 更新 event_faction_points 表
+        logging.info("正在更新 'event_faction_points' 表...")
+        points_query = "UPDATE event_faction_points SET faction_id = 'jiangshi' WHERE faction_id = 'zombie';"
+        result_points = await db._execute(
+            db._db_transaction, points_query, fetch="rowcount", commit=True
+        )
+        updated_faction_points = result_points if result_points is not None else 0
+        logging.info(
+            f"在 'event_faction_points' 表中更新了 {updated_faction_points} 条记录。"
+        )
 
-            # 2. Update event_contribution_log table
-            logging.info("Updating 'event_contribution_log' table...")
-            log_query = "UPDATE event_contribution_log SET faction_id = 'jiangshi' WHERE faction_id = 'zombie';"
-            result_logs = await db._execute(db._db_transaction, log_query, commit=False)
-            updated_contribution_logs = result_logs if result_logs is not None else 0
-            logging.info(
-                f"Updated {updated_contribution_logs} records in 'event_contribution_log'."
-            )
+        # 2. 更新 event_contribution_log 表
+        logging.info("正在更新 'event_contribution_log' 表...")
+        log_query = "UPDATE event_contribution_log SET faction_id = 'jiangshi' WHERE faction_id = 'zombie';"
+        result_logs = await db._execute(
+            db._db_transaction, log_query, fetch="rowcount", commit=True
+        )
+        updated_contribution_logs = result_logs if result_logs is not None else 0
+        logging.info(
+            f"在 'event_contribution_log' 表中更新了 {updated_contribution_logs} 条记录。"
+        )
 
-        logging.info("Transaction committed successfully.")
+        logging.info("数据迁移成功完成。")
 
     except Exception as e:
-        logging.error(f"An error occurred during the migration: {e}", exc_info=True)
-        logging.error("Transaction was rolled back.")
-    finally:
-        await db.disconnect()
-        logging.info("Database connection closed.")
+        logging.error(f"在迁移过程中发生错误: {e}", exc_info=True)
 
-    logging.info("--- Migration Summary ---")
+    logging.info("--- 迁移摘要 ---")
     logging.info(
-        f"Total records updated in 'event_faction_points': {updated_faction_points}"
+        f"'event_faction_points' 表中总共更新的记录数: {updated_faction_points}"
     )
     logging.info(
-        f"Total records updated in 'event_contribution_log': {updated_contribution_logs}"
+        f"'event_contribution_log' 表中总共更新的记录数: {updated_contribution_logs}"
     )
-    logging.info("Migration script finished.")
+    logging.info("迁移脚本执行完毕。")
 
 
 if __name__ == "__main__":
