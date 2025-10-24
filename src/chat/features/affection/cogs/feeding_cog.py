@@ -9,7 +9,7 @@ from src.chat.features.affection.service.feeding_service import feeding_service
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
 from src.chat.services.gemini_service import gemini_service
 from src.chat.services.prompt_service import prompt_service
-from src.chat.config.chat_config import FEEDING_CONFIG
+from src.chat.config.chat_config import FEEDING_CONFIG, PROMPT_CONFIG
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.config import DEVELOPER_USER_IDS
 from src.chat.services.event_service import event_service
@@ -55,7 +55,8 @@ class FeedingCog(commands.Cog):
             persona_part = extract_persona_prompt(
                 prompt_service.get_prompt("SYSTEM_PROMPT")
             )
-            prompt = f"{persona_part}\n\n现在，请你对这张图片中的食物进行打分（1-10分），并给出一个简短的、符合你人设的评价。评价中可以包含你对食物的喜好、吐槽或俏皮话，并直接包含分数。\n在评价文本的最后，请严格按照以下格式附加上好感度和类脑币奖励，不要添加任何额外说明：<affection:好感度奖励;coins:类脑币奖励>\n例如：\n这个看起来好好吃！我给10分！<affection:+5;coins:+50>"
+            base_prompt = PROMPT_CONFIG.get("feeding_prompt", "")
+            prompt = f"{persona_part}\n\n{base_prompt}"
 
             response_text = await self.gemini_service.generate_text_with_image(
                 prompt=prompt, image_bytes=image_bytes, mime_type=image.content_type

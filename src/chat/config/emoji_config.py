@@ -65,6 +65,20 @@ _HALLOWEEN_CHURCH_EMOJI_MAPPINGS = [
     (re.compile(r"\<饿了\>"), ["<:e_le:1430886719569526795>"]),
 ]
 
+# 万圣节 2025 - 僵尸派系
+_HALLOWEEN_JIANGSHI_EMOJI_MAPPINGS = [
+    (re.compile(r"\<无聊\>"), ["<:wu_liao:1431233300172767315>"]),
+    (re.compile(r"\<馋了\>"), ["<:chan_le_jiangshi:1431233836598951977>"]),
+    (re.compile(r"\<得意\>"), ["<:de_yi_jiangshi:1431233035130638437>"]),
+    (re.compile(r"\<期待\>"), ["<:qi_dai_jiangshi:1431233112628658268>"]),
+    (
+        re.compile(r"\<急了\>"),
+        ["<:ji_le:1431233208669704202>", "<:ji_le_2:1431233353331376189>"],
+    ),
+    (re.compile(r"\<躺平\>"), ["<:tang_ping:1431233401863667843>"]),
+    (re.compile(r"\<懵懂\>"), ["<:meng_dong:1431233459967230074>"]),
+]
+
 # --- 派系表情总配置 ---
 # 结构: { "event_id": { "faction_id": MAPPING_LIST } }
 FACTION_EMOJI_MAPPINGS = {
@@ -72,5 +86,6 @@ FACTION_EMOJI_MAPPINGS = {
         "ghost": _HALLOWEEN_GHOST_EMOJI_MAPPINGS,
         "vampire": _HALLOWEEN_VAMPIRE_EMOJI_MAPPINGS,
         "church": _HALLOWEEN_CHURCH_EMOJI_MAPPINGS,
+        "jiangshi": _HALLOWEEN_JIANGSHI_EMOJI_MAPPINGS,
     }
 }

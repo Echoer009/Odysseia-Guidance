@@ -39,7 +39,11 @@
         "faction_id": "zombie",
         "faction_name": "僵尸",
         "description": "我们身着前朝官服，额贴符咒，以跳跃代替行走。我们是介于生死之间的存在，听从主人的号令，守护着古老的秘密与宝藏。加入我们，你将获得刀枪不入的躯体和震慑心魄的力量。",
-        "icon": "📜"
+        "icon": "📜",
+        "response_images": {
+            "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1431235395827531786/3_810121096752483_00001_.png?ex=68fcad55&is=68fb5bd5&hm=8bd1bafb2a520affd283f463a44742153330b29f6a8562ec696775a8f133fe09&",
+            "confession": "https://cdn.discordapp.com/attachments/1403347767912562728/1431235397568036925/3_1089845605437870_00001_.png?ex=68fcad55&is=68fb5bd5&hm=113d9dbbecdcef050d123a4eb1928fa7bb6f2b27f32bdcb94d44aeccdc3501e0&"
+        }
     },
     {
         "faction_id": "witch",
