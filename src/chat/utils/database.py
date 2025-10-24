@@ -246,7 +246,7 @@ class ChatDatabaseManager:
             if "has_withered_sunflower" not in columns_coins:
                 cursor.execute("""
                     ALTER TABLE user_coins
-                    ADD COLUMN has_withered_sunflower BOOLEAN NOT NULL DEFAULT 0;
+                    ADD COLUMN has_withered_sunflower BOOLEAN DEFAULT NULL;
                 """)
                 log.info("已向 user_coins 表添加 has_withered_sunflower 列。")
 
