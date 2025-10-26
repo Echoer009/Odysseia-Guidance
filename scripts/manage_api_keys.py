@@ -34,17 +34,14 @@ def get_keys_from_env():
         with open(ENV_FILE, "r", encoding="utf-8") as f:
             content = f.read()
 
-        match = re.search(
-            r"^GOOGLE_API_KEYS_LIST=(.*)$", content, re.MULTILINE | re.DOTALL
-        )
+        match = re.search(r'GOOGLE_API_KEYS_LIST="(.*?)"', content, re.DOTALL)
         if not match:
-            print("错误: 在 .env 文件中未找到 'GOOGLE_API_KEYS_LIST'。")
+            print(
+                "错误: 在 .env 文件中未找到格式正确的 'GOOGLE_API_KEYS_LIST=\"...\"'。"
+            )
             return None, None
 
-        keys_str = match.group(1).strip()
-        # 移除可能存在的引号
-        if keys_str.startswith('"') and keys_str.endswith('"'):
-            keys_str = keys_str[1:-1]
+        keys_str = match.group(1)
 
         # 对每个分割后的 key 去除可能存在的引号
         keys = [
@@ -75,10 +72,10 @@ def reformat_keys_in_env():
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
     new_env_content = re.sub(
-        r"^GOOGLE_API_KEYS_LIST=.*$",
+        r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
         env_content,
-        flags=re.MULTILINE,
+        flags=re.DOTALL,
     )
 
     try:
@@ -134,10 +131,10 @@ def add_keys_to_env():
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
     new_env_content = re.sub(
-        r"^GOOGLE_API_KEYS_LIST=.*$",
+        r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
         env_content,
-        flags=re.MULTILINE,
+        flags=re.DOTALL,
     )
 
     try:
@@ -250,10 +247,10 @@ def run_default_removal():
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
     new_env_content = re.sub(
-        r"^GOOGLE_API_KEYS_LIST=.*$",
+        r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
         env_content,
-        flags=re.MULTILINE,
+        flags=re.DOTALL,
     )
 
     try:
@@ -267,6 +264,28 @@ def run_default_removal():
 
 def main():
     """主执行函数，现在仅用于命令分发"""
+    global ENV_FILE  # 声明我们将修改全局变量
+
+    env_path_override = None
+    # 手动解析 --env-file 参数
+    if "--env-file" in sys.argv:
+        try:
+            index = sys.argv.index("--env-file")
+            env_path_override = sys.argv[index + 1]
+            # 从参数列表中移除标志和值，以免干扰后续逻辑
+            sys.argv.pop(index)
+            sys.argv.pop(index)
+        except (ValueError, IndexError):
+            print("错误: --env-file 标志需要一个路径参数。")
+            return
+
+    if env_path_override:
+        if not os.path.exists(env_path_override):
+            print(f"错误: 提供的 .env 文件路径不存在: {env_path_override}")
+            return
+        ENV_FILE = env_path_override
+        print(f"--- 正在对指定的 .env 文件进行操作: {ENV_FILE} ---")
+
     if len(sys.argv) > 1:
         command = sys.argv[1].lower()
         if command == "status":
