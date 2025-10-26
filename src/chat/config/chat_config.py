@@ -128,14 +128,14 @@ COIN_CONFIG = {
 
 # --- 个人记忆功能 ---
 PERSONAL_MEMORY_CONFIG = {
-    "summary_threshold": 20,  # 触发总结的消息数量阈值 (测试用 5, 原为 50)
+    "summary_threshold": 30,  # 触发总结的消息数量阈值 (测试用 5, 原为 50)
 }
 
 
 # --- 频道记忆功能 ---
 CHANNEL_MEMORY_CONFIG = {
-    "raw_history_limit": 10,  # 从Discord API获取的原始消息数量
-    "formatted_history_limit": 10,  # 格式化为AI模型可用的对话历史消息数量
+    "raw_history_limit": 20,  # 从Discord API获取的原始消息数量
+    "formatted_history_limit": 20,  # 格式化为AI模型可用的对话历史消息数量
 }
 
 
@@ -278,15 +278,12 @@ CONFESSION_PROMPT = """
 
 # --- 帖子评价功能 ---
 THREAD_COMMENTOR_CONFIG = {
-    "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）
+    "INITIAL_DELAY_SECONDS": 3,  # 暖贴功能的初始延迟（秒）
 }
 
 WARMUP_MESSAGES = {
     "consent_prompts": [
-        "你像往常一样在刷群，看到了群友 **{user_nickname}** 的新帖子。用自然的、友好的语气去聊两句，捧个场，最后可以提醒下大家给帖子点赞。",
-        "你看到了 **{user_nickname}** 的新帖子。用你自己的风格去回复，可以是对内容的正面感想，也可以是简单的夸奖。像平时聊天一样，最后号召大家给TA点赞。",
-        "你路过了 **{user_nickname}** 的新帖子，决定进去看看。用随意的、积极的语气发表点看法，让帖子别沉下去。最后可以说一句“路过的朋友可以点个赞”。",
-        "你注意到了 **{user_nickname}** 的新分享。用一个普通群友的身份去友好地互动一下，表达你的正面看法，最后可以顺便帮TA号召一下点赞。",
+        "你正在刷群，像一个普通群友一样，偶然看到了 **{user_nickname}** 的新帖子。你的任务是模仿一个真实群友的语气，自然地去捧场。**核心要求：**请对帖子的内容给出一个**整体的、总结性的**夸赞或感想，**绝对不要逐条分析或引用原文**。你的回复应该简短、口语化，就像一条真实的朋友圈评论。最后，别忘了号召大家给帖子点赞。"
     ],
     "consent_dm": (
         "哈喽！{user_mention}！我是类脑娘！\n"
