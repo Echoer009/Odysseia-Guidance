@@ -9,9 +9,11 @@ from typing import Optional
 # 导入新的 Service
 from src.chat.services.chat_service import chat_service
 from src.chat.services.message_processor import message_processor
+
 # 导入上下文服务以设置 bot 实例
 from src.chat.services.context_service import context_service
-from src.chat.services.context_service_test import context_service_test # 导入测试服务
+from src.chat.services.context_service_test import context_service_test  # 导入测试服务
+
 # 导入数据库管理器以进行黑名单检查和斜杠命令
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHAT_ENABLED
@@ -19,15 +21,16 @@ from src.chat.features.odysseia_coin.service.coin_service import coin_service
 
 log = logging.getLogger(__name__)
 
+
 class AIChatCog(commands.Cog):
     """处理AI聊天功能的Cog，包括@mention回复和斜杠命令"""
-    
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # 将bot实例传递给需要它的服务
         context_service.set_bot_instance(bot)
-        context_service_test.set_bot_instance(bot) # 为测试服务也设置bot实例
-    
+        context_service_test.set_bot_instance(bot)  # 为测试服务也设置bot实例
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """
@@ -35,7 +38,7 @@ class AIChatCog(commands.Cog):
         """
         if not CHAT_ENABLED:
             return
-            
+
         # 忽略机器人自己的消息
         if message.author.bot:
             return
@@ -44,8 +47,12 @@ class AIChatCog(commands.Cog):
         if isinstance(message.channel, discord.Thread):
             # 检查帖子的创建者
             thread_owner = message.channel.owner
-            if thread_owner and await coin_service.blocks_thread_replies(thread_owner.id):
-                log.info(f"帖子 '{message.channel.name}' 的创建者 {thread_owner.id} 已禁用回复，跳过消息处理。")
+            if thread_owner and await coin_service.blocks_thread_replies(
+                thread_owner.id
+            ):
+                log.info(
+                    f"帖子 '{message.channel.name}' 的创建者 {thread_owner.id} 已禁用回复，跳过消息处理。"
+                )
                 return
 
         # 检查消息是否符合处理条件：私聊 或 在服务器中被@
@@ -57,7 +64,7 @@ class AIChatCog(commands.Cog):
         if await chat_db_manager.is_user_globally_blacklisted(message.author.id):
             log.info(f"用户 {message.author.id} 在全局黑名单中，已跳过。")
             return
-        
+
         if not is_dm and not is_mentioned:
             return
 
@@ -73,10 +80,10 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if response_text:
             try:
-                await message.reply(response_text, mention_author=False)
+                await message.reply(response_text, mention_author=True)
             except discord.errors.HTTPException as e:
                 log.warning(f"发送回复失败: {e}")
-                pass # 如果发送回复失败，则忽略
+                pass  # 如果发送回复失败，则忽略
 
     async def handle_chat_message(self, message: discord.Message) -> Optional[str]:
         """
@@ -87,7 +94,9 @@ class AIChatCog(commands.Cog):
             processed_data = await message_processor.process_message(message, self.bot)
 
             # 2. 使用 ChatService 获取AI回复
-            final_response = await chat_service.handle_chat_message(message, processed_data)
+            final_response = await chat_service.handle_chat_message(
+                message, processed_data
+            )
 
             # 3. 返回回复内容
             return final_response
@@ -123,10 +132,10 @@ class AIChatCog(commands.Cog):
     #         guild_id = interaction.guild.id if interaction.guild else 0
     #         channel_id = interaction.channel.id
     #         channel_name = interaction.channel.name
-            
+
     #         # 获取此命令之前的最后一条消息
     #         last_message = [msg async for msg in interaction.channel.history(limit=1)]
-            
+
     #         if not last_message:
     #             # 如果频道中没有消息，则不设置锚点，并告知用户
     #             await interaction.response.send_message(
@@ -140,7 +149,7 @@ class AIChatCog(commands.Cog):
 
     #         # 调用数据库管理器来设置或更新锚点
     #         await chat_db_manager.set_channel_memory_anchor(guild_id, channel_id, anchor_message_id)
-            
+
     #         await interaction.response.send_message(
     #             f"好的，我已经刷新了对 `#{channel_name}` 频道的记忆。\n"
     #             f"从现在开始，我将只参考消息 ID `{anchor_message_id}` 之后的新对话作为上下文。",
@@ -181,7 +190,8 @@ class AIChatCog(commands.Cog):
     #         log.error(f"处理 clear_channel_memory 命令时出错: {e}")
     #         if not interaction.response.is_done():
     #             await interaction.response.send_message("执行此命令时发生未知错误，请检查日志。", ephemeral=True)
-    
+
+
 async def setup(bot: commands.Bot):
     """将这个Cog添加到机器人中"""
     await bot.add_cog(AIChatCog(bot))
