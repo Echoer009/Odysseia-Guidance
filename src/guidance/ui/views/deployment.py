@@ -7,12 +7,16 @@ from typing import Dict, List, Tuple
 
 from src.guidance.utils.database import guidance_db_manager as db_manager
 from src.guidance.ui.views.ui_elements import BackButton
-from src.guidance.ui.views.channel_panel import PermanentPanelView # 这是我们要部署的用户端视图
+from src.guidance.ui.views.channel_panel import (
+    PermanentPanelView,
+)  # 这是我们要部署的用户端视图
 from src import config as root_config
 from src.guidance.utils.helpers import create_embed_from_template_data
+from src.guidance.services.deployment_service import deploy_all_panels
 import json
 
 log = logging.getLogger(__name__)
+
 
 class DeploymentView(View):
     """处理部署和重置引导消息的视图"""
@@ -28,32 +32,44 @@ class DeploymentView(View):
     async def async_init(self):
         """异步初始化，运行检查并设置组件。"""
         self.clear_items()
-        self.checks_passed, self.check_results, self.has_deployment = await self.run_pre_deployment_checks()
-        
+        (
+            self.checks_passed,
+            self.check_results,
+            self.has_deployment,
+        ) = await self.run_pre_deployment_checks()
+
         # 添加返回按钮
         self.add_item(BackButton())
-        
+
         # 添加部署和重置按钮
         self.add_item(DeployAllButton(disabled=not self.checks_passed))
         self.add_item(ResetDeploymentButton(disabled=not self.has_deployment))
 
-    async def run_pre_deployment_checks(self) -> Tuple[bool, Dict[str, Tuple[bool, str]], bool]:
+    async def run_pre_deployment_checks(
+        self,
+    ) -> Tuple[bool, Dict[str, Tuple[bool, str]], bool]:
         """执行部署前的所有检查。"""
         guild_id = self.guild.id
         results = {}
-        
+
         # 检查 1: 是否至少有一个配置好的永久消息
         channel_configs = await db_manager.get_all_channel_messages(guild_id)
-        valid_configs = [c for c in channel_configs if c.get('permanent_message_data')]
-        results["channel_configs"] = (bool(valid_configs), f"{len(valid_configs)} 个地点已配置永久消息")
+        valid_configs = [c for c in channel_configs if c.get("permanent_message_data")]
+        results["channel_configs"] = (
+            bool(valid_configs),
+            f"{len(valid_configs)} 个地点已配置永久消息",
+        )
 
         # 检查 2: 机器人是否拥有必要的权限
         perms = self.guild.me.guild_permissions
         has_perms = perms.send_messages and perms.embed_links and perms.manage_messages
-        results["permissions"] = (has_perms, "基本权限充足" if has_perms else "缺少关键权限")
+        results["permissions"] = (
+            has_perms,
+            "基本权限充足" if has_perms else "缺少关键权限",
+        )
 
         # 检查 3: 是否已有部署存在
-        deployed_messages = [c for c in channel_configs if c.get('deployed_message_id')]
+        deployed_messages = [c for c in channel_configs if c.get("deployed_message_id")]
         has_deployment = bool(deployed_messages)
 
         overall_result = all(res[0] for res in results.values())
@@ -63,9 +79,11 @@ class DeploymentView(View):
         """生成部署视图的 Embed"""
         if self.checks_passed:
             title = "✅ 准备就绪，可以部署或更新"
-            description = "所有前置检查均已通过。\n" \
-                        "▶️ **一键部署**: 向所有已配置的地点部署或更新引导消息。\n" \
-                        "🔄 **重置部署**: 从所有地点删除已部署的引导消息。"
+            description = (
+                "所有前置检查均已通过。\n"
+                "▶️ **一键部署**: 向所有已配置的地点部署或更新引导消息。\n"
+                "🔄 **重置部署**: 从所有地点删除已部署的引导消息。"
+            )
             color = root_config.EMBED_COLOR_PRIMARY
         else:
             title = "⚠️ 部署前检查失败"
@@ -76,128 +94,115 @@ class DeploymentView(View):
 
         check_map = {
             "channel_configs": "📝 地点消息配置",
-            "permissions": "🤖 机器人权限"
+            "permissions": "🤖 机器人权限",
         }
         for key, (passed, status_text) in self.check_results.items():
             emoji = "✅" if passed else "❌"
-            embed.add_field(name=f"{emoji} {check_map.get(key, key)}", value=f"状态: {status_text}", inline=False)
-        
+            embed.add_field(
+                name=f"{emoji} {check_map.get(key, key)}",
+                value=f"状态: {status_text}",
+                inline=False,
+            )
+
         embed.set_footer(text="部署或重置过程可能需要一些时间，请耐心等待。")
         return embed
 
+
 # --- UI 组件 ---
+
 
 class DeployAllButton(Button):
     """确认部署所有频道消息的按钮"""
+
     def __init__(self, disabled: bool):
-        super().__init__(label="🚀 一键部署/更新", style=discord.ButtonStyle.success, row=1, disabled=disabled)
+        super().__init__(
+            label="🚀 一键部署/更新",
+            style=discord.ButtonStyle.success,
+            row=1,
+            disabled=disabled,
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        
+
         guild = interaction.guild
-        all_configs = await db_manager.get_all_channel_messages(guild.id)
-        
-        deploy_targets = [c for c in all_configs if c.get('permanent_message_data')]
+        success_count, fail_count, report_lines = await deploy_all_panels(guild)
 
-        if not deploy_targets:
-            await interaction.followup.send("❌ 没有找到任何已配置永久消息的地点可供部署。", ephemeral=True)
-            return
-
-        success_count, fail_count, report_lines = 0, 0, []
-
-        for config_item in deploy_targets:
-            channel_id = config_item['channel_id']
-            channel = guild.get_channel_or_thread(channel_id)
-
-            if not channel:
-                report_lines.append(f"❌ **未知地点 (ID: {channel_id})**: 跳过。")
-                fail_count += 1
-                continue
-
-            if not channel.permissions_for(guild.me).send_messages:
-                report_lines.append(f"❌ **#{channel.name}**: 权限不足。")
-                fail_count += 1
-                continue
-
-            try:
-                old_message_id = config_item.get('deployed_message_id')
-                if old_message_id:
-                    try:
-                        old_message = await channel.fetch_message(old_message_id)
-                        await old_message.delete()
-                    except (discord.NotFound, discord.Forbidden):
-                        await db_manager.update_channel_deployment_id(channel_id, None)
-
-                perm_data = config_item.get('permanent_message_data') or {}
-                perm_embed = create_embed_from_template_data(perm_data, channel=channel)
-
-                view = PermanentPanelView()
-                new_message = await channel.send(embed=perm_embed, view=view)
-                await db_manager.update_channel_deployment_id(channel_id, new_message.id)
-                
-                report_lines.append(f"✅ **#{channel.name}**: [部署成功]({new_message.jump_url})")
-                success_count += 1
-
-            except Exception as e:
-                log.error(f"部署到地点 {channel_id} 时出错: {e}", exc_info=True)
-                report_lines.append(f"❌ **#{channel.name}**: 发生未知错误。")
-                fail_count += 1
-        
         report_embed = discord.Embed(
             title="部署完成",
             description=f"**总览: {success_count} 个成功, {fail_count} 个失败**",
-            color=root_config.EMBED_COLOR_PRIMARY
+            color=root_config.EMBED_COLOR_PRIMARY,
         )
-        
+
         current_chunk = ""
         field_count = 1
         if not report_lines:
             report_embed.add_field(name="详细报告", value="无详细信息。", inline=False)
         else:
             for line in report_lines:
-                if len(current_chunk) + len(line) + 2 > 1024: # +2 for \n
-                    report_embed.add_field(name=f"详细报告 (第 {field_count} 部分)", value=current_chunk, inline=False)
+                if len(current_chunk) + len(line) + 2 > 1024:  # +2 for \n
+                    report_embed.add_field(
+                        name=f"详细报告 (第 {field_count} 部分)",
+                        value=current_chunk,
+                        inline=False,
+                    )
                     current_chunk = ""
                     field_count += 1
                 current_chunk += line + "\n"
-            
+
             if current_chunk:
-                report_embed.add_field(name=f"详细报告 (第 {field_count} 部分)", value=current_chunk, inline=False)
+                report_embed.add_field(
+                    name=f"详细报告 (第 {field_count} 部分)",
+                    value=current_chunk,
+                    inline=False,
+                )
 
         await interaction.followup.send(embed=report_embed, ephemeral=True)
 
         # 刷新主视图
         await self.view.async_init()
         new_embed = await self.view.get_embed()
-        await self.view.main_interaction.edit_original_response(embed=new_embed, view=self.view)
+        await self.view.main_interaction.edit_original_response(
+            embed=new_embed, view=self.view
+        )
+
 
 class ResetDeploymentButton(Button):
     """重置所有部署的按钮"""
+
     def __init__(self, disabled: bool):
-        super().__init__(label="🔄 重置所有部署", style=discord.ButtonStyle.danger, row=1, disabled=disabled)
+        super().__init__(
+            label="🔄 重置所有部署",
+            style=discord.ButtonStyle.danger,
+            row=1,
+            disabled=disabled,
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        
+
         guild = interaction.guild
         all_configs = await db_manager.get_all_channel_messages(guild.id)
-        
-        deploy_targets = [c for c in all_configs if c.get('deployed_message_id')]
+
+        deploy_targets = [c for c in all_configs if c.get("deployed_message_id")]
 
         if not deploy_targets:
-            await interaction.followup.send("ℹ️ 当前没有任何已部署的消息可供重置。", ephemeral=True)
+            await interaction.followup.send(
+                "ℹ️ 当前没有任何已部署的消息可供重置。", ephemeral=True
+            )
             return
 
         success_count, fail_count, report_lines = 0, 0, []
 
         for config_item in deploy_targets:
-            channel_id = config_item['channel_id']
-            message_id = config_item['deployed_message_id']
+            channel_id = config_item["channel_id"]
+            message_id = config_item["deployed_message_id"]
             channel = guild.get_channel_or_thread(channel_id)
 
             if not channel:
-                report_lines.append(f"⚠️ **未知地点 (ID: {channel_id})**: 无法删除消息，但已从数据库清除记录。")
+                report_lines.append(
+                    f"⚠️ **未知地点 (ID: {channel_id})**: 无法删除消息，但已从数据库清除记录。"
+                )
                 await db_manager.update_channel_deployment_id(channel_id, None)
                 fail_count += 1
                 continue
@@ -210,7 +215,9 @@ class ResetDeploymentButton(Button):
                 success_count += 1
             except discord.NotFound:
                 await db_manager.update_channel_deployment_id(channel_id, None)
-                report_lines.append(f"ℹ️ **#{channel.name}**: 消息已被删除，已从数据库清除记录。")
+                report_lines.append(
+                    f"ℹ️ **#{channel.name}**: 消息已被删除，已从数据库清除记录。"
+                )
             except discord.Forbidden:
                 report_lines.append(f"❌ **#{channel.name}**: 权限不足，无法删除消息。")
                 fail_count += 1
@@ -222,27 +229,37 @@ class ResetDeploymentButton(Button):
         report_embed = discord.Embed(
             title="重置完成",
             description=f"**总览: {success_count} 个成功, {fail_count} 个失败/警告**",
-            color=root_config.EMBED_COLOR_PRIMARY
+            color=root_config.EMBED_COLOR_PRIMARY,
         )
-        
+
         current_chunk = ""
         field_count = 1
         if not report_lines:
             report_embed.add_field(name="详细报告", value="无详细信息。", inline=False)
         else:
             for line in report_lines:
-                if len(current_chunk) + len(line) + 2 > 1024: # +2 for \n
-                    report_embed.add_field(name=f"详细报告 (第 {field_count} 部分)", value=current_chunk, inline=False)
+                if len(current_chunk) + len(line) + 2 > 1024:  # +2 for \n
+                    report_embed.add_field(
+                        name=f"详细报告 (第 {field_count} 部分)",
+                        value=current_chunk,
+                        inline=False,
+                    )
                     current_chunk = ""
                     field_count += 1
                 current_chunk += line + "\n"
-            
+
             if current_chunk:
-                report_embed.add_field(name=f"详细报告 (第 {field_count} 部分)", value=current_chunk, inline=False)
+                report_embed.add_field(
+                    name=f"详细报告 (第 {field_count} 部分)",
+                    value=current_chunk,
+                    inline=False,
+                )
 
         await interaction.followup.send(embed=report_embed, ephemeral=True)
 
         # 刷新主视图
         await self.view.async_init()
         new_embed = await self.view.get_embed()
-        await self.view.main_interaction.edit_original_response(embed=new_embed, view=self.view)
+        await self.view.main_interaction.edit_original_response(
+            embed=new_embed, view=self.view
+        )

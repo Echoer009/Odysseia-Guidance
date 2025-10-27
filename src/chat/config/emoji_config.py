@@ -93,6 +93,21 @@ _HALLOWEEN_WITCH_EMOJI_MAPPINGS = [
     (re.compile(r"\<呆呆\>"), ["<:dai_dai:1431972409107288135>"]),
 ]
 
+# 万圣节 2025 - 狼人派系
+_HALLOWEEN_WEREWOLF_EMOJI_MAPPINGS = [
+    (re.compile(r"\<威胁\>"), ["<:sheng_qi_wolf:1432334013103603733>"]),
+    (re.compile(r"\<得意\>"), ["<:de_yi_wolf:1432335271336218799>"]),
+    (re.compile(r"\<激动\>"), ["<:ji_dong_wolf:1432333960272416828>"]),
+    (re.compile(r"\<开心\>"), ["<:ji_dong_wolf:1432333960272416828>"]),
+    (
+        re.compile(r"\<委屈\>"),
+        ["<:wei_qu_wolf1:1432333814189002873>", "<:wei_qu_wolf2:1432333897923952720>"],
+    ),
+    (re.compile(r"\<大笑\>"), ["<:da_xiao:1432333771591651348>"]),
+    (re.compile(r"\<馋\>"), ["<:can_wolf:1432333654314586162>"]),
+    (re.compile(r"\<无语\>"), ["<:wuyu_wolf:1432338549528727603>"]),
+]
+
 # --- 派系表情总配置 ---
 # 结构: { "event_id": { "faction_id": MAPPING_LIST } }
 FACTION_EMOJI_MAPPINGS = {
@@ -102,5 +117,6 @@ FACTION_EMOJI_MAPPINGS = {
         "church": _HALLOWEEN_CHURCH_EMOJI_MAPPINGS,
         "jiangshi": _HALLOWEEN_JIANGSHI_EMOJI_MAPPINGS,
         "witch": _HALLOWEEN_WITCH_EMOJI_MAPPINGS,
+        "werewolf": _HALLOWEEN_WEREWOLF_EMOJI_MAPPINGS,
     }
 }

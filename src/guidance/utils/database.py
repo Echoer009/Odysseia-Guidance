@@ -7,11 +7,14 @@ from functools import partial
 from typing import Optional, List, Dict, Any, Callable
 
 # --- 常量定义 ---
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+_PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
 DB_PATH = os.path.join(_PROJECT_ROOT, "data", "guidance.db")
 
 # --- 日志记录器 ---
 log = logging.getLogger(__name__)
+
 
 class GuidanceDatabaseManager:
     """管理所有与引导模块相关的 SQLite 数据库的异步交互。"""
@@ -44,7 +47,7 @@ class GuidanceDatabaseManager:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
+
             # --- 服务器配置表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS guild_configs (
@@ -53,11 +56,11 @@ class GuidanceDatabaseManager:
                     verified_role_id INTEGER
                 );
             """)
-            
+
             # 检查并添加 default_tag_id 列到 guild_configs
             cursor.execute("PRAGMA table_info(guild_configs);")
             columns = [info[1] for info in cursor.fetchall()]
-            if 'default_tag_id' not in columns:
+            if "default_tag_id" not in columns:
                 cursor.execute("""
                     ALTER TABLE guild_configs
                     ADD COLUMN default_tag_id INTEGER REFERENCES tags(tag_id) ON DELETE SET NULL;
@@ -131,11 +134,11 @@ class GuidanceDatabaseManager:
                     UNIQUE(user_id, guild_id)
                 );
             """)
-            
+
             # 检查并添加 remaining_path_json 列到 user_progress
             cursor.execute("PRAGMA table_info(user_progress);")
             columns = [info[1] for info in cursor.fetchall()]
-            if 'remaining_path_json' not in columns:
+            if "remaining_path_json" not in columns:
                 cursor.execute("""
                     ALTER TABLE user_progress
                     ADD COLUMN remaining_path_json TEXT;
@@ -161,7 +164,6 @@ class GuidanceDatabaseManager:
                     deployed_message_id INTEGER
                     );
             """)
-                
 
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
@@ -169,7 +171,7 @@ class GuidanceDatabaseManager:
             log.error(f"同步初始化数据库表时出错: {e}")
             raise
         finally:
-            if 'conn' in locals() and conn:
+            if "conn" in locals() and conn:
                 conn.close()
 
     async def _execute(self, func: Callable, *args, **kwargs) -> Any:
@@ -179,13 +181,22 @@ class GuidanceDatabaseManager:
             # 使用 functools.partial 将函数和参数绑定在一起
             blocking_task = partial(func, *args, **kwargs)
             # 在默认的执行器（线程池）中运行该任务
-            result = await asyncio.get_running_loop().run_in_executor(None, blocking_task)
+            result = await asyncio.get_running_loop().run_in_executor(
+                None, blocking_task
+            )
             return result
         except Exception as e:
             log.error(f"数据库执行器出错: {e}", exc_info=True)
             raise
 
-    def _db_transaction(self, query: str, params: tuple = (), *, fetch: str = "none", commit: bool = False):
+    def _db_transaction(
+        self,
+        query: str,
+        params: tuple = (),
+        *,
+        fetch: str = "none",
+        commit: bool = False,
+    ):
         """
         一个通用的同步事务函数，用于被 _execute 调用。
         :param query: SQL 查询语句。
@@ -199,7 +210,7 @@ class GuidanceDatabaseManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(query, params)
-            
+
             if fetch == "one":
                 result = cursor.fetchone()
             elif fetch == "all":
@@ -252,20 +263,24 @@ class GuidanceDatabaseManager:
     # --- Guild Configs ---
     async def get_guild_config(self, guild_id: int) -> Optional[sqlite3.Row]:
         query = "SELECT * FROM guild_configs WHERE guild_id = ?"
-        return await self._execute(self._db_transaction, query, (guild_id,), fetch="one")
+        return await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="one"
+        )
 
     async def set_stage_role(self, guild_id: int, stage: str, role_id: Optional[int]):
         field_name = f"{stage}_role_id"
-        if field_name not in ['buffer_role_id', 'verified_role_id']:
+        if field_name not in ["buffer_role_id", "verified_role_id"]:
             raise ValueError("无效的阶段名称")
-        
+
         query = f"""
             INSERT INTO guild_configs (guild_id, {field_name})
             VALUES (?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET
                 {field_name} = excluded.{field_name};
         """
-        await self._execute(self._db_transaction, query, (guild_id, role_id), commit=True)
+        await self._execute(
+            self._db_transaction, query, (guild_id, role_id), commit=True
+        )
         log.info(f"已为服务器 {guild_id} 设置 {stage} 身份组为 {role_id}")
 
     async def set_default_tag(self, guild_id: int, tag_id: Optional[int]):
@@ -276,14 +291,24 @@ class GuidanceDatabaseManager:
             ON CONFLICT(guild_id) DO UPDATE SET
                 default_tag_id = excluded.default_tag_id;
         """
-        await self._execute(self._db_transaction, query, (guild_id, tag_id), commit=True)
+        await self._execute(
+            self._db_transaction, query, (guild_id, tag_id), commit=True
+        )
         log.info(f"已为服务器 {guild_id} 设置默认标签 ID 为 {tag_id}")
 
     # --- Tags ---
-    async def add_tag(self, guild_id: int, name: str, description: Optional[str] = None) -> int:
+    async def add_tag(
+        self, guild_id: int, name: str, description: Optional[str] = None
+    ) -> int:
         query = "INSERT INTO tags (guild_id, tag_name, description) VALUES (?, ?, ?)"
         try:
-            lastrowid = await self._execute(self._db_transaction, query, (guild_id, name, description), commit=True, fetch="lastrowid")
+            lastrowid = await self._execute(
+                self._db_transaction,
+                query,
+                (guild_id, name, description),
+                commit=True,
+                fetch="lastrowid",
+            )
             log.info(f"已在服务器 {guild_id} 添加标签: {name}")
             return lastrowid
         except sqlite3.IntegrityError:
@@ -296,16 +321,28 @@ class GuidanceDatabaseManager:
 
     async def get_all_tags(self, guild_id: int) -> List[sqlite3.Row]:
         query = "SELECT * FROM tags WHERE guild_id = ? ORDER BY tag_name"
-        return await self._execute(self._db_transaction, query, (guild_id,), fetch="all")
+        return await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="all"
+        )
 
     async def get_tag_by_name(self, guild_id: int, name: str) -> Optional[sqlite3.Row]:
         query = "SELECT * FROM tags WHERE guild_id = ? AND tag_name = ?"
-        return await self._execute(self._db_transaction, query, (guild_id, name), fetch="one")
+        return await self._execute(
+            self._db_transaction, query, (guild_id, name), fetch="one"
+        )
 
-    async def update_tag(self, tag_id: int, name: str, description: Optional[str]) -> int:
+    async def update_tag(
+        self, tag_id: int, name: str, description: Optional[str]
+    ) -> int:
         query = "UPDATE tags SET tag_name = ?, description = ? WHERE tag_id = ?"
         try:
-            rowcount = await self._execute(self._db_transaction, query, (name, description, tag_id), commit=True, fetch="rowcount")
+            rowcount = await self._execute(
+                self._db_transaction,
+                query,
+                (name, description, tag_id),
+                commit=True,
+                fetch="rowcount",
+            )
             if rowcount > 0:
                 log.info(f"已更新标签 ID {tag_id} 为: {name}")
             return rowcount
@@ -315,7 +352,9 @@ class GuidanceDatabaseManager:
 
     async def delete_tag(self, tag_id: int) -> int:
         query = "DELETE FROM tags WHERE tag_id = ?"
-        deleted_rows = await self._execute(self._db_transaction, query, (tag_id,), commit=True, fetch="rowcount")
+        deleted_rows = await self._execute(
+            self._db_transaction, query, (tag_id,), commit=True, fetch="rowcount"
+        )
         if deleted_rows > 0:
             log.info(f"已通过 ID {tag_id} 移除标签。")
         return deleted_rows
@@ -329,22 +368,31 @@ class GuidanceDatabaseManager:
             try:
                 cursor.execute("DELETE FROM paths WHERE tag_id = ?", (tag_id,))
                 steps_to_insert = [
-                    (tag_id, path['location_id'], path['location_type'], path.get('message'), i + 1)
+                    (
+                        tag_id,
+                        path["location_id"],
+                        path["location_type"],
+                        path.get("message"),
+                        i + 1,
+                    )
                     for i, path in enumerate(paths_data)
                 ]
                 if steps_to_insert:
                     cursor.executemany(
                         "INSERT INTO paths (tag_id, location_id, location_type, message, step_number) VALUES (?, ?, ?, ?, ?)",
-                        steps_to_insert
+                        steps_to_insert,
                     )
                 conn.commit()
-                log.info(f"已为标签 {tag_id} 设置新路径，包含 {len(paths_data)} 个步骤。")
+                log.info(
+                    f"已为标签 {tag_id} 设置新路径，包含 {len(paths_data)} 个步骤。"
+                )
             except sqlite3.Error as e:
                 conn.rollback()
                 log.error(f"为标签 {tag_id} 设置路径失败: {e}")
                 raise
             finally:
                 conn.close()
+
         await self._execute(_transaction)
 
     async def get_path_for_tag(self, tag_id: int) -> List[sqlite3.Row]:
@@ -356,16 +404,18 @@ class GuidanceDatabaseManager:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             try:
-                cursor.execute("SELECT tag_id, step_number FROM paths WHERE id = ?", (path_id,))
+                cursor.execute(
+                    "SELECT tag_id, step_number FROM paths WHERE id = ?", (path_id,)
+                )
                 result = cursor.fetchone()
                 if not result:
                     return
-                
+
                 tag_id, deleted_step_number = result[0], result[1]
                 cursor.execute("DELETE FROM paths WHERE id = ?", (path_id,))
                 cursor.execute(
                     "UPDATE paths SET step_number = step_number - 1 WHERE tag_id = ? AND step_number > ?",
-                    (tag_id, deleted_step_number)
+                    (tag_id, deleted_step_number),
                 )
                 conn.commit()
                 log.info(f"已删除路径步骤 {path_id} 并重新排序。")
@@ -375,6 +425,7 @@ class GuidanceDatabaseManager:
                 raise
             finally:
                 conn.close()
+
         await self._execute(_transaction)
 
     async def get_configured_path_locations(self, guild_id: int) -> List[sqlite3.Row]:
@@ -385,22 +436,31 @@ class GuidanceDatabaseManager:
             INNER JOIN tags t ON p.tag_id = t.tag_id
             WHERE t.guild_id = ?
         """
-        return await self._execute(self._db_transaction, query, (guild_id,), fetch="all")
+        return await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="all"
+        )
 
     # --- Trigger Roles ---
     async def get_trigger_roles(self, guild_id: int) -> List[sqlite3.Row]:
         query = "SELECT role_id FROM trigger_roles WHERE guild_id = ?"
-        return await self._execute(self._db_transaction, query, (guild_id,), fetch="all")
+        return await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="all"
+        )
 
     async def set_trigger_roles(self, guild_id: int, role_ids: List[int]):
         def _transaction():
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             try:
-                cursor.execute("DELETE FROM trigger_roles WHERE guild_id = ?", (guild_id,))
+                cursor.execute(
+                    "DELETE FROM trigger_roles WHERE guild_id = ?", (guild_id,)
+                )
                 if role_ids:
                     roles_to_insert = [(guild_id, role_id) for role_id in role_ids]
-                    cursor.executemany("INSERT INTO trigger_roles (guild_id, role_id) VALUES (?, ?)", roles_to_insert)
+                    cursor.executemany(
+                        "INSERT INTO trigger_roles (guild_id, role_id) VALUES (?, ?)",
+                        roles_to_insert,
+                    )
                 conn.commit()
                 log.info(f"已为服务器 {guild_id} 设置 {len(role_ids)} 个触发身份组。")
             except sqlite3.Error as e:
@@ -409,20 +469,30 @@ class GuidanceDatabaseManager:
                 raise
             finally:
                 conn.close()
+
         await self._execute(_transaction)
 
     # --- Message Templates ---
-    async def get_message_template(self, guild_id: int, template_name: str) -> Optional[Dict[str, Any]]:
+    async def get_message_template(
+        self, guild_id: int, template_name: str
+    ) -> Optional[Dict[str, Any]]:
         query = "SELECT template_data FROM message_templates WHERE guild_id = ? AND template_name = ?"
-        row = await self._execute(self._db_transaction, query, (guild_id, template_name), fetch="one")
+        row = await self._execute(
+            self._db_transaction, query, (guild_id, template_name), fetch="one"
+        )
         if row:
             try:
-                return json.loads(row['template_data'])
+                return json.loads(row["template_data"])
             except (json.JSONDecodeError, TypeError):
                 log.warning(f"解析服务器 {guild_id} 的模板 {template_name} 时出错。")
         return None
 
-    async def set_message_template(self, guild_id: int, template_name: str, template_data: Dict[str, Any] | List[Dict[str, Any]]):
+    async def set_message_template(
+        self,
+        guild_id: int,
+        template_name: str,
+        template_data: Dict[str, Any] | List[Dict[str, Any]],
+    ):
         template_json = json.dumps(template_data, ensure_ascii=False)
         query = """
             INSERT INTO message_templates (guild_id, template_name, template_data)
@@ -430,47 +500,76 @@ class GuidanceDatabaseManager:
             ON CONFLICT(guild_id, template_name) DO UPDATE SET
                 template_data = excluded.template_data;
         """
-        await self._execute(self._db_transaction, query, (guild_id, template_name, template_json), commit=True)
+        await self._execute(
+            self._db_transaction,
+            query,
+            (guild_id, template_name, template_json),
+            commit=True,
+        )
         log.info(f"已为服务器 {guild_id} 设置消息模板: {template_name}")
 
     async def delete_all_message_templates(self, guild_id: int) -> int:
         """删除一个服务器的所有消息模板。"""
         query = "DELETE FROM message_templates WHERE guild_id = ?"
-        deleted_rows = await self._execute(self._db_transaction, query, (guild_id,), commit=True, fetch="rowcount")
+        deleted_rows = await self._execute(
+            self._db_transaction, query, (guild_id,), commit=True, fetch="rowcount"
+        )
         if deleted_rows > 0:
             log.info(f"已删除服务器 {guild_id} 的 {deleted_rows} 个消息模板。")
         return deleted_rows
 
     async def get_all_message_templates(self, guild_id: int) -> Dict[str, Any]:
         query = "SELECT template_name, template_data FROM message_templates WHERE guild_id = ?"
-        rows = await self._execute(self._db_transaction, query, (guild_id,), fetch="all")
+        rows = await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="all"
+        )
         templates = {}
         for row in rows:
             try:
-                templates[row['template_name']] = json.loads(row['template_data'])
+                templates[row["template_name"]] = json.loads(row["template_data"])
             except (json.JSONDecodeError, TypeError):
-                log.warning(f"解析服务器 {guild_id} 的模板 {row['template_name']} 时出错。")
+                log.warning(
+                    f"解析服务器 {guild_id} 的模板 {row['template_name']} 时出错。"
+                )
         return templates
 
     # --- User Progress ---
-    async def get_user_progress(self, user_id: int, guild_id: int) -> Optional[sqlite3.Row]:
+    async def get_user_progress(
+        self, user_id: int, guild_id: int
+    ) -> Optional[sqlite3.Row]:
         query = "SELECT * FROM user_progress WHERE user_id = ? AND guild_id = ?"
-        return await self._execute(self._db_transaction, query, (user_id, guild_id), fetch="one")
+        return await self._execute(
+            self._db_transaction, query, (user_id, guild_id), fetch="one"
+        )
 
-    async def create_or_reset_user_progress(self, user_id: int, guild_id: int, status: str, guidance_stage: Optional[str] = None) -> sqlite3.Row:
+    async def create_or_reset_user_progress(
+        self,
+        user_id: int,
+        guild_id: int,
+        status: str,
+        guidance_stage: Optional[str] = None,
+    ) -> sqlite3.Row:
         def _transaction():
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             try:
-                cursor.execute("DELETE FROM user_progress WHERE user_id = ? AND guild_id = ?", (user_id, guild_id))
+                cursor.execute(
+                    "DELETE FROM user_progress WHERE user_id = ? AND guild_id = ?",
+                    (user_id, guild_id),
+                )
                 cursor.execute(
                     "INSERT INTO user_progress (user_id, guild_id, status, guidance_stage, current_step) VALUES (?, ?, ?, ?, ?)",
-                    (user_id, guild_id, status, guidance_stage, 1)
+                    (user_id, guild_id, status, guidance_stage, 1),
                 )
                 conn.commit()
-                cursor.execute("SELECT * FROM user_progress WHERE progress_id = ?", (cursor.lastrowid,))
-                log.info(f"已为用户 {user_id} 在服务器 {guild_id} 创建或重置了进度记录，新状态: {status}, 阶段: {guidance_stage}")
+                cursor.execute(
+                    "SELECT * FROM user_progress WHERE progress_id = ?",
+                    (cursor.lastrowid,),
+                )
+                log.info(
+                    f"已为用户 {user_id} 在服务器 {guild_id} 创建或重置了进度记录，新状态: {status}, 阶段: {guidance_stage}"
+                )
                 return cursor.fetchone()
             except sqlite3.Error as e:
                 conn.rollback()
@@ -478,9 +577,12 @@ class GuidanceDatabaseManager:
                 raise
             finally:
                 conn.close()
+
         return await self._execute(_transaction)
 
-    async def update_user_progress(self, user_id: int, guild_id: int, **kwargs) -> Optional[sqlite3.Row]:
+    async def update_user_progress(
+        self, user_id: int, guild_id: int, **kwargs
+    ) -> Optional[sqlite3.Row]:
         updates = {key: value for key, value in kwargs.items() if value is not None}
         if not updates:
             return None
@@ -494,7 +596,9 @@ class GuidanceDatabaseManager:
         values.append(user_id)
         values.append(guild_id)
 
-        query = f"UPDATE user_progress SET {set_clause} WHERE user_id = ? AND guild_id = ?"
+        query = (
+            f"UPDATE user_progress SET {set_clause} WHERE user_id = ? AND guild_id = ?"
+        )
         await self._execute(self._db_transaction, query, tuple(values), commit=True)
         log.info(f"用户 {user_id} 的进度已更新: {updates}")
         return await self.get_user_progress(user_id, guild_id)
@@ -509,15 +613,27 @@ class GuidanceDatabaseManager:
                 message_id = excluded.message_id,
                 last_deployed_at = excluded.last_deployed_at
         """
-        await self._execute(self._db_transaction, query, (guild_id, channel_id, message_id), commit=True)
-        log.info(f"已记录服务器 {guild_id} 的面板部署信息 (Channel: {channel_id}, Message: {message_id})")
+        await self._execute(
+            self._db_transaction, query, (guild_id, channel_id, message_id), commit=True
+        )
+        log.info(
+            f"已记录服务器 {guild_id} 的面板部署信息 (Channel: {channel_id}, Message: {message_id})"
+        )
 
     async def get_deployed_panel(self, guild_id: int) -> Optional[sqlite3.Row]:
         query = "SELECT channel_id, message_id FROM deployed_panels WHERE guild_id = ?"
-        return await self._execute(self._db_transaction, query, (guild_id,), fetch="one")
+        return await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="one"
+        )
 
     # --- Channel Messages ---
-    async def set_channel_message(self, guild_id: int, channel_id: int, permanent_data: Optional[Dict[str, Any]], temporary_data: Optional[Dict[str, Any]]):
+    async def set_channel_message(
+        self,
+        guild_id: int,
+        channel_id: int,
+        permanent_data: Optional[Dict[str, Any]],
+        temporary_data: Optional[Dict[str, Any]],
+    ):
         permanent_json = json.dumps(permanent_data) if permanent_data else None
         temporary_json = json.dumps(temporary_data) if temporary_data else None
         query = """
@@ -528,52 +644,77 @@ class GuidanceDatabaseManager:
                 permanent_message_data = excluded.permanent_message_data,
                 temporary_message_data = excluded.temporary_message_data
         """
-        await self._execute(self._db_transaction, query, (channel_id, guild_id, permanent_json, temporary_json), commit=True)
+        await self._execute(
+            self._db_transaction,
+            query,
+            (channel_id, guild_id, permanent_json, temporary_json),
+            commit=True,
+        )
         log.info(f"已为频道 {channel_id} 设置专属消息。")
 
     async def get_channel_message(self, channel_id: int) -> Optional[Dict[str, Any]]:
         query = "SELECT * FROM channel_messages WHERE channel_id = ?"
-        row = await self._execute(self._db_transaction, query, (channel_id,), fetch="one")
+        row = await self._execute(
+            self._db_transaction, query, (channel_id,), fetch="one"
+        )
         if not row:
             return None
-        
+
         data = dict(row)
         try:
-            if data.get('permanent_message_data'):
-                data['permanent_message_data'] = json.loads(data['permanent_message_data'])
-            if data.get('temporary_message_data'):
-                data['temporary_message_data'] = json.loads(data['temporary_message_data'])
+            if data.get("permanent_message_data"):
+                data["permanent_message_data"] = json.loads(
+                    data["permanent_message_data"]
+                )
+            if data.get("temporary_message_data"):
+                data["temporary_message_data"] = json.loads(
+                    data["temporary_message_data"]
+                )
         except (json.JSONDecodeError, TypeError):
             log.warning(f"解析频道 {channel_id} 的专属消息JSON时出错。")
         return data
 
     def get_channel_message_sync(self, channel_id: int) -> Optional[Dict[str, Any]]:
         """同步版本的 get_channel_message，用于视图内部的快速查找。"""
-        row = self._db_transaction("SELECT * FROM channel_messages WHERE channel_id = ?", (channel_id,), fetch="one")
+        row = self._db_transaction(
+            "SELECT * FROM channel_messages WHERE channel_id = ?",
+            (channel_id,),
+            fetch="one",
+        )
         if not row:
             return None
-        
+
         data = dict(row)
         try:
-            if data.get('permanent_message_data'):
-                data['permanent_message_data'] = json.loads(data['permanent_message_data'])
-            if data.get('temporary_message_data'):
-                data['temporary_message_data'] = json.loads(data['temporary_message_data'])
+            if data.get("permanent_message_data"):
+                data["permanent_message_data"] = json.loads(
+                    data["permanent_message_data"]
+                )
+            if data.get("temporary_message_data"):
+                data["temporary_message_data"] = json.loads(
+                    data["temporary_message_data"]
+                )
         except (json.JSONDecodeError, TypeError):
             log.warning(f"同步解析频道 {channel_id} 的专属消息JSON时出错。")
         return data
 
     async def get_all_channel_messages(self, guild_id: int) -> List[Dict[str, Any]]:
         query = "SELECT * FROM channel_messages WHERE guild_id = ?"
-        rows = await self._execute(self._db_transaction, query, (guild_id,), fetch="all")
+        rows = await self._execute(
+            self._db_transaction, query, (guild_id,), fetch="all"
+        )
         results = []
         for row in rows:
             data = dict(row)
             try:
-                if data.get('permanent_message_data'):
-                    data['permanent_message_data'] = json.loads(data['permanent_message_data'])
-                if data.get('temporary_message_data'):
-                    data['temporary_message_data'] = json.loads(data['temporary_message_data'])
+                if data.get("permanent_message_data"):
+                    data["permanent_message_data"] = json.loads(
+                        data["permanent_message_data"]
+                    )
+                if data.get("temporary_message_data"):
+                    data["temporary_message_data"] = json.loads(
+                        data["temporary_message_data"]
+                    )
                 results.append(data)
             except (json.JSONDecodeError, TypeError):
                 log.warning(f"解析频道 {data['channel_id']} 的专属消息JSON时出错。")
@@ -581,19 +722,27 @@ class GuidanceDatabaseManager:
 
     async def remove_channel_message(self, channel_id: int) -> int:
         query = "DELETE FROM channel_messages WHERE channel_id = ?"
-        deleted_rows = await self._execute(self._db_transaction, query, (channel_id,), commit=True, fetch="rowcount")
+        deleted_rows = await self._execute(
+            self._db_transaction, query, (channel_id,), commit=True, fetch="rowcount"
+        )
         if deleted_rows > 0:
             log.info(f"已删除频道 {channel_id} 的专属消息配置。")
         return deleted_rows
 
-    async def update_channel_deployment_id(self, channel_id: int, message_id: Optional[int]):
-        query = "UPDATE channel_messages SET deployed_message_id = ? WHERE channel_id = ?"
-        await self._execute(self._db_transaction, query, (message_id, channel_id), commit=True)
+    async def update_channel_deployment_id(
+        self, channel_id: int, message_id: Optional[int]
+    ):
+        query = (
+            "UPDATE channel_messages SET deployed_message_id = ? WHERE channel_id = ?"
+        )
+        await self._execute(
+            self._db_transaction, query, (message_id, channel_id), commit=True
+        )
         log.info(f"已更新频道 {channel_id} 的部署消息ID为 {message_id}。")
 
 
 # --- 单例实例 ---
 guidance_db_manager = GuidanceDatabaseManager()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("这是一个异步数据库模块，不能直接运行。请通过主程序导入和使用。")
