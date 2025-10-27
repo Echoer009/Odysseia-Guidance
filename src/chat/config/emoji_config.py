@@ -95,7 +95,7 @@ _HALLOWEEN_WITCH_EMOJI_MAPPINGS = [
 
 # 万圣节 2025 - 狼人派系
 _HALLOWEEN_WEREWOLF_EMOJI_MAPPINGS = [
-    (re.compile(r"\<威胁\>"), ["<:sheng_qi_wolf:1432334013103603733>"]),
+    (re.compile(r"\<生气\>"), ["<:sheng_qi_wolf:1432334013103603733>"]),
     (re.compile(r"\<得意\>"), ["<:de_yi_wolf:1432335271336218799>"]),
     (re.compile(r"\<激动\>"), ["<:ji_dong_wolf:1432333960272416828>"]),
     (re.compile(r"\<开心\>"), ["<:ji_dong_wolf:1432333960272416828>"]),
