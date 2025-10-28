@@ -529,6 +529,8 @@ class GeminiService:
         personal_summary: Optional[str] = None,
         affection_status: Optional[Dict[str, Any]] = None,
         user_profile_data: Optional[Dict[str, Any]] = None,
+        guild_name: str = "未知服务器",
+        location_name: str = "未知位置",
         client: Any = None,
     ) -> str:
         """生成AI回复（已重构）。"""
@@ -550,6 +552,8 @@ class GeminiService:
             affection_status=affection_status,
             personal_summary=personal_summary,
             user_profile_data=user_profile_data,
+            guild_name=guild_name,
+            location_name=location_name,
         )
 
         # 3. 准备 API 调用参数 (重构以符合文档规范)

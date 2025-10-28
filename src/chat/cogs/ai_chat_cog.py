@@ -94,8 +94,23 @@ class AIChatCog(commands.Cog):
             processed_data = await message_processor.process_message(message, self.bot)
 
             # 2. 使用 ChatService 获取AI回复
+            # --- 新增：获取并传递位置信息 ---
+            guild_name = message.guild.name if message.guild else "私信"
+            location_name = ""
+            if isinstance(message.channel, discord.Thread):
+                # 如果是帖子（子区），显示“父频道 -> 帖子名”
+                parent_channel_name = (
+                    message.channel.parent.name
+                    if message.channel.parent
+                    else "未知频道"
+                )
+                location_name = f"{parent_channel_name} -> {message.channel.name}"
+            else:
+                # 否则，直接显示频道名
+                location_name = message.channel.name
+
             final_response = await chat_service.handle_chat_message(
-                message, processed_data
+                message, processed_data, guild_name, location_name
             )
 
             # 3. 返回回复内容

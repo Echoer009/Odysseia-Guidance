@@ -90,7 +90,11 @@ class ChatService:
         return True
 
     async def handle_chat_message(
-        self, message: discord.Message, processed_data: Dict[str, Any]
+        self,
+        message: discord.Message,
+        processed_data: Dict[str, Any],
+        guild_name: str,
+        location_name: str,
     ) -> str:
         """
         处理聊天消息，生成并返回AI的最终回复。
@@ -228,6 +232,8 @@ class ChatService:
                 personal_summary=personal_summary,
                 affection_status=affection_status,
                 user_profile_data=user_profile_data,
+                guild_name=guild_name,
+                location_name=location_name,
             )
 
             if not ai_response:

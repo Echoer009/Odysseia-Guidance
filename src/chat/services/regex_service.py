@@ -2,6 +2,7 @@
 
 import re
 
+
 class RegexService:
     """
     一个专门用于处理和清理文本中特定模式的的服务。
@@ -17,9 +18,9 @@ class RegexService:
             return ""
 
         # 匹配 (), （）
-        text = re.sub(r'[\(（][^)）]*[\)）]:?\s*', '', text)
+        text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
         # 匹配 [], 【】
-        text = re.sub(r'[\[【][^\]】]*[\]】]:?\s*', '', text)
+        text = re.sub(r"[\[【][^\]】]*[\]】]:?\s*", "", text)
         return text.strip()
 
     def clean_user_input(self, text: str) -> str:
@@ -32,24 +33,25 @@ class RegexService:
             return ""
 
         # 移除 (), （）, [], 【】, {}, 《》 及其内部内容
-        text = re.sub(r'[\(（][^)）]*[\)）]:?\s*', '', text)
-        text = re.sub(r'[\[【][^\]】]*[\]】]:?\s*', '', text)
-        text = re.sub(r'\{[^\}]*\}', '', text)
-        text = re.sub(r'《[^》]*》', '', text)
+        text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
+        text = re.sub(r"[\[【][^\]】]*[\]】]:?\s*", "", text)
+        text = re.sub(r"\{[^\}]*\}", "", text)
+        text = re.sub(r"《[^》]*》", "", text)
 
-        # 移除XML/HTML标签，但豁免Discord自定义表情格式 <a?:name:id>
-        # 使用负向前瞻断言来避免匹配表情
-        text = re.sub(r'<(?![a]?:[\w_]+:\d+>)[^>]+>', '', text)
+        # 移除所有剩余的XML/HTML标签
+        # 此时真实的Discord表情应该已经被移除了，所以我们可以安全地移除所有 <...> 格式的文本
+        text = re.sub(r"<[^>]+>", "", text)
 
         # 移除Markdown代码块 (```...``` 和 `...`)
-        text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
-        text = re.sub(r'`[^`]*`', '', text)
+        text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        text = re.sub(r"`[^`]*`", "", text)
 
         # 移除Markdown引用和标题
-        text = re.sub(r'^\s*>\s*', '', text, flags=re.MULTILINE)
-        text = re.sub(r'^\s*#+\s*', '', text, flags=re.MULTILINE)
-        
+        text = re.sub(r"^\s*>\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\s*#+\s*", "", text, flags=re.MULTILINE)
+
         return text.strip()
+
 
 # 全局实例
 regex_service = RegexService()
