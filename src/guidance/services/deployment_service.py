@@ -10,12 +10,15 @@ from src.guidance.utils.helpers import create_embed_from_template_data
 log = logging.getLogger(__name__)
 
 
-async def deploy_all_panels(guild: discord.Guild) -> Tuple[int, int, List[str]]:
+async def deploy_all_panels(
+    guild: discord.Guild, force: bool = False
+) -> Tuple[int, int, List[str]]:
     """
     向服务器中所有已配置永久消息的地点部署或更新引导面板。
 
     Args:
         guild: 目标 discord.Guild 对象。
+        force: 如果为 True，则跳过权限检查强制部署。
 
     Returns:
         一个元组，包含 (成功数量, 失败数量, 报告行列表)。
@@ -59,7 +62,7 @@ async def deploy_all_panels(guild: discord.Guild) -> Tuple[int, int, List[str]]:
         }
         missing_perms = [p for p, v in required_perms.items() if not v]
 
-        if missing_perms:
+        if not force and missing_perms:
             report_lines.append(
                 f"❌ **#{channel.name}**: 权限不足 (缺少: {', '.join(missing_perms)})。"
             )

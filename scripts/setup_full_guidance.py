@@ -510,7 +510,9 @@ async def setup_guidance(args: argparse.Namespace):
     # --- 4. 部署永久消息面板 (可选) ---
     if args.deploy_panels:
         log.info("--- 3. 正在部署或更新永久消息面板 ---")
-        success_count, fail_count, report_lines = await deploy_all_panels(guild)
+        success_count, fail_count, report_lines = await deploy_all_panels(
+            guild, force=args.force
+        )
         log.info("--- 部署报告 ---")
         for line in report_lines:
             # 移除 markdown 链接格式，简化输出
@@ -544,6 +546,11 @@ async def on_ready():
         "--deploy-panels",
         action="store_true",
         help="是否部署或更新频道内的永久消息面板。",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制部署，跳过权限检查。警告：可能导致重复的消息面板。",
     )
     args = parser.parse_args()
 
