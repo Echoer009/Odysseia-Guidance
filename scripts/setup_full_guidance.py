@@ -318,197 +318,210 @@ async def setup_guidance(args: argparse.Namespace):
         log.info("--- [重试模式] 已激活，跳过清理旧配置和已部署的面板。 ---")
 
     # --- 3. 写入新配置 ---
-    log.info("--- 3. 正在写入新配置到数据库 ---")
+    if not args.retry_failed:
+        log.info("--- 3. 正在写入新配置到数据库 ---")
 
-    # 辅助函数：通过名称查找ID
-    def get_role_id_by_name(name: str) -> Optional[int]:
-        role = discord.utils.get(guild.roles, name=name)
-        if not role:
-            log.warning(
-                f"  ⚠️  警告：在服务器 '{guild.name}' 中找不到名为 '{name}' 的身份组。"
+        # 辅助函数：通过名称查找ID
+        def get_role_id_by_name(name: str) -> Optional[int]:
+            role = discord.utils.get(guild.roles, name=name)
+            if not role:
+                log.warning(
+                    f"  ⚠️  警告：在服务器 '{guild.name}' 中找不到名为 '{name}' 的身份组。"
+                )
+            return role.id if role else None
+
+        # 3.1 写入服务器基础配置
+        server_config = logic_config.get("server_config", {})
+        buffer_role_name = server_config.get("buffer_role_name")
+        verified_role_name = server_config.get("verified_role_name")
+
+        if buffer_role_name:
+            buffer_role_id = get_role_id_by_name(buffer_role_name)
+            if buffer_role_id:
+                await db_manager.set_stage_role(guild_id, "buffer", buffer_role_id)
+                log.info(
+                    f"  - 设置缓冲区身份组为: '{buffer_role_name}' (ID: {buffer_role_id})"
+                )
+
+        if verified_role_name:
+            verified_role_id = get_role_id_by_name(verified_role_name)
+            if verified_role_id:
+                await db_manager.set_stage_role(guild_id, "verified", verified_role_id)
+                log.info(
+                    f"  - 设置已验证身份组为: '{verified_role_name}' (ID: {verified_role_id})"
+                )
+
+        # 3.2 写入标签，并设置默认标签
+        tags_config = logic_config.get("tags", [])
+        default_tag_name = None
+        created_tags_map = {}  # 用于存储 name -> id 的映射
+
+        # --- 性能优化：一次性并行验证所有地点ID ---
+        all_location_ids = set()
+        for tag_config in tags_config:
+            all_location_ids.update(tag_config.get("channels", []))
+            all_location_ids.update(tag_config.get("threads", []))
+
+        log.info(f"  - 发现 {len(all_location_ids)} 个唯一的地点ID，开始并行验证...")
+        validation_tasks = [guild.fetch_channel(loc_id) for loc_id in all_location_ids]
+        results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+
+        validated_locations = {}
+        for i, result in enumerate(results):
+            # 使用 all_location_ids 的有序列表来确保 loc_id 和 result 对应
+            loc_id = list(all_location_ids)[i]
+            if isinstance(result, (discord.abc.GuildChannel, discord.Thread)):
+                validated_locations[loc_id] = result
+            else:
+                # 对于无效的ID，记录警告
+                log.warning(
+                    f"  - ⚠️  验证失败：找不到 ID 为 {loc_id} 的地点或权限不足。"
+                )
+        log.info(f"  - ✅ 验证完成，成功获取 {len(validated_locations)} 个地点的信息。")
+        # --- 性能优化结束 ---
+
+        for i, tag_config in enumerate(tags_config):
+            tag_name = tag_config["name"]
+            tag_id = await db_manager.add_tag(
+                guild_id, tag_name, tag_config.get("description"), sort_order=i
             )
-        return role.id if role else None
+            created_tags_map[tag_name] = tag_id
+            log.info(f"  - 创建标签: '{tag_name}' (ID: {tag_id}, 顺序: {i})")
 
-    # 3.1 写入服务器基础配置
-    server_config = logic_config.get("server_config", {})
-    buffer_role_name = server_config.get("buffer_role_name")
-    verified_role_name = server_config.get("verified_role_name")
+            if tag_config.get("is_default", False):
+                default_tag_name = tag_name
 
-    if buffer_role_name:
-        buffer_role_id = get_role_id_by_name(buffer_role_name)
-        if buffer_role_id:
-            await db_manager.set_stage_role(guild_id, "buffer", buffer_role_id)
-            log.info(
-                f"  - 设置缓冲区身份组为: '{buffer_role_name}' (ID: {buffer_role_id})"
-            )
+            paths_data = []
 
-    if verified_role_name:
-        verified_role_id = get_role_id_by_name(verified_role_name)
-        if verified_role_id:
-            await db_manager.set_stage_role(guild_id, "verified", verified_role_id)
-            log.info(
-                f"  - 设置已验证身份组为: '{verified_role_name}' (ID: {verified_role_id})"
-            )
-
-    # 3.2 写入标签，并设置默认标签
-    tags_config = logic_config.get("tags", [])
-    default_tag_name = None
-    created_tags_map = {}  # 用于存储 name -> id 的映射
-
-    # --- 性能优化：一次性并行验证所有地点ID ---
-    all_location_ids = set()
-    for tag_config in tags_config:
-        all_location_ids.update(tag_config.get("channels", []))
-        all_location_ids.update(tag_config.get("threads", []))
-
-    log.info(f"  - 发现 {len(all_location_ids)} 个唯一的地点ID，开始并行验证...")
-    validation_tasks = [guild.fetch_channel(loc_id) for loc_id in all_location_ids]
-    results = await asyncio.gather(*validation_tasks, return_exceptions=True)
-
-    validated_locations = {}
-    for i, result in enumerate(results):
-        # 使用 all_location_ids 的有序列表来确保 loc_id 和 result 对应
-        loc_id = list(all_location_ids)[i]
-        if isinstance(result, (discord.abc.GuildChannel, discord.Thread)):
-            validated_locations[loc_id] = result
-        else:
-            # 对于无效的ID，记录警告
-            log.warning(f"  - ⚠️  验证失败：找不到 ID 为 {loc_id} 的地点或权限不足。")
-    log.info(f"  - ✅ 验证完成，成功获取 {len(validated_locations)} 个地点的信息。")
-    # --- 性能优化结束 ---
-
-    for i, tag_config in enumerate(tags_config):
-        tag_name = tag_config["name"]
-        tag_id = await db_manager.add_tag(
-            guild_id, tag_name, tag_config.get("description"), sort_order=i
-        )
-        created_tags_map[tag_name] = tag_id
-        log.info(f"  - 创建标签: '{tag_name}' (ID: {tag_id}, 顺序: {i})")
-
-        if tag_config.get("is_default", False):
-            default_tag_name = tag_name
-
-        paths_data = []
-
-        # 处理普通频道
-        for location_id in tag_config.get("channels", []):
-            channel = validated_locations.get(location_id)
-            if channel:
-                if not isinstance(channel, discord.Thread):
-                    paths_data.append(
-                        {
-                            "location_id": location_id,
-                            "location_type": "channel",
-                            "message": None,
-                        }
-                    )
-                else:
-                    log.warning(
-                        f"    - ⚠️  警告：ID {location_id} ('{channel.name}') 是一个帖子，但被配置在了 'channels' 列表下。"
-                    )
-            # 如果ID无效，之前已打印过警告，此处不再重复
-
-        # 处理帖子
-        for location_id in tag_config.get("threads", []):
-            thread = validated_locations.get(location_id)
-            if thread:
-                if isinstance(thread, discord.Thread):
-                    paths_data.append(
-                        {
-                            "location_id": location_id,
-                            "location_type": "thread",
-                            "message": None,
-                        }
-                    )
-                else:
-                    log.warning(
-                        f"    - ⚠️  警告：ID {location_id} ('{thread.name}') 不是一个帖子，但被配置在了 'threads' 列表下。"
-                    )
-            # 如果ID无效，之前已打印过警告，此处不再重复
-
-        if paths_data:
-            await db_manager.set_path_for_tag(tag_id, paths_data)
-            log.info(
-                f"    - ✅ 成功为标签 '{tag_name}' 创建了包含 {len(paths_data)} 个频道/帖子的路径。"
-            )
-
-    # 在所有标签创建完毕后，设置默认标签
-    if default_tag_name and default_tag_name in created_tags_map:
-        default_tag_id = created_tags_map[default_tag_name]
-        await db_manager.set_default_tag(guild_id, default_tag_id)
-        log.info(f"  - 设置默认标签为: '{default_tag_name}' (ID: {default_tag_id})")
-
-    # 3.2 写入路径和触发身份组
-    paths_config = logic_config.get("paths", [])
-    all_trigger_roles = []
-
-    for path_config in paths_config:
-        path_name = path_config["name"]
-        trigger_role_name = path_config.get("trigger_role")
-
-        if trigger_role_name:
-            trigger_role_id = get_role_id_by_name(trigger_role_name)
-            if trigger_role_id:
-                # 构建 path_steps 数据
-                path_steps = []
-                for step in path_config.get("steps", []):
-                    location_id = step.get("channel_id")
-                    if location_id:
-                        # 验证频道或帖子是否存在
-                        if guild.get_channel(location_id) or guild.get_thread(
-                            location_id
-                        ):
-                            path_steps.append(
-                                {
-                                    "location_id": location_id,
-                                    "persona_template": step.get("persona_template"),
-                                    # 可以根据需要添加其他步骤相关的配置
-                                }
-                            )
-                        else:
-                            log.warning(
-                                f"    ⚠️  警告：在路径 '{path_name}' 中，找不到 ID 为 '{location_id}' 的频道或帖子。"
-                            )
+            # 处理普通频道
+            for location_id in tag_config.get("channels", []):
+                channel = validated_locations.get(location_id)
+                if channel:
+                    if not isinstance(channel, discord.Thread):
+                        paths_data.append(
+                            {
+                                "location_id": location_id,
+                                "location_type": "channel",
+                                "message": None,
+                            }
+                        )
                     else:
                         log.warning(
-                            f"    ⚠️  警告：路径 '{path_name}' 的一个步骤缺少 'channel_id'。"
+                            f"    - ⚠️  警告：ID {location_id} ('{channel.name}') 是一个帖子，但被配置在了 'channels' 列表下。"
                         )
+                # 如果ID无效，之前已打印过警告，此处不再重复
 
-                # 将路径数据和触发身份组ID存入数据库
-                await db_manager.add_or_update_path(
-                    guild_id, path_name, trigger_role_id, path_steps
-                )
-                all_trigger_roles.append(trigger_role_id)
+            # 处理帖子
+            for location_id in tag_config.get("threads", []):
+                thread = validated_locations.get(location_id)
+                if thread:
+                    if isinstance(thread, discord.Thread):
+                        paths_data.append(
+                            {
+                                "location_id": location_id,
+                                "location_type": "thread",
+                                "message": None,
+                            }
+                        )
+                    else:
+                        log.warning(
+                            f"    - ⚠️  警告：ID {location_id} ('{thread.name}') 不是一个帖子，但被配置在了 'threads' 列表下。"
+                        )
+                # 如果ID无效，之前已打印过警告，此处不再重复
+
+            if paths_data:
+                await db_manager.set_path_for_tag(tag_id, paths_data)
                 log.info(
-                    f"  - 写入路径 '{path_name}'，由身份组 '{trigger_role_name}' (ID: {trigger_role_id}) 触发，包含 {len(path_steps)} 个步骤。"
+                    f"    - ✅ 成功为标签 '{tag_name}' 创建了包含 {len(paths_data)} 个频道/帖子的路径。"
                 )
 
-    # 更新服务器的总触发身份组列表
-    if all_trigger_roles:
-        await db_manager.set_trigger_roles(guild_id, all_trigger_roles)
-        log.info(f"  - 更新服务器的触发身份组列表，共 {len(all_trigger_roles)} 个。")
+        # 在所有标签创建完毕后，设置默认标签
+        if default_tag_name and default_tag_name in created_tags_map:
+            default_tag_id = created_tags_map[default_tag_name]
+            await db_manager.set_default_tag(guild_id, default_tag_id)
+            log.info(f"  - 设置默认标签为: '{default_tag_name}' (ID: {default_tag_id})")
 
-    # 3.3 写入私信模板
-    for template_name, template_data in persona_templates.items():
-        await db_manager.set_message_template(guild_id, template_name, template_data)
-    log.info(f"  - 写入了 {len(persona_templates)} 个私信模板。")
+        # 3.2 写入路径和触发身份组
+        paths_config = logic_config.get("paths", [])
+        all_trigger_roles = []
 
-    # 3.4 写入频道专属消息
-    for location_identifier, message_data in channel_messages.items():
-        # location_identifier 格式为 "type(id)"
-        match = re.match(r"(channel|thread)\((\d+)\)", location_identifier)
-        if match:
-            loc_type, loc_id_str = match.groups()
-            loc_id = int(loc_id_str)
-            await db_manager.set_channel_message(
-                guild_id=guild_id,
-                channel_id=loc_id,
-                permanent_data=message_data.get("permanent_data", [{}])[0]
-                if message_data.get("permanent_data")
-                else {},
-                temporary_data=message_data.get("temporary_data", []),
+        for path_config in paths_config:
+            path_name = path_config["name"]
+            trigger_role_name = path_config.get("trigger_role")
+
+            if trigger_role_name:
+                trigger_role_id = get_role_id_by_name(trigger_role_name)
+                if trigger_role_id:
+                    # 构建 path_steps 数据
+                    path_steps = []
+                    for step in path_config.get("steps", []):
+                        location_id = step.get("channel_id")
+                        if location_id:
+                            # 验证频道或帖子是否存在
+                            if guild.get_channel(location_id) or guild.get_thread(
+                                location_id
+                            ):
+                                path_steps.append(
+                                    {
+                                        "location_id": location_id,
+                                        "persona_template": step.get(
+                                            "persona_template"
+                                        ),
+                                        # 可以根据需要添加其他步骤相关的配置
+                                    }
+                                )
+                            else:
+                                log.warning(
+                                    f"    ⚠️  警告：在路径 '{path_name}' 中，找不到 ID 为 '{location_id}' 的频道或帖子。"
+                                )
+                        else:
+                            log.warning(
+                                f"    ⚠️  警告：路径 '{path_name}' 的一个步骤缺少 'channel_id'。"
+                            )
+
+                    # 将路径数据和触发身份组ID存入数据库
+                    await db_manager.add_or_update_path(
+                        guild_id, path_name, trigger_role_id, path_steps
+                    )
+                    all_trigger_roles.append(trigger_role_id)
+                    log.info(
+                        f"  - 写入路径 '{path_name}'，由身份组 '{trigger_role_name}' (ID: {trigger_role_id}) 触发，包含 {len(path_steps)} 个步骤。"
+                    )
+
+        # 更新服务器的总触发身份组列表
+        if all_trigger_roles:
+            await db_manager.set_trigger_roles(guild_id, all_trigger_roles)
+            log.info(
+                f"  - 更新服务器的触发身份组列表，共 {len(all_trigger_roles)} 个。"
             )
-    log.info(f"  - 写入了 {len(channel_messages)} 个地点的专属消息。")
+
+        # 3.3 写入私信模板
+        for template_name, template_data in persona_templates.items():
+            await db_manager.set_message_template(
+                guild_id, template_name, template_data
+            )
+        log.info(f"  - 写入了 {len(persona_templates)} 个私信模板。")
+
+        # 3.4 写入频道专属消息
+        for location_identifier, message_data in channel_messages.items():
+            # location_identifier 格式为 "type(id)"
+            match = re.match(r"(channel|thread)\((\d+)\)", location_identifier)
+            if match:
+                loc_type, loc_id_str = match.groups()
+                loc_id = int(loc_id_str)
+                await db_manager.set_channel_message(
+                    guild_id=guild_id,
+                    channel_id=loc_id,
+                    permanent_data=message_data.get("permanent_data", [{}])[0]
+                    if message_data.get("permanent_data")
+                    else {},
+                    temporary_data=message_data.get("temporary_data", []),
+                )
+        log.info(f"  - 写入了 {len(channel_messages)} 个地点的专属消息。")
+    else:
+        log.info(
+            "--- [重试模式] 已激活，跳过写入配置步骤。将直接使用数据库中的现有配置进行部署。 ---"
+        )
 
     # --- 4. 部署永久消息面板 (可选) ---
     if args.deploy_panels:
