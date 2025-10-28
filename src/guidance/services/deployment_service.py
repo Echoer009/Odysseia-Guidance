@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 async def deploy_all_panels(
-    guild: discord.Guild, force: bool = False
+    guild: discord.Guild, force: bool = False, retry_failed: bool = False
 ) -> Tuple[int, int, List[str]]:
     """
     向服务器中所有已配置永久消息的地点部署或更新引导面板。
@@ -19,6 +19,7 @@ async def deploy_all_panels(
     Args:
         guild: 目标 discord.Guild 对象。
         force: 如果为 True，则跳过权限检查强制部署。
+        retry_failed: 如果为 True，则只部署之前失败的（即没有 deployed_message_id 的）。
 
     Returns:
         一个元组，包含 (成功数量, 失败数量, 报告行列表)。
@@ -30,6 +31,12 @@ async def deploy_all_panels(
 
     deploy_targets = [c for c in all_configs if c.get("permanent_message_data")]
     log.info(f"筛选后，有 {len(deploy_targets)} 个地点需要部署永久面板。")
+
+    if retry_failed:
+        deploy_targets = [c for c in deploy_targets if not c.get("deployed_message_id")]
+        log.info(
+            f"--- [重试模式] 已激活，仅部署之前失败的 {len(deploy_targets)} 个地点。 ---"
+        )
 
     if not deploy_targets:
         return 0, 0, ["没有找到任何已配置永久消息的地点可供部署。"]

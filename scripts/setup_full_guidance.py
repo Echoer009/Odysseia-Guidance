@@ -511,7 +511,7 @@ async def setup_guidance(args: argparse.Namespace):
     if args.deploy_panels:
         log.info("--- 3. 正在部署或更新永久消息面板 ---")
         success_count, fail_count, report_lines = await deploy_all_panels(
-            guild, force=args.force
+            guild, force=args.force, retry_failed=args.retry_failed
         )
         log.info("--- 部署报告 ---")
         for line in report_lines:
@@ -551,6 +551,11 @@ async def on_ready():
         "--force",
         action="store_true",
         help="强制部署，跳过权限检查。警告：可能导致重复的消息面板。",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="仅部署之前失败或尚未部署的永久消息面板。",
     )
     args = parser.parse_args()
 
