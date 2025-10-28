@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 
 class GuidanceEventsCog(commands.Cog):
     """处理机器人核心后台逻辑。"""
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.user_progress_repo = UserProgressRepository(db_manager)
@@ -37,8 +38,8 @@ class GuidanceEventsCog(commands.Cog):
         if not guild_config:
             return
 
-        buffer_role_id = guild_config['buffer_role_id']
-        verified_role_id = guild_config['verified_role_id']
+        buffer_role_id = guild_config["buffer_role_id"]
+        verified_role_id = guild_config["verified_role_id"]
 
         # 如果两个阶段的身份组都未设置，则不执行任何操作
         if not buffer_role_id and not verified_role_id:
@@ -56,24 +57,30 @@ class GuidanceEventsCog(commands.Cog):
             # if user_progress:
             #     log.info(f"用户 {after.name} 已有引导记录，跳过重复的缓冲区引导。")
             #     return
-            
-            log.info(f"检测到用户 {after.name} 获得缓冲区身份组，准备触发第一阶段引导。")
+
+            log.info(
+                f"检测到用户 {after.name} 获得缓冲区身份组，准备触发第一阶段引导。"
+            )
             await self.guidance_service.start_guidance_flow(after)
             return
 
         # --- 场景二：用户获得“已验证”身份组，触发第二阶段引导 ---
         if verified_role_id in gained_roles:
             # 如果用户没有进度，或者第一阶段未完成，则不处理
-            if not user_progress or user_progress.guidance_stage != 'stage_1_completed':
-                log.info(f"用户 {after.name} 获得了已验证身份组，但其第一阶段引导未完成，跳过。")
+            if not user_progress or user_progress.guidance_stage != "stage_1_completed":
+                log.info(
+                    f"用户 {after.name} 获得了已验证身份组，但其第一阶段引导未完成，跳过。"
+                )
                 return
-            
-            log.info(f"检测到用户 {after.name} 获得已验证身份组，准备触发第二阶段引导。")
+
+            log.info(
+                f"检测到用户 {after.name} 获得已验证身份组，准备触发第二阶段引导。"
+            )
             # [BUGFIX] 使用 asyncio.create_task 将耗时操作放入后台，防止阻塞事件循环导致交互失败
-            asyncio.create_task(self.guidance_service.start_stage_2_guidance(after, user_progress))
+            asyncio.create_task(
+                self.guidance_service.start_stage_2_guidance(after, user_progress)
+            )
             return
-
-
 
 
 async def setup(bot: commands.Bot):

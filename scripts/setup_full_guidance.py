@@ -5,6 +5,7 @@ import sys
 import argparse
 import re
 import logging
+import sqlite3
 from typing import Dict, Any, Optional
 
 import discord
@@ -32,6 +33,52 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger(__name__)
+
+
+def update_schema():
+    """确保数据库结构是最新的，特别是添加 sort_order 列。"""
+    log.info("--- [MIGRATION] 正在检查并更新数据库结构 ---")
+    # 数据库路径相对于项目根目录是 'data/guidance.db'
+    # 此脚本位于 'scripts/'，所以我们需要向上返回一级
+    db_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "data", "guidance.db")
+    )
+
+    # 确保目录存在，如果不存在，说明数据库也还不存在
+    db_dir = os.path.dirname(db_path)
+    if not os.path.exists(db_dir):
+        log.info("  - ℹ️ 数据目录不存在，将由数据库管理器在后续步骤中创建。")
+        return
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # 1. 检查 'tags' 表是否存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tags'"
+        )
+        if cursor.fetchone() is None:
+            log.info("  - ℹ️ 'tags' 表不存在，将由数据库管理器创建。")
+            return  # 表不存在，无需操作
+
+        # 2. 表存在，检查 'sort_order' 列是否存在
+        cursor.execute("PRAGMA table_info(tags)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if "sort_order" not in columns:
+            log.info("  - ⚠️ 'sort_order' 列不存在，正在添加...")
+            cursor.execute("ALTER TABLE tags ADD COLUMN sort_order INTEGER")
+            conn.commit()
+            log.info("  - ✅ 成功为 'tags' 表添加 'sort_order' 列。")
+        else:
+            log.info("  - ✅ 'sort_order' 列已存在，无需修改。")
+
+    except sqlite3.Error as e:
+        log.error(f"  - ❌ 更新数据库 'tags' 表结构时发生错误: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
 # --- 全局变量 ---
@@ -327,13 +374,13 @@ async def setup_guidance(args: argparse.Namespace):
     log.info(f"  - ✅ 验证完成，成功获取 {len(validated_locations)} 个地点的信息。")
     # --- 性能优化结束 ---
 
-    for tag_config in tags_config:
+    for i, tag_config in enumerate(tags_config):
         tag_name = tag_config["name"]
         tag_id = await db_manager.add_tag(
-            guild_id, tag_name, tag_config.get("description")
+            guild_id, tag_name, tag_config.get("description"), sort_order=i
         )
         created_tags_map[tag_name] = tag_id
-        log.info(f"  - 创建标签: '{tag_name}' (ID: {tag_id})")
+        log.info(f"  - 创建标签: '{tag_name}' (ID: {tag_id}, 顺序: {i})")
 
         if tag_config.get("is_default", False):
             default_tag_name = tag_name
@@ -523,4 +570,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    # 在启动异步事件循环之前，首先运行同步的数据库结构检查和更新
+    update_schema()
     asyncio.run(main())

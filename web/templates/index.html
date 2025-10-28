@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>21点游戏</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="game-container">
+        <h1>21点游戏</h1>
+
+        <div id="game-setup">
+            <input type="number" id="bet-amount" value="10" min="1">
+            <button id="start-game-btn">下注并开始游戏</button>
+        </div>
+
+        <div id="game-board" class="hidden">
+            <div class="hand-container">
+                <h2>庄家手牌 (<span id="dealer-score">?</span>)</h2>
+                <div id="dealer-hand" class="hand">
+                    <!-- 庄家卡牌 -->
+                </div>
+            </div>
+
+            <div class="hand-container">
+                <h2>你的手牌</h2>
+                <div id="player-hands-container">
+                    <!-- 玩家的多手牌会动态添加到这里 -->
+                </div>
+            </div>
+
+            <div id="player-actions">
+                <button id="hit-btn">要牌 (Hit)</button>
+                <button id="stand-btn">停牌 (Stand)</button>
+                <button id="double-btn">双倍下注 (Double)</button>
+                <button id="split-btn">分牌 (Split)</button>
+            </div>
+
+            <div id="insurance-actions" class="hidden">
+                <p>庄家的明牌是A，要买保险吗？</p>
+                <button id="insurance-yes-btn">是</button>
+                <button id="insurance-no-btn">否</button>
+            </div>
+
+            <div id="game-message"></div>
+            <button id="play-again-btn" class="hidden">再玩一局</button>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

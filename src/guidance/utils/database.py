@@ -74,6 +74,7 @@ class GuidanceDatabaseManager:
                     guild_id INTEGER NOT NULL,
                     tag_name TEXT NOT NULL,
                     description TEXT,
+                    sort_order INTEGER DEFAULT 0,
                     UNIQUE(guild_id, tag_name)
                 );
             """)
@@ -298,14 +299,18 @@ class GuidanceDatabaseManager:
 
     # --- Tags ---
     async def add_tag(
-        self, guild_id: int, name: str, description: Optional[str] = None
+        self,
+        guild_id: int,
+        name: str,
+        description: Optional[str] = None,
+        sort_order: int = 0,
     ) -> int:
-        query = "INSERT INTO tags (guild_id, tag_name, description) VALUES (?, ?, ?)"
+        query = "INSERT INTO tags (guild_id, tag_name, description, sort_order) VALUES (?, ?, ?, ?)"
         try:
             lastrowid = await self._execute(
                 self._db_transaction,
                 query,
-                (guild_id, name, description),
+                (guild_id, name, description, sort_order),
                 commit=True,
                 fetch="lastrowid",
             )
@@ -320,7 +325,7 @@ class GuidanceDatabaseManager:
         return await self._execute(self._db_transaction, query, (tag_id,), fetch="one")
 
     async def get_all_tags(self, guild_id: int) -> List[sqlite3.Row]:
-        query = "SELECT * FROM tags WHERE guild_id = ? ORDER BY tag_name"
+        query = "SELECT * FROM tags WHERE guild_id = ? ORDER BY sort_order, tag_name"
         return await self._execute(
             self._db_transaction, query, (guild_id,), fetch="all"
         )
@@ -332,14 +337,14 @@ class GuidanceDatabaseManager:
         )
 
     async def update_tag(
-        self, tag_id: int, name: str, description: Optional[str]
+        self, tag_id: int, name: str, description: Optional[str], sort_order: int
     ) -> int:
-        query = "UPDATE tags SET tag_name = ?, description = ? WHERE tag_id = ?"
+        query = "UPDATE tags SET tag_name = ?, description = ?, sort_order = ? WHERE tag_id = ?"
         try:
             rowcount = await self._execute(
                 self._db_transaction,
                 query,
-                (name, description, tag_id),
+                (name, description, sort_order, tag_id),
                 commit=True,
                 fetch="rowcount",
             )
@@ -358,6 +363,122 @@ class GuidanceDatabaseManager:
         if deleted_rows > 0:
             log.info(f"已通过 ID {tag_id} 移除标签。")
         return deleted_rows
+
+    async def sync_tags_from_config(self, guild_id: int, config_data: Dict[str, Any]):
+        """从解析的 YAML/JSON 配置数据同步标签和路径。"""
+        tags_in_config = config_data.get("tags", [])
+
+        def _transaction():
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            try:
+                # 1. 获取当前数据库中的所有标签
+                cursor.execute(
+                    "SELECT tag_name, tag_id FROM tags WHERE guild_id = ?", (guild_id,)
+                )
+                db_tags = {row[0]: row[1] for row in cursor.fetchall()}
+
+                # 2. 遍历配置文件中的标签
+                config_tag_names = set()
+                for i, tag_config in enumerate(tags_in_config):
+                    tag_name = tag_config["name"]
+                    description = tag_config.get("description")
+                    sort_order = i
+                    config_tag_names.add(tag_name)
+
+                    if tag_name in db_tags:
+                        # 更新现有标签
+                        cursor.execute(
+                            "UPDATE tags SET description = ?, sort_order = ? WHERE tag_id = ?",
+                            (description, sort_order, db_tags[tag_name]),
+                        )
+                    else:
+                        # 插入新标签
+                        cursor.execute(
+                            "INSERT INTO tags (guild_id, tag_name, description, sort_order) VALUES (?, ?, ?, ?)",
+                            (guild_id, tag_name, description, sort_order),
+                        )
+
+                # 3. 删除配置文件中不再存在的标签
+                tags_to_delete = set(db_tags.keys()) - config_tag_names
+                if tags_to_delete:
+                    for tag_name in tags_to_delete:
+                        cursor.execute(
+                            "DELETE FROM tags WHERE tag_id = ?", (db_tags[tag_name],)
+                        )
+                        log.info(
+                            f"已从数据库中删除标签 '{tag_name}'，因为它不再存在于配置文件中。"
+                        )
+
+                conn.commit()
+                log.info(f"已成功为服务器 {guild_id} 同步标签。")
+
+            except sqlite3.Error as e:
+                conn.rollback()
+                log.error(f"从配置文件同步标签时出错: {e}")
+                raise
+            finally:
+                conn.close()
+
+        await self._execute(_transaction)
+
+    async def sync_tags_from_config(self, guild_id: int, config_data: Dict[str, Any]):
+        """从解析的 YAML/JSON 配置数据同步标签和路径。"""
+        tags_in_config = config_data.get("tags", [])
+
+        def _transaction():
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            try:
+                # 1. 获取当前数据库中的所有标签
+                cursor.execute(
+                    "SELECT tag_name, tag_id FROM tags WHERE guild_id = ?", (guild_id,)
+                )
+                db_tags = {row[0]: row[1] for row in cursor.fetchall()}
+
+                # 2. 遍历配置文件中的标签
+                config_tag_names = set()
+                for i, tag_config in enumerate(tags_in_config):
+                    tag_name = tag_config["name"]
+                    description = tag_config.get("description")
+                    sort_order = i
+                    config_tag_names.add(tag_name)
+
+                    if tag_name in db_tags:
+                        # 更新现有标签
+                        cursor.execute(
+                            "UPDATE tags SET description = ?, sort_order = ? WHERE tag_id = ?",
+                            (description, sort_order, db_tags[tag_name]),
+                        )
+                    else:
+                        # 插入新标签
+                        cursor.execute(
+                            "INSERT INTO tags (guild_id, tag_name, description, sort_order) VALUES (?, ?, ?, ?)",
+                            (guild_id, tag_name, description, sort_order),
+                        )
+
+                # 3. 删除配置文件中不再存在的标签
+                tags_to_delete = set(db_tags.keys()) - config_tag_names
+                if tags_to_delete:
+                    for tag_name in tags_to_delete:
+                        cursor.execute(
+                            "DELETE FROM tags WHERE tag_id = ?", (db_tags[tag_name],)
+                        )
+                        log.info(
+                            f"已从数据库中删除标签 '{tag_name}'，因为它不再存在于配置文件中。"
+                        )
+
+                conn.commit()
+                log.info(f"已成功为服务器 {guild_id} 同步标签。")
+
+            except sqlite3.Error as e:
+                conn.rollback()
+                log.error(f"从配置文件同步标签时出错: {e}")
+                raise
+            finally:
+                conn.close()
+
+        await self._execute(_transaction)
 
     # --- Paths ---
     async def set_path_for_tag(self, tag_id: int, paths_data: List[Dict[str, Any]]):
