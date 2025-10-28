@@ -262,9 +262,9 @@ class PermanentPanelView(View):
         custom_id="show_channel_details",
     )
     async def show_details(self, interaction: discord.Interaction, button: Button):
-        log.info(
-            f"[DEBUG] show_details triggered by user {interaction.user.id} in channel {interaction.channel.id} for message {interaction.message.id}"
-        )
+        # log.info(
+        #     f"[DEBUG] show_details triggered by user {interaction.user.id} in channel {interaction.channel.id} for message {interaction.message.id}"
+        # )
         try:
             await interaction.response.defer(ephemeral=True)
 

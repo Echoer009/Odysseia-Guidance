@@ -721,7 +721,7 @@ class GuidanceDatabaseManager:
             f"UPDATE user_progress SET {set_clause} WHERE user_id = ? AND guild_id = ?"
         )
         await self._execute(self._db_transaction, query, tuple(values), commit=True)
-        log.info(f"用户 {user_id} 的进度已更新: {updates}")
+        # log.info(f"用户 {user_id} 的进度已更新: {updates}")
         return await self.get_user_progress(user_id, guild_id)
 
     # --- Deployed Panels ---
