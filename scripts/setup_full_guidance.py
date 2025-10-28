@@ -4,6 +4,7 @@ import os
 import sys
 import argparse
 import re
+import logging
 from typing import Dict, Any, Optional
 
 import discord
@@ -23,6 +24,15 @@ from src.guidance.utils.database import guidance_db_manager as db_manager
 # 导入解析器
 from scripts.parsers.persona_template_parser import parse_persona_templates
 from src.guidance.services.deployment_service import deploy_all_panels
+
+# --- 日志配置 ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - [%(name)s] - %(message)s",
+    stream=sys.stdout,
+)
+log = logging.getLogger(__name__)
+
 
 # --- 全局变量 ---
 # 使用环境变量中的 Bot Token
@@ -137,45 +147,45 @@ def parse_channel_messages(file_path: str) -> Dict[str, Any]:
 
 async def clear_existing_config(guild_id: int):
     """在写入新配置前，清空指定服务器的所有旧引导配置。"""
-    print(f"\n--- 正在清空服务器 {guild_id} 的旧配置 ---")
+    log.info(f"--- 正在清空服务器 {guild_id} 的旧配置 ---")
 
     # 1. 删除所有标签 (这将通过 ON DELETE CASCADE 级联删除所有关联的路径)
     tags = await db_manager.get_all_tags(guild_id)
     for tag in tags:
         await db_manager.delete_tag(tag["tag_id"])
-    print(f"  - 已删除 {len(tags)} 个标签及其关联路径。")
+    log.info(f"  - 已删除 {len(tags)} 个标签及其关联路径。")
 
     # 2. 删除所有频道专属消息
     channel_messages = await db_manager.get_all_channel_messages(guild_id)
     for msg in channel_messages:
         await db_manager.remove_channel_message(msg["channel_id"])
-    print(f"  - 已删除 {len(channel_messages)} 条频道专属消息配置。")
+    log.info(f"  - 已删除 {len(channel_messages)} 条频道专属消息配置。")
 
     # 3. 删除所有消息模板
     deleted_templates = await db_manager.delete_all_message_templates(guild_id)
-    print(f"  - 已删除 {deleted_templates} 个消息模板。")
+    log.info(f"  - 已删除 {deleted_templates} 个消息模板。")
 
     # 4. 清空触发身份组
     await db_manager.set_trigger_roles(guild_id, [])
-    print("  - 已清空触发身份组。")
+    log.info("  - 已清空触发身份组。")
 
     # 5. 清空服务器基础配置 (buffer_role_id, verified_role_id, default_tag_id)
     await db_manager.set_stage_role(guild_id, "buffer", None)
     await db_manager.set_stage_role(guild_id, "verified", None)
     await db_manager.set_default_tag(guild_id, None)
-    print("  - 已重置服务器基础配置。")
+    log.info("  - 已重置服务器基础配置。")
 
-    print("--- ✅ 清空完成 ---")
+    log.info("--- ✅ 清空完成 ---")
 
 
 async def clear_deployed_panels(guild: discord.Guild):
     """Deletes all previously deployed permanent panels from their channels."""
-    print("\n--- 正在删除旧的永久消息面板 ---")
+    log.info("--- 正在删除旧的永久消息面板 ---")
     all_configs = await db_manager.get_all_channel_messages(guild.id)
     deployed_panels = [c for c in all_configs if c.get("deployed_message_id")]
 
     if not deployed_panels:
-        print("  - 未找到任何已部署的旧面板。")
+        log.info("  - 未找到任何已部署的旧面板。")
         return
 
     deleted_count = 0
@@ -188,7 +198,7 @@ async def clear_deployed_panels(guild: discord.Guild):
             try:
                 channel = await guild.fetch_channel(channel_id)
             except (discord.NotFound, discord.Forbidden):
-                print(
+                log.warning(
                     f"  - ⚠️ 警告：找不到频道 ID {channel_id}，无法删除消息 {message_id}。"
                 )
                 continue
@@ -196,16 +206,18 @@ async def clear_deployed_panels(guild: discord.Guild):
         try:
             message = await channel.fetch_message(message_id)
             await message.delete()
-            print(f"  - 已删除位于 #{channel.name} 的旧面板消息 (ID: {message_id})。")
+            log.info(
+                f"  - 已删除位于 #{channel.name} 的旧面板消息 (ID: {message_id})。"
+            )
             deleted_count += 1
         except (discord.NotFound, discord.Forbidden):
-            print(
+            log.info(
                 f"  - ℹ️ 信息：在 #{channel.name} 中找不到消息 ID {message_id} 或无权删除，可能已被手动删除。"
             )
         except Exception as e:
-            print(f"  - ❌ 错误：删除消息 {message_id} 时发生错误: {e}")
+            log.error(f"  - ❌ 错误：删除消息 {message_id} 时发生错误: {e}")
 
-    print(f"--- ✅ 旧面板删除完成：共删除 {deleted_count} 个。 ---")
+    log.info(f"--- ✅ 旧面板删除完成：共删除 {deleted_count} 个。 ---")
 
 
 async def setup_guidance(args: argparse.Namespace):
@@ -213,42 +225,39 @@ async def setup_guidance(args: argparse.Namespace):
     guild_id = args.guild_id
     guild = bot.get_guild(guild_id)
     if not guild:
-        print(f"❌ 错误：找不到服务器 ID: {guild_id}，或者机器人不在该服务器中。")
+        log.error(f"❌ 错误：找不到服务器 ID: {guild_id}，或者机器人不在该服务器中。")
         return
 
-    print(f"🚀 开始为服务器 '{guild.name}' (ID: {guild_id}) 部署引导配置...")
+    log.info(f"🚀 开始为服务器 '{guild.name}' (ID: {guild_id}) 部署引导配置...")
 
     # --- 1. 加载所有配置文件 ---
-    print("\n--- 1. 正在加载配置文件 ---")
+    log.info("--- 1. 正在加载配置文件 ---")
     script_dir = os.path.dirname(__file__)
 
     try:
-        with open(
-            os.path.join(script_dir, "..", "docs", "guidance_config.yaml"),
-            "r",
-            encoding="utf-8",
-        ) as f:
+        config_path = os.path.join(script_dir, "..", args.config_file)
+        with open(config_path, "r", encoding="utf-8") as f:
             logic_config = yaml.safe_load(f)
-        print("  - ✅ `guidance_config.yaml` (逻辑配置) 加载成功。")
+        log.info(f"  - ✅ `{os.path.basename(config_path)}` (逻辑配置) 加载成功。")
 
         channel_messages = parse_channel_messages(
             os.path.join(script_dir, "..", "docs", "channel_message.md")
         )
-        print(
+        log.info(
             f"  - ✅ `channel_message.md` (频道消息) 加载成功，解析出 {len(channel_messages)} 个地点的配置。"
         )
 
         persona_templates = parse_persona_templates(
             os.path.join(script_dir, "..", "docs", "persona_templates.md")
         )
-        print(
+        log.info(
             f"  - ✅ `persona_templates.md` (私信模板) 加载成功，解析出 {len(persona_templates)} 个模板。"
         )
     except FileNotFoundError as e:
-        print(f"❌ 错误：配置文件未找到: {e}")
+        log.error(f"❌ 错误：配置文件未找到: {e}")
         return
     except Exception as e:
-        print(f"❌ 错误：解析配置文件时出错: {e}")
+        log.error(f"❌ 错误：解析配置文件时出错: {e}")
         return
 
     # --- 2. 清空旧配置 ---
@@ -259,13 +268,13 @@ async def setup_guidance(args: argparse.Namespace):
     await clear_existing_config(guild_id)
 
     # --- 3. 写入新配置 ---
-    print("\n--- 2. 正在写入新配置到数据库 ---")
+    log.info("--- 2. 正在写入新配置到数据库 ---")
 
     # 辅助函数：通过名称查找ID
     def get_role_id_by_name(name: str) -> Optional[int]:
         role = discord.utils.get(guild.roles, name=name)
         if not role:
-            print(
+            log.warning(
                 f"  ⚠️  警告：在服务器 '{guild.name}' 中找不到名为 '{name}' 的身份组。"
             )
         return role.id if role else None
@@ -279,7 +288,7 @@ async def setup_guidance(args: argparse.Namespace):
         buffer_role_id = get_role_id_by_name(buffer_role_name)
         if buffer_role_id:
             await db_manager.set_stage_role(guild_id, "buffer", buffer_role_id)
-            print(
+            log.info(
                 f"  - 设置缓冲区身份组为: '{buffer_role_name}' (ID: {buffer_role_id})"
             )
 
@@ -287,7 +296,7 @@ async def setup_guidance(args: argparse.Namespace):
         verified_role_id = get_role_id_by_name(verified_role_name)
         if verified_role_id:
             await db_manager.set_stage_role(guild_id, "verified", verified_role_id)
-            print(
+            log.info(
                 f"  - 设置已验证身份组为: '{verified_role_name}' (ID: {verified_role_id})"
             )
 
@@ -296,26 +305,45 @@ async def setup_guidance(args: argparse.Namespace):
     default_tag_name = None
     created_tags_map = {}  # 用于存储 name -> id 的映射
 
+    # --- 性能优化：一次性并行验证所有地点ID ---
+    all_location_ids = set()
+    for tag_config in tags_config:
+        all_location_ids.update(tag_config.get("channels", []))
+        all_location_ids.update(tag_config.get("threads", []))
+
+    log.info(f"  - 发现 {len(all_location_ids)} 个唯一的地点ID，开始并行验证...")
+    validation_tasks = [guild.fetch_channel(loc_id) for loc_id in all_location_ids]
+    results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+
+    validated_locations = {}
+    for i, result in enumerate(results):
+        # 使用 all_location_ids 的有序列表来确保 loc_id 和 result 对应
+        loc_id = list(all_location_ids)[i]
+        if isinstance(result, (discord.abc.GuildChannel, discord.Thread)):
+            validated_locations[loc_id] = result
+        else:
+            # 对于无效的ID，记录警告
+            log.warning(f"  - ⚠️  验证失败：找不到 ID 为 {loc_id} 的地点或权限不足。")
+    log.info(f"  - ✅ 验证完成，成功获取 {len(validated_locations)} 个地点的信息。")
+    # --- 性能优化结束 ---
+
     for tag_config in tags_config:
         tag_name = tag_config["name"]
         tag_id = await db_manager.add_tag(
             guild_id, tag_name, tag_config.get("description")
         )
         created_tags_map[tag_name] = tag_id
-        print(f"  - 创建标签: '{tag_name}' (ID: {tag_id})")
+        log.info(f"  - 创建标签: '{tag_name}' (ID: {tag_id})")
 
-        # 检查是否为默认标签
         if tag_config.get("is_default", False):
             default_tag_name = tag_name
 
-        # 关联频道和帖子到标签，作为路径步骤
         paths_data = []
 
         # 处理普通频道
-        channel_ids = tag_config.get("channels", [])
-        for location_id in channel_ids:
-            try:
-                channel = await guild.fetch_channel(location_id)
+        for location_id in tag_config.get("channels", []):
+            channel = validated_locations.get(location_id)
+            if channel:
                 if not isinstance(channel, discord.Thread):
                     paths_data.append(
                         {
@@ -325,19 +353,15 @@ async def setup_guidance(args: argparse.Namespace):
                         }
                     )
                 else:
-                    print(
-                        f"    ⚠️  警告：ID {location_id} 是一个帖子，但被配置在了 'channels' 列表下。"
+                    log.warning(
+                        f"    - ⚠️  警告：ID {location_id} ('{channel.name}') 是一个帖子，但被配置在了 'channels' 列表下。"
                     )
-            except discord.NotFound:
-                print(
-                    f"    ⚠️  警告：在为标签 '{tag_name}' 添加频道时，找不到 ID 为 '{location_id}' 的频道。"
-                )
+            # 如果ID无效，之前已打印过警告，此处不再重复
 
         # 处理帖子
-        thread_ids = tag_config.get("threads", [])
-        for location_id in thread_ids:
-            try:
-                thread = await guild.fetch_channel(location_id)
+        for location_id in tag_config.get("threads", []):
+            thread = validated_locations.get(location_id)
+            if thread:
                 if isinstance(thread, discord.Thread):
                     paths_data.append(
                         {
@@ -347,25 +371,22 @@ async def setup_guidance(args: argparse.Namespace):
                         }
                     )
                 else:
-                    print(
-                        f"    ⚠️  警告：ID {location_id} 不是一个帖子，但被配置在了 'threads' 列表下。"
+                    log.warning(
+                        f"    - ⚠️  警告：ID {location_id} ('{thread.name}') 不是一个帖子，但被配置在了 'threads' 列表下。"
                     )
-            except discord.NotFound:
-                print(
-                    f"    ⚠️  警告：在为标签 '{tag_name}' 添加帖子时，找不到 ID 为 '{location_id}' 的帖子。"
-                )
+            # 如果ID无效，之前已打印过警告，此处不再重复
 
         if paths_data:
             await db_manager.set_path_for_tag(tag_id, paths_data)
-            print(
-                f"    - 为标签 '{tag_name}' 创建了包含 {len(paths_data)} 个频道/帖子的路径。"
+            log.info(
+                f"    - ✅ 成功为标签 '{tag_name}' 创建了包含 {len(paths_data)} 个频道/帖子的路径。"
             )
 
     # 在所有标签创建完毕后，设置默认标签
     if default_tag_name and default_tag_name in created_tags_map:
         default_tag_id = created_tags_map[default_tag_name]
         await db_manager.set_default_tag(guild_id, default_tag_id)
-        print(f"  - 设置默认标签为: '{default_tag_name}' (ID: {default_tag_id})")
+        log.info(f"  - 设置默认标签为: '{default_tag_name}' (ID: {default_tag_id})")
 
     # 3.2 写入路径和触发身份组
     paths_config = logic_config.get("paths", [])
@@ -395,11 +416,11 @@ async def setup_guidance(args: argparse.Namespace):
                                 }
                             )
                         else:
-                            print(
+                            log.warning(
                                 f"    ⚠️  警告：在路径 '{path_name}' 中，找不到 ID 为 '{location_id}' 的频道或帖子。"
                             )
                     else:
-                        print(
+                        log.warning(
                             f"    ⚠️  警告：路径 '{path_name}' 的一个步骤缺少 'channel_id'。"
                         )
 
@@ -408,19 +429,19 @@ async def setup_guidance(args: argparse.Namespace):
                     guild_id, path_name, trigger_role_id, path_steps
                 )
                 all_trigger_roles.append(trigger_role_id)
-                print(
+                log.info(
                     f"  - 写入路径 '{path_name}'，由身份组 '{trigger_role_name}' (ID: {trigger_role_id}) 触发，包含 {len(path_steps)} 个步骤。"
                 )
 
     # 更新服务器的总触发身份组列表
     if all_trigger_roles:
         await db_manager.set_trigger_roles(guild_id, all_trigger_roles)
-        print(f"  - 更新服务器的触发身份组列表，共 {len(all_trigger_roles)} 个。")
+        log.info(f"  - 更新服务器的触发身份组列表，共 {len(all_trigger_roles)} 个。")
 
     # 3.3 写入私信模板
     for template_name, template_data in persona_templates.items():
         await db_manager.set_message_template(guild_id, template_name, template_data)
-    print(f"  - 写入了 {len(persona_templates)} 个私信模板。")
+    log.info(f"  - 写入了 {len(persona_templates)} 个私信模板。")
 
     # 3.4 写入频道专属消息
     for location_identifier, message_data in channel_messages.items():
@@ -437,34 +458,40 @@ async def setup_guidance(args: argparse.Namespace):
                 else {},
                 temporary_data=message_data.get("temporary_data", []),
             )
-    print(f"  - 写入了 {len(channel_messages)} 个地点的专属消息。")
+    log.info(f"  - 写入了 {len(channel_messages)} 个地点的专属消息。")
 
     # --- 4. 部署永久消息面板 (可选) ---
     if args.deploy_panels:
-        print("\n--- 3. 正在部署或更新永久消息面板 ---")
+        log.info("--- 3. 正在部署或更新永久消息面板 ---")
         success_count, fail_count, report_lines = await deploy_all_panels(guild)
-        print("\n--- 部署报告 ---")
+        log.info("--- 部署报告 ---")
         for line in report_lines:
             # 移除 markdown 链接格式，简化输出
             cleaned_line = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", line)
-            print(f"  {cleaned_line}")
-        print(f"--- ✅ 部署完成：{success_count} 个成功, {fail_count} 个失败 ---")
-        print("\n🎉 部署完成！所有配置已成功写入数据库并部署。")
+            log.info(f"  {cleaned_line}")
+        log.info(f"--- ✅ 部署完成：{success_count} 个成功, {fail_count} 个失败 ---")
+        log.info("🎉 部署完成！所有配置已成功写入数据库并部署。")
     else:
-        print(
-            "\n🎉 部署完成！所有配置已成功写入数据库。使用 --deploy-panels 参数来部署消息面板。"
+        log.info(
+            "🎉 部署完成！所有配置已成功写入数据库。使用 --deploy-panels 参数来部署消息面板。"
         )
 
 
 @bot.event
 async def on_ready():
     """当机器人准备好后执行。"""
-    print(f"机器人已以 {bot.user} 的身份登录。")
+    log.info(f"机器人已以 {bot.user} 的身份登录。")
 
     # 从命令行参数获取 guild_id
     parser = argparse.ArgumentParser(description="为指定服务器部署完整的新人引导配置。")
     parser.add_argument(
         "--guild-id", type=int, required=True, help="要部署配置的目标服务器 ID。"
+    )
+    parser.add_argument(
+        "--config-file",
+        type=str,
+        default="docs/guidance_config.yaml",
+        help="要使用的逻辑配置文件路径 (例如: docs/guidance_config_new.yaml)。",
     )
     parser.add_argument(
         "--deploy-panels",
@@ -475,22 +502,24 @@ async def on_ready():
 
     await setup_guidance(args)
 
-    print("任务完成，正在关闭机器人...")
+    log.info("任务完成，正在关闭机器人...")
     await bot.close()
+    # 给予 aiohttp 一个短暂但确切的时间来关闭所有底层连接
+    await asyncio.sleep(0.25)
 
 
 async def main():
     """主函数，启动机器人。"""
     if not BOT_TOKEN:
-        print("错误：未在 .env 文件中找到 BOT_TOKEN。")
+        log.error("错误：未在 .env 文件中找到 BOT_TOKEN。")
         return
 
     try:
         await bot.start(BOT_TOKEN)
     except discord.LoginFailure:
-        print("错误：无效的 Bot Token。请检查 .env 文件。")
+        log.error("错误：无效的 Bot Token。请检查 .env 文件。")
     except Exception as e:
-        print(f"启动机器人时发生未知错误: {e}")
+        log.error(f"启动机器人时发生未知错误: {e}")
 
 
 if __name__ == "__main__":
