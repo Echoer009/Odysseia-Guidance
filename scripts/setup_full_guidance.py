@@ -308,17 +308,22 @@ async def setup_guidance(args: argparse.Namespace):
         return
 
     # --- 2. 清空旧配置 ---
-    if not args.retry_failed:
+    if not args.retry_failed and not args.target_channel:
         log.info("--- 正在执行完整部署前的清理 ---")
         # 如果计划部署新面板，则先删除所有旧的已部署面板
         if args.deploy_panels:
             await clear_deployed_panels(guild)
         await clear_existing_config(guild_id)
     else:
-        log.info("--- [重试模式] 已激活，跳过清理旧配置和已部署的面板。 ---")
+        mode = (
+            "[重试模式]"
+            if args.retry_failed
+            else f"[精准部署模式: {args.target_channel}]"
+        )
+        log.info(f"--- {mode} 已激活，跳过清理旧配置和已部署的面板。 ---")
 
     # --- 3. 写入新配置 ---
-    if not args.retry_failed:
+    if not args.retry_failed and not args.target_channel:
         log.info("--- 3. 正在写入新配置到数据库 ---")
 
         # 辅助函数：通过名称查找ID
@@ -519,15 +524,23 @@ async def setup_guidance(args: argparse.Namespace):
                 )
         log.info(f"  - 写入了 {len(channel_messages)} 个地点的专属消息。")
     else:
+        mode = (
+            "[重试模式]"
+            if args.retry_failed
+            else f"[精准部署模式: {args.target_channel}]"
+        )
         log.info(
-            "--- [重试模式] 已激活，跳过写入配置步骤。将直接使用数据库中的现有配置进行部署。 ---"
+            f"--- {mode} 已激活，跳过写入配置步骤。将直接使用数据库中的现有配置进行部署。 ---"
         )
 
     # --- 4. 部署永久消息面板 (可选) ---
     if args.deploy_panels:
         log.info("--- 4. 正在部署或更新永久消息面板 ---")
         success_count, fail_count, report_lines = await deploy_all_panels(
-            guild, force=args.force, retry_failed=args.retry_failed
+            guild,
+            force=args.force,
+            retry_failed=args.retry_failed,
+            target_channel_id=args.target_channel,
         )
         log.info("--- 部署报告 ---")
         for line in report_lines:
@@ -572,6 +585,12 @@ async def on_ready():
         "--retry-failed",
         action="store_true",
         help="仅部署之前失败或尚未部署的永久消息面板。",
+    )
+    parser.add_argument(
+        "--target-channel",
+        type=int,
+        default=None,
+        help="仅为指定的频道ID重新部署面板，忽略其他所有频道。",
     )
     args = parser.parse_args()
 
