@@ -308,14 +308,17 @@ async def setup_guidance(args: argparse.Namespace):
         return
 
     # --- 2. 清空旧配置 ---
-    # 如果计划部署新面板，则先删除所有旧的已部署面板
-    if args.deploy_panels:
-        await clear_deployed_panels(guild)
-
-    await clear_existing_config(guild_id)
+    if not args.retry_failed:
+        log.info("--- 正在执行完整部署前的清理 ---")
+        # 如果计划部署新面板，则先删除所有旧的已部署面板
+        if args.deploy_panels:
+            await clear_deployed_panels(guild)
+        await clear_existing_config(guild_id)
+    else:
+        log.info("--- [重试模式] 已激活，跳过清理旧配置和已部署的面板。 ---")
 
     # --- 3. 写入新配置 ---
-    log.info("--- 2. 正在写入新配置到数据库 ---")
+    log.info("--- 3. 正在写入新配置到数据库 ---")
 
     # 辅助函数：通过名称查找ID
     def get_role_id_by_name(name: str) -> Optional[int]:
@@ -509,7 +512,7 @@ async def setup_guidance(args: argparse.Namespace):
 
     # --- 4. 部署永久消息面板 (可选) ---
     if args.deploy_panels:
-        log.info("--- 3. 正在部署或更新永久消息面板 ---")
+        log.info("--- 4. 正在部署或更新永久消息面板 ---")
         success_count, fail_count, report_lines = await deploy_all_panels(
             guild, force=args.force, retry_failed=args.retry_failed
         )
