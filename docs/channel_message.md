@@ -2,7 +2,7 @@
 
 ---
 
-### AIGC资讯 (`channel(1408886655557042176)`)
+### AIGC资讯 (`channel(1134580592810405898)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -20,7 +20,7 @@
 
 ---
 
-### 新手答疑 (`channel(1410196354730426398)`)
+### 新手答疑 (`channel(1337107956499615744)`)
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
     *   **Embed 描述:**
@@ -35,7 +35,7 @@
 
 ---
 
-### 羁绊的开始 (`channel(1402514085475520644)`)
+### 羁绊的开始 (`channel(1402121015911518379)`)
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
     *   **Embed 描述:**
@@ -58,7 +58,7 @@
 
 ---
 
-### AI杂谈 (`channel(1401185811231408158)`)
+### AI杂谈 (`channel(1378734700318822400)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -75,7 +75,7 @@
 
 ---
 
-### 男NSFW聊天区 (`channel(1401185672768913469)`)
+### 男NSFW聊天区 (`channel(1378738606335594667)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -92,7 +92,7 @@
 
 ---
 
-### 女NSFW聊天区 (`channel(1401185721317855274)`)
+### 女NSFW聊天区 (`channel(1378738701919850546)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -109,7 +109,7 @@
 
 ---
 
-### 每日新卡 (`channel(1397920536004264056)`)
+### 每日新卡 (`channel(1393179379126767686)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -133,7 +133,7 @@
 
 ---
 
-### 搜索频道 (`channel(1401187216851468403)`)
+### 搜索频道 (`channel(1307242450300964986)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -157,7 +157,7 @@
 
 ---
 
-### 角色卡分区：男性向 (`thread(1402526845278224475)`)
+### 角色卡分区：男性向 (`thread(1374614257919987824)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -173,7 +173,7 @@
 
 ---
 
-### 角色卡分区：女性向 (`thread(1402526811790774395)`)
+### 角色卡分区：女性向 (`thread(1374630459828469853)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -189,7 +189,7 @@
 
 ---
 
-### 角色卡分区：纯净向 (`thread(1402526880837668987)`)
+### 角色卡分区：纯净向 (`thread(1399006747733266452)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -205,7 +205,7 @@
 
 ---
 
-### 角色卡分区：全性向 (`thread(1402527053097603212)`)
+### 角色卡分区：全性向 (`thread(1399003980805181521)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -221,7 +221,7 @@
 
 ---
 
-### 角色卡分区：世界书 (`thread(1402526995342168179)`)
+### 角色卡分区：世界书 (`thread(1431906908478115891)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -237,7 +237,7 @@
 
 ---
 
-### 角色卡分区：其他区 (`thread(1408894989618118779)`)
+### 角色卡分区：其他区 (`thread(1399004359731314698)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -253,7 +253,7 @@
 
 ---
 
-### 角色卡分区：工具区 (`thread(1402526978304905288)`)
+### 角色卡分区：工具区 (`thread(1376210194887082034)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -269,7 +269,7 @@
 
 ---
 
-### 角色卡分区：深渊区 (`thread(1408894876296151192)`)
+### 角色卡分区：深渊区 (`channel(1337561613821022248)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -285,7 +285,7 @@
 
 ---
 
-### 档案馆 (`thread(1408895350088925416)`)
+### 档案馆 (`thread(1432661851644100679)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -320,7 +320,7 @@
 
 ---
 
-### 预设破限区 (`thread(1402527079119061022)`)
+### 预设破限区 (`thread(1431907913055600731)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -337,7 +337,7 @@
 
 ---
 
-### 酒馆美化区 (`thread(1408895625340256296)`)
+### 酒馆美化区 (`thread(1431911482727207002)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -355,7 +355,7 @@
 
 ---
 
-### NSFW绘图 (`channel(1401186006794764390)`)
+### NSFW绘图 (`channel(1378743070203576432)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -372,7 +372,7 @@
 
 ---
 
-### SFW绘图 (`channel(1401185972988936273)`)
+### SFW绘图 (`channel(1378742997885390973)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -406,7 +406,7 @@
 
 ---
 
-### 类脑竞技场 (`channel(1410198464431652945)`)
+### 类脑竞技场 (`channel(1408471251260932146)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -429,7 +429,7 @@
         *   **Embed 缩略图 URL:** `https://cdn.discordapp.com/attachments/1403347767912562728/1410260648063012914/3_354199679133851_00001_.png`
 
 ---
-### 卡区Bot功能介绍 (`channel(1410197100838387792)`)
+### 卡区Bot功能介绍 (`channel(1234431470773338143)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
@@ -470,7 +470,7 @@
         *   **Embed 缩略图 URL:** `https://cdn.discordapp.com/attachments/1403347767912562728/1410260648499347456/3_757233459989602_00001_.png`
 
 ---
-### 回顶区 (`thread(1410199670898167899)`)
+### 回顶区 (`thread(1365567153390227508)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
