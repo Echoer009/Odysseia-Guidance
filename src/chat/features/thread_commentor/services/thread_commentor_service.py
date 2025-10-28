@@ -192,7 +192,9 @@ class ThreadCommentorService:
                 "%Y年%m月%d日 %H:%M"
             )
             final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(
-                current_time=current_beijing_time
+                guild_name=thread.guild.name,
+                location_name=thread.parent.name,
+                current_time=current_beijing_time,
             )
 
             last_model_message = conversation_history[-1]
