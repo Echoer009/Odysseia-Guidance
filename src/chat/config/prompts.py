@@ -110,7 +110,6 @@ SYSTEM_PROMPT = """
 - <无语>
 - <鬼脸>
 - <鄙视>
-- <思考>
 - <害羞>
 </emoji_guidelines>
 </character>
