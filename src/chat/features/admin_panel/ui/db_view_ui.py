@@ -307,6 +307,30 @@ class JumpToPageModal(discord.ui.Modal):
             )
 
 
+# --- 搜索用户的模态窗口 ---
+class SearchUserModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView"):
+        super().__init__(title="通过 Discord ID 搜索用户")
+        self.db_view = db_view
+        self.user_id_input = discord.ui.TextInput(
+            label="输入用户的 Discord 数字 ID",
+            placeholder="例如: 123456789012345678",
+            required=True,
+            min_length=17,
+            max_length=20,
+        )
+        self.add_item(self.user_id_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        user_id_str = self.user_id_input.value.strip()
+        if not user_id_str.isdigit():
+            await interaction.followup.send("请输入一个有效的数字ID。", ephemeral=True)
+            return
+
+        await self.db_view.find_user_and_jump(interaction, user_id_str)
+
+
 # --- 数据库浏览器视图 ---
 class DBView(discord.ui.View):
     """数据库浏览器的交互式视图"""
@@ -382,6 +406,17 @@ class DBView(discord.ui.View):
             )
             self.jump_button.callback = self.jump_to_page
             self.add_item(self.jump_button)
+
+            # --- 新增：仅在 community_members 表中显示搜索按钮 ---
+            if self.current_table == "community_members":
+                self.search_user_button = discord.ui.Button(
+                    label="搜索用户",
+                    emoji="🔍",
+                    style=discord.ButtonStyle.success,
+                    row=1,
+                )
+                self.search_user_button.callback = self.search_user
+                self.add_item(self.search_user_button)
 
             if self.current_list_items:
                 self.add_item(self._create_item_select())
@@ -479,7 +514,64 @@ class DBView(discord.ui.View):
                 "只有一页，无需跳转。", ephemeral=True
             )
 
+    async def search_user(self, interaction: discord.Interaction):
+        """显示一个模态窗口让用户输入 Discord ID 进行搜索"""
+        modal = SearchUserModal(self)
+        await interaction.response.send_modal(modal)
+
     # --- 数据操作 ---
+
+    async def find_user_and_jump(self, interaction: discord.Interaction, user_id: str):
+        """根据 Discord ID 查找用户并跳转到其所在页面"""
+        if self.current_table != "community_members":
+            return
+
+        conn = self._get_db_connection()
+        if not conn:
+            await interaction.followup.send("数据库连接失败。", ephemeral=True)
+            return
+
+        try:
+            cursor = conn.cursor()
+            # 1. 获取所有用户的 ID 和 discord_number_id，按主键排序
+            cursor.execute(
+                "SELECT id, discord_number_id FROM community_members ORDER BY id"
+            )
+            all_users = cursor.fetchall()
+
+            # 2. 在 Python 中查找目标用户
+            target_index = -1
+            target_user_db_id = None
+            for i, user in enumerate(all_users):
+                if str(user["discord_number_id"]) == user_id:
+                    target_index = i
+                    target_user_db_id = user["id"]
+                    break
+
+            # 3. 如果找到，计算页码并更新视图
+            if target_index != -1:
+                page = target_index // self.items_per_page
+                position_on_page = (target_index % self.items_per_page) + 1
+                self.current_page = page
+
+                await self.update_view()
+
+                await interaction.followup.send(
+                    f"✅ 用户 `{user_id}` 已找到。\n"
+                    f"跳转到第 **{page + 1}** 页，其档案 `#{target_user_db_id}` 是该页的第 **{position_on_page}** 个。",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ 未找到 Discord ID 为 `{user_id}` 的用户。", ephemeral=True
+                )
+
+        except sqlite3.Error as e:
+            log.error(f"搜索用户时发生数据库错误: {e}", exc_info=True)
+            await interaction.followup.send(f"搜索时发生错误: {e}", ephemeral=True)
+        finally:
+            if conn:
+                conn.close()
 
     def _get_item_by_id(self, item_id: str) -> Optional[sqlite3.Row]:
         conn = self._get_db_connection()
