@@ -220,6 +220,10 @@ class ChatService:
             if DEBUG_CONFIG["LOG_FINAL_CONTEXT"]:
                 log.info(f"发送给AI -> 最终上下文: {channel_context}")
 
+            # --- 获取当前设置的AI模型 ---
+            current_model = await chat_settings_service.get_current_ai_model()
+            log.info(f"当前使用的AI模型: {current_model}")
+
             ai_response = await gemini_service.generate_response(
                 author.id,
                 guild_id,
@@ -234,6 +238,7 @@ class ChatService:
                 user_profile_data=user_profile_data,
                 guild_name=guild_name,
                 location_name=location_name,
+                model_name=current_model,  # 传递模型名称
             )
 
             if not ai_response:

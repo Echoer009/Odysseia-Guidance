@@ -81,7 +81,7 @@ class GeminiService:
             f"GeminiService 初始化并由 KeyRotationService 管理 {len(api_keys)} 个密钥。"
         )
 
-        self.model_name = app_config.GEMINI_MODEL
+        self.default_model_name = app_config.GEMINI_MODEL
         self.executor = ThreadPoolExecutor(max_workers=10)
         self.user_request_timestamps: Dict[int, List[datetime]] = {}
         self.safety_settings = [
@@ -531,6 +531,7 @@ class GeminiService:
         user_profile_data: Optional[Dict[str, Any]] = None,
         guild_name: str = "未知服务器",
         location_name: str = "未知位置",
+        model_name: Optional[str] = None,  # 新增：允许覆盖模型
         client: Any = None,
     ) -> str:
         """生成AI回复（已重构）。"""
@@ -613,7 +614,7 @@ class GeminiService:
 
         # 根据文档第690行，异步函数应使用 client.aio.models
         response = await client.aio.models.generate_content(
-            model=self.model_name,
+            model=(model_name or self.default_model_name),
             contents=processed_contents,
             config=gen_config,  # 遵循文档示例，使用 config=
         )
@@ -666,7 +667,7 @@ class GeminiService:
 
             # 第二次调用同样遵循文档的异步方式
             response = await client.aio.models.generate_content(
-                model=self.model_name,
+                model=(model_name or self.default_model_name),
                 contents=processed_contents,
                 config=gen_config,  # 遵循文档示例，使用 config=
             )
@@ -783,7 +784,7 @@ class GeminiService:
         gen_config = types.GenerateContentConfig(
             **gen_config_params, safety_settings=self.safety_settings
         )
-        final_model_name = model_name or self.model_name
+        final_model_name = model_name or self.default_model_name
 
         response = await loop.run_in_executor(
             self.executor,
@@ -823,7 +824,7 @@ class GeminiService:
         gen_config = types.GenerateContentConfig(
             **generation_config, safety_settings=self.safety_settings
         )
-        final_model_name = model_name or self.model_name
+        final_model_name = model_name or self.default_model_name
 
         response = await loop.run_in_executor(
             self.executor,
@@ -866,7 +867,7 @@ class GeminiService:
             **app_config.GEMINI_THREAD_PRAISE_CONFIG,
             safety_settings=self.safety_settings,
         )
-        final_model_name = self.model_name
+        final_model_name = self.default_model_name
 
         final_contents = self._prepare_api_contents(conversation_history)
 
@@ -996,7 +997,7 @@ class GeminiService:
         )
 
         response = await client.aio.models.generate_content(
-            model=self.model_name, contents=request_contents, config=gen_config
+            model=self.default_model_name, contents=request_contents, config=gen_config
         )
 
         if response.parts:
@@ -1024,7 +1025,7 @@ class GeminiService:
             **app_config.GEMINI_CONFESSION_GEN_CONFIG,
             safety_settings=self.safety_settings,
         )
-        final_model_name = self.model_name
+        final_model_name = self.default_model_name
 
         if app_config.DEBUG_CONFIG["LOG_AI_FULL_CONTEXT"]:
             log.info("--- 忏悔功能 · 完整 AI 上下文 ---")
