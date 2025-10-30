@@ -619,7 +619,7 @@ class GeminiService:
             config=gen_config,  # 遵循文档示例，使用 config=
         )
 
-        log.info(f"--- 从 Gemini 收到的原始响应 ---\n{response}")
+        # log.info(f"--- 从 Gemini 收到的原始响应 ---\n{response}")
 
         # --- 函数调用集成逻辑 ---
         # 检查模型的回复是否包含函数调用请求
