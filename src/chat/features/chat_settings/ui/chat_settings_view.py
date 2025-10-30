@@ -15,6 +15,9 @@ from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettin
 from src.chat.features.chat_settings.ui.warm_up_settings_view import WarmUpSettingsView
 from src.chat.features.chat_settings.ui.components import PaginatedSelect
 from src.chat.services.event_service import event_service
+from src.chat.features.chat_settings.ui.ai_model_settings_modal import (
+    AIModelSettingsModal,
+)
 
 
 class ChatSettingsView(View):
@@ -157,10 +160,20 @@ class ChatSettingsView(View):
                 placeholder="设置当前活动派系人设...",
                 options=faction_options,
                 custom_id="faction_select",
-                row=1,  # 放在暖贴频道按钮旁边
+                row=1,
             )
             faction_select.callback = self.on_faction_select
             self.add_item(faction_select)
+
+        # 更换AI模型按钮
+        self.add_item(
+            Button(
+                label="更换AI模型",
+                style=ButtonStyle.secondary,
+                custom_id="ai_model_settings",
+                row=0,
+            )
+        )
 
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
@@ -184,6 +197,8 @@ class ChatSettingsView(View):
             custom_id
         ):
             await self._update_view(interaction)
+        elif custom_id == "ai_model_settings":
+            await self.on_ai_model_settings(interaction)
 
         return True
 
@@ -317,3 +332,30 @@ class ChatSettingsView(View):
             if not interaction.response.is_done():
                 await interaction.response.defer()
             await interaction.followup.send(f"❌ 保存设置时出错: {e}", ephemeral=True)
+
+    async def on_ai_model_settings(self, interaction: Interaction):
+        """打开AI模型设置模态框。"""
+        current_model = await self.service.get_current_ai_model()
+        available_models = self.service.get_available_ai_models()
+
+        async def modal_callback(
+            modal_interaction: Interaction, settings: Dict[str, Any]
+        ):
+            new_model = settings.get("ai_model")
+            if new_model:
+                await self.service.set_ai_model(new_model)
+                await modal_interaction.response.send_message(
+                    f"✅ 已成功将AI模型更换为: **{new_model}**", ephemeral=True
+                )
+            else:
+                await modal_interaction.response.send_message(
+                    "❌ 没有选择任何模型。", ephemeral=True
+                )
+
+        modal = AIModelSettingsModal(
+            title="更换全局AI模型",
+            current_model=current_model,
+            available_models=available_models,
+            on_submit_callback=modal_callback,
+        )
+        await interaction.response.send_modal(modal)

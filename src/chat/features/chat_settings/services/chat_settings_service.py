@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 from src.chat.utils.database import chat_db_manager
 from src.chat.services.event_service import event_service
+from src import config
 
 
 class ChatSettingsService:
@@ -252,6 +253,21 @@ class ChatSettingsService:
     def get_winning_faction(self) -> Optional[str]:
         """获取当前活动的获胜派系。"""
         return event_service.get_winning_faction()
+
+    # --- AI Model Settings ---
+
+    def get_available_ai_models(self) -> List[str]:
+        """获取所有可用的AI模型。"""
+        return config.AVAILABLE_AI_MODELS
+
+    async def get_current_ai_model(self) -> str:
+        """获取当前设置的全局AI模型。"""
+        model = await self.db_manager.get_global_setting("ai_model")
+        return model if model else config.AVAILABLE_AI_MODELS[0]
+
+    async def set_ai_model(self, model: str) -> None:
+        """设置全局AI模型。"""
+        await self.db_manager.set_global_setting("ai_model", model)
 
 
 # 单例实例
