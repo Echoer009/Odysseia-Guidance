@@ -368,6 +368,14 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 全局设置表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS global_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+            """)
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -841,6 +849,23 @@ class ChatDatabaseManager:
             raise
 
     # --- 聊天设置管理 ---
+
+    async def get_global_setting(self, key: str) -> Optional[str]:
+        """获取一个全局设置的值。"""
+        query = "SELECT value FROM global_settings WHERE key = ?"
+        row = await self._execute(self._db_transaction, query, (key,), fetch="one")
+        return row["value"] if row else None
+
+    async def set_global_setting(self, key: str, value: str) -> None:
+        """设置一个全局设置的值。"""
+        query = """
+            INSERT INTO global_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value;
+        """
+        await self._execute(self._db_transaction, query, (key, value), commit=True)
+        log.info(f"已更新全局设置: {key} = {value}")
 
     async def get_global_chat_config(self, guild_id: int) -> Optional[sqlite3.Row]:
         """获取服务器的全局聊天配置。"""
