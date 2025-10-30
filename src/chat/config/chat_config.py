@@ -10,6 +10,11 @@ from src.config import _parse_ids
 # --- Chat 功能总开关 ---
 CHAT_ENABLED = os.getenv("CHAT_ENABLED", "False").lower() == "true"
 
+# --- 交互禁用配置 ---
+# 在这些频道ID中，所有交互（包括 @mention 和 /命令）都将被完全禁用。
+# 示例: DISABLED_INTERACTION_CHANNEL_IDS = [123456789012345678, 987654321098765432]
+DISABLED_INTERACTION_CHANNEL_IDS = [1397920536004264056]
+
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
 GEMINI_MODEL = "gemini-2.5-flash"

@@ -10,6 +10,7 @@ from src.chat.features.odysseia_coin.service.coin_service import CoinService
 from src.chat.services.gemini_service import gemini_service
 from src.chat.services.prompt_service import prompt_service
 from src.chat.config.chat_config import FEEDING_CONFIG, PROMPT_CONFIG
+from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.config import DEVELOPER_USER_IDS
 from src.chat.services.event_service import event_service
@@ -29,6 +30,23 @@ class FeedingCog(commands.Cog):
     @app_commands.command(name="投喂", description="在吃饭?给类脑娘来一口怎么样")
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
+        # --- 交互可用性检查 ---
+        channel = interaction.channel
+        # 1. 检查是否在禁用的频道中
+        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+            await interaction.response.send_message(
+                "嘘... 在这里我需要保持安静，我们去别的地方聊吧？", ephemeral=True
+            )
+            return
+
+        # 2. 检查是否在置顶的帖子中
+        if isinstance(channel, discord.Thread) and channel.flags.pinned:
+            await interaction.response.send_message(
+                "唔... 这个帖子被置顶了，一定是很重要的内容。我们不要在这里聊天，以免打扰到大家哦。",
+                ephemeral=True,
+            )
+            return
+
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild.id)
 

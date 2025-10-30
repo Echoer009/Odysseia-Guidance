@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 import logging
 from typing import Optional
@@ -43,6 +42,21 @@ class AIChatCog(commands.Cog):
         if message.author.bot:
             return
 
+        # --- 核心前置检查 ---
+        # 在处理任何逻辑之前，首先检查消息是否应该被 message_processor 忽略
+        # 这会处理置顶帖和禁用频道的情况
+        processed_data = await message_processor.process_message(message, self.bot)
+        if processed_data is None:
+            # 如果返回 None，说明消息来自一个应被忽略的源（如置顶帖），直接退出
+            return
+
+        # 检查消息是否符合处理条件：私聊 或 在服务器中被@
+        is_dm = message.guild is None
+        is_mentioned = self.bot.user in message.mentions
+
+        if not is_dm and not is_mentioned:
+            return
+
         # 新增：检查是否在帖子中，以及帖子创建者是否禁用了回复
         if isinstance(message.channel, discord.Thread):
             # 检查帖子的创建者
@@ -55,17 +69,9 @@ class AIChatCog(commands.Cog):
                 )
                 return
 
-        # 检查消息是否符合处理条件：私聊 或 在服务器中被@
-        is_dm = message.guild is None
-        guild_id = message.guild.id if message.guild else 0
-        is_mentioned = self.bot.user in message.mentions
-
         # 黑名单检查
         if await chat_db_manager.is_user_globally_blacklisted(message.author.id):
             log.info(f"用户 {message.author.id} 在全局黑名单中，已跳过。")
-            return
-
-        if not is_dm and not is_mentioned:
             return
 
         # 在显示“输入中”之前执行所有前置检查
@@ -75,7 +81,8 @@ class AIChatCog(commands.Cog):
         # 显示"正在输入"状态，直到AI响应生成完毕
         response_text = None
         async with message.channel.typing():
-            response_text = await self.handle_chat_message(message)
+            # 注意：这里我们将已经处理过的数据传递下去
+            response_text = await self.handle_chat_message(message, processed_data)
 
         # 在退出 typing 状态后发送回复
         if response_text:
@@ -85,13 +92,14 @@ class AIChatCog(commands.Cog):
                 log.warning(f"发送回复失败: {e}")
                 pass  # 如果发送回复失败，则忽略
 
-    async def handle_chat_message(self, message: discord.Message) -> Optional[str]:
+    async def handle_chat_message(
+        self, message: discord.Message, processed_data: dict
+    ) -> Optional[str]:
         """
         处理聊天消息（包括私聊和@mention），协调各个服务生成AI回复并返回其内容
         """
         try:
-            # 1. 使用 MessageProcessor 处理消息
-            processed_data = await message_processor.process_message(message, self.bot)
+            # 1. MessageProcessor 的处理已前移到 on_message 中
 
             # 2. 使用 ChatService 获取AI回复
             # --- 新增：获取并传递位置信息 ---

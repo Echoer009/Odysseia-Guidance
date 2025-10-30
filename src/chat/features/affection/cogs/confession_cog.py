@@ -8,6 +8,7 @@ from src.chat.config.chat_config import (
     CONFESSION_PROMPT,
     CONFESSION_PERSONA_INJECTION,
 )
+from src.chat.config import chat_config
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.confession_service import ConfessionService
 from src.chat.services.gemini_service import gemini_service
@@ -30,6 +31,23 @@ class ConfessionCog(commands.Cog):
     @app_commands.rename(content="忏悔内容")
     @app_commands.describe(content="写下你的忏悔内容。")
     async def confess(self, interaction: discord.Interaction, content: str):
+        # --- 交互可用性检查 ---
+        channel = interaction.channel
+        # 1. 检查是否在禁用的频道中
+        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+            await interaction.response.send_message(
+                "嘘... 在这里我需要保持安静，我们去别的地方聊吧？", ephemeral=True
+            )
+            return
+
+        # 2. 检查是否在置顶的帖子中
+        if isinstance(channel, discord.Thread) and channel.flags.pinned:
+            await interaction.response.send_message(
+                "唔... 这个帖子被置顶了，一定是很重要的内容。我们不要在这里聊天，以免打扰到大家哦。",
+                ephemeral=True,
+            )
+            return
+
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild.id)
 

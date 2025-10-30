@@ -9,6 +9,7 @@ import aiohttp
 
 from src.chat.services.regex_service import regex_service
 from src import config
+from src.chat.config import chat_config
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +88,36 @@ class MessageProcessor:
 
     async def process_message(
         self, message: discord.Message, bot: discord.Client
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         处理传入的 discord 消息对象。
+        如果消息来自一个不应被触发的频道（如永久面板或置顶帖子），则返回 None。
         """
+        # --- 置顶帖诊断日志 ---
+        channel = message.channel
+        is_thread = isinstance(channel, discord.Thread)
+        is_pinned = False
+        if is_thread:
+            is_pinned = channel.flags.pinned
+
+        log.info("--- 置顶帖检查 (message_processor) ---")
+        log.info(f"频道名称: {channel.name} (ID: {channel.id})")
+        log.info(f"频道类型是否为 Thread: {is_thread}")
+        if is_thread:
+            log.info(f"Thread Flags: {channel.flags}")
+            log.info(f"是否检测到 Pinned Flag: {is_pinned}")
+        log.info("------------------------------------")
+
+        # 检查消息是否来自置顶帖子
+        if is_thread and is_pinned:
+            log.info(f"判定为置顶帖消息，已忽略。")
+            return None
+
+        # 检查消息是否来自配置中禁用的频道
+        if message.channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+            log.debug(f"消息来自禁用的频道 {message.channel.name}，已忽略。")
+            return None
+
         image_data_list = []
         bot_user = message.guild.me
 

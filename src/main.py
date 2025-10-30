@@ -18,30 +18,39 @@ load_dotenv()
 from src import config
 from src.guidance.utils.database import guidance_db_manager
 from src.chat.utils.database import chat_db_manager
-from src.chat.features.world_book.database.world_book_db_manager import world_book_db_manager
+from src.chat.features.world_book.database.world_book_db_manager import (
+    world_book_db_manager,
+)
+
 # 导入全局 gemini_service 实例
 from src.chat.services.gemini_service import gemini_service
+from src.chat.utils.command_sync import sync_commands
+from src.chat.config import chat_config
 
 current_script_path = os.path.abspath(__file__)
 current_dir = os.path.dirname(current_script_path)
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)  
+    sys.path.insert(0, parent_dir)
 
 # --- WebUI_start ---
-log_server_url = 'http://config_web:80/api/log'
-heartbeat_interval = 1.0 #心跳包间隔
+log_server_url = "http://config_web:80/api/log"
+heartbeat_interval = 1.0  # 心跳包间隔
 
 log_queue = queue.Queue()
+
+
 class QueueHandler(logging.Handler):
-    def __init__(self,log_queue):
+    def __init__(self, log_queue):
         super().__init__()
         self.log_queue = log_queue
-    def emit(self,record):
-        self.log_queue.put(self.format(record)) #格式化后入列
+
+    def emit(self, record):
+        self.log_queue.put(self.format(record))  # 格式化后入列
+
 
 def heartbeat_sender():
-    while(1):
+    while 1:
         time.sleep(heartbeat_interval)
         logs_to_send = []
         while not log_queue.empty():
@@ -52,26 +61,35 @@ def heartbeat_sender():
 
         try:
             payload = {
-            "timestamp":datetime.now(timezone.utc).isoformat(),
-            "logs":logs_to_send
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "logs": logs_to_send,
             }
-            response = requests.post(log_server_url,json=payload,timeout=2.0)
-            if response.status_code !=200:
-                print(f"Heartbeat Error: Received status {response.status_code}",file=sys.stderr) #不适用logging
+            response = requests.post(log_server_url, json=payload, timeout=2.0)
+            if response.status_code != 200:
+                print(
+                    f"Heartbeat Error: Received status {response.status_code}",
+                    file=sys.stderr,
+                )  # 不适用logging
 
         except requests.exceptions.RequestException as e:
-            print(f"Heartbeat Error: Could not connet to {log_server_url}.\nDetail:{e}",file=sys.stderr)
-# --- WebUI_end ---
+            print(
+                f"Heartbeat Error: Could not connet to {log_server_url}.\nDetail:{e}",
+                file=sys.stderr,
+            )
 
+
+# --- WebUI_end ---
 
 
 if sys.platform != "win32":
     try:
         import uvloop
+
         uvloop.install()
         logging.info("已成功启用 uvloop 作为 asyncio 事件循环")
     except ImportError:
         logging.warning("尝试启用 uvloop 失败，将使用默认事件循环")
+
 
 def setup_logging():
     """
@@ -86,8 +104,8 @@ def setup_logging():
     #    为了让文件能记录 DEBUG 信息，根 logger 的级别必须是 DEBUG。
     #    控制台输出的级别将在各自的 handler 中单独控制。
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG) # 设置根 logger 的最低响应级别为 DEBUG
-    root_logger.handlers.clear() # 清除任何可能由其他库（如 discord.py）添加的旧处理器
+    root_logger.setLevel(logging.DEBUG)  # 设置根 logger 的最低响应级别为 DEBUG
+    root_logger.handlers.clear()  # 清除任何可能由其他库（如 discord.py）添加的旧处理器
 
     # 3. 创建控制台处理器 (stdout)，只显示 INFO 和 DEBUG
     stdout_handler = logging.StreamHandler(sys.stdout)
@@ -106,29 +124,32 @@ def setup_logging():
     # 5. 创建文件处理器，记录所有 DEBUG 及以上级别的日志
     #    使用 RotatingFileHandler 来自动管理日志文件大小
     from logging.handlers import RotatingFileHandler
+
     # 确保日志文件所在的目录存在
     log_dir = os.path.dirname(config.LOG_FILE_PATH)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    
+
     file_handler = RotatingFileHandler(
         config.LOG_FILE_PATH,
-        maxBytes=5*1024*1024, # 5 MB
+        maxBytes=5 * 1024 * 1024,  # 5 MB
         backupCount=2,
-        encoding='utf-8'
+        encoding="utf-8",
     )
-    file_handler.setLevel(logging.DEBUG) # 文件记录 DEBUG 级别
+    file_handler.setLevel(logging.DEBUG)  # 文件记录 DEBUG 级别
     file_handler.setFormatter(log_formatter)
 
     # --- webui ---
     web_log_formatter = logging.Formatter(
-        '[%(asctime)s.%(msecs)03dZ] [%(levelname)s] [%(name)s] %(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S'
+        "[%(asctime)s.%(msecs)03dZ] [%(levelname)s] [%(name)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
     )
     logging.Formatter.converter = time.gmtime
 
     queue_handler = QueueHandler(log_queue)
-    queue_handler.setLevel(logging.DEBUG) #这里如果想在WebUI看到仅INFO以上日志，请在这里修改
+    queue_handler.setLevel(
+        logging.DEBUG
+    )  # 这里如果想在WebUI看到仅INFO以上日志，请在这里修改
     queue_handler.setFormatter(web_log_formatter)
 
     # 6. 为根 logger 添加所有处理器
@@ -146,24 +167,30 @@ def setup_logging():
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+
 class GuidanceBot(commands.Bot):
     """机器人类，继承自 commands.Bot"""
+
     def __init__(self):
         # 设置机器人需要监听的事件
         intents = discord.Intents.default()
         intents.members = True  # 需要监听成员加入、角色变化
-        intents.message_content = True # 根据 discord.py v2.0+ 的要求
-        intents.reactions = True # 需要监听反应事件
+        intents.message_content = True  # 根据 discord.py v2.0+ 的要求
+        intents.reactions = True  # 需要监听反应事件
 
         # 解析 GUILD_ID 环境变量，支持用逗号分隔的多个 ID
         debug_guilds = None
         if config.GUILD_ID:
             try:
                 # 将环境变量中的字符串转换为整数ID列表
-                debug_guilds = [int(gid.strip()) for gid in config.GUILD_ID.split(',')]
-                logging.getLogger(__name__).info(f"检测到开发服务器 ID，将以调试模式加载命令到: {debug_guilds}")
+                debug_guilds = [int(gid.strip()) for gid in config.GUILD_ID.split(",")]
+                logging.getLogger(__name__).info(
+                    f"检测到开发服务器 ID，将以调试模式加载命令到: {debug_guilds}"
+                )
             except ValueError:
-                logging.getLogger(__name__).error("GUILD_ID 格式错误，请确保是由逗号分隔的纯数字 ID。")
+                logging.getLogger(__name__).error(
+                    "GUILD_ID 格式错误，请确保是由逗号分隔的纯数字 ID。"
+                )
                 # 出错时，不使用调试模式，以避免意外行为
                 debug_guilds = None
 
@@ -178,8 +205,24 @@ class GuidanceBot(commands.Bot):
         }
         if config.PROXY_URL:
             init_kwargs["proxy"] = config.PROXY_URL
-        
+
         super().__init__(**init_kwargs)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """
+        全局交互检查。在执行任何命令之前调用。
+        如果返回 False，则命令不会执行。
+        """
+        channel = interaction.channel
+        # 检查交互是否来自配置中禁用的频道
+        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+            logging.getLogger(__name__).debug(
+                f"交互来自禁用的频道 {channel.name}，已忽略。"
+            )
+            # 注意：全局检查无法发送响应消息，只能返回False来静默地阻止命令
+            return False
+
+        return True
 
     async def setup_hook(self):
         """
@@ -191,6 +234,7 @@ class GuidanceBot(commands.Bot):
         # 1. 重新加载持久化视图
         # 这必须在加载 Cogs 之前完成，因为 Cogs 可能依赖于这些视图
         from .guidance.ui.views import GuidancePanelView, PermanentPanelView
+
         self.add_view(GuidancePanelView())
         log.info("已成功重新加载持久化视图 (GuidancePanelView)。")
         self.add_view(PermanentPanelView())
@@ -204,17 +248,14 @@ class GuidanceBot(commands.Bot):
         src_root = Path(__file__).parent
 
         # 定义所有需要扫描 cogs 的基础路径
-        cog_paths_to_scan = [
-            src_root / 'guidance' / 'cogs',
-            src_root / 'chat' / 'cogs'
-        ]
+        cog_paths_to_scan = [src_root / "guidance" / "cogs", src_root / "chat" / "cogs"]
 
         # 动态查找所有 features/*/cogs 目录并添加到扫描列表
-        features_dir = src_root / 'chat' / 'features'
+        features_dir = src_root / "chat" / "features"
         if features_dir.is_dir():
             for feature in features_dir.iterdir():
                 if feature.is_dir():
-                    cogs_dir = feature / 'cogs'
+                    cogs_dir = feature / "cogs"
                     if cogs_dir.is_dir():
                         cog_paths_to_scan.append(cogs_dir)
 
@@ -222,15 +263,17 @@ class GuidanceBot(commands.Bot):
         for path in cog_paths_to_scan:
             # 使用相对于项目根目录的路径进行日志记录，更清晰
             log.info(f"--- 正在从 {path.relative_to(src_root.parent)} 加载 Cogs ---")
-            for file in path.glob('*.py'):
-                if file.name.startswith('__'):
+            for file in path.glob("*.py"):
+                if file.name.startswith("__"):
                     continue
 
                 # 从文件系统路径构建 Python 模块路径
                 # 例如: E:\...\src\chat\...\feeding_cog.py -> src.chat....feeding_cog
                 relative_path = file.relative_to(src_root.parent)
-                module_name = str(relative_path.with_suffix('')).replace(os.path.sep, '.')
-                
+                module_name = str(relative_path.with_suffix("")).replace(
+                    os.path.sep, "."
+                )
+
                 try:
                     await self.load_extension(module_name)
                     log.info(f"成功加载模块: {module_name}")
@@ -242,10 +285,10 @@ class GuidanceBot(commands.Bot):
     async def on_ready(self):
         """当机器人成功连接到 Discord 时调用"""
         log = logging.getLogger(__name__)
-        log.info('--- 机器人已上线 ---')
+        log.info("--- 机器人已上线 ---")
         if self.user:
-            log.info(f'登录用户: {self.user} (ID: {self.user.id})')
-        
+            log.info(f"登录用户: {self.user} (ID: {self.user.id})")
+
         # 同步并列出所有命令，包括子命令
         log.info("--- 机器人已加载的命令 ---")
         for cmd in self.tree.get_commands():
@@ -269,19 +312,23 @@ class GuidanceBot(commands.Bot):
         if self.debug_guild_ids:
             log.info(f"正在将命令同步到开发服务器: {self.debug_guild_ids}...")
         else:
-            log.info("未设置开发服务器ID，正在进行全局命令同步（可能需要一小时生效）...")
+            log.info(
+                "未设置开发服务器ID，正在进行全局命令同步（可能需要一小时生效）..."
+            )
 
         try:
             # 如果在初始化时设置了 debug_guilds，sync() 会自动同步到这些服务器。
             # 如果没有设置，sync() 会进行全局同步。
-            synced_commands = await self.tree.sync()
-            log.info(f"成功同步 {len(synced_commands)} 个命令。")
+            # 使用新的智能同步功能，并将在黑名单中指定的命令排除
+            # 这可以防止在批量更新中意外删除由 Discord 活动（Activity）等功能自动创建的入口点命令
+            await sync_commands(self.tree, self, blacklist=["启动"])
         except Exception as e:
             log.error(f"同步命令时出错: {e}", exc_info=True)
-            
-        log.info('--------------------')
+
+        log.info("--------------------")
         # --- 内存诊断代码 ---
         import objgraph
+
         log.info("--- 开始内存诊断 ---")
         log.info("内存中数量最多的前 20 个对象类型:")
         objgraph.show_most_common_types(limit=20)
@@ -311,7 +358,10 @@ async def main():
     await chat_db_manager.init_async()
 
     # 3.5. 初始化商店商品
-    from src.chat.features.odysseia_coin.service.coin_service import _setup_initial_items
+    from src.chat.features.odysseia_coin.service.coin_service import (
+        _setup_initial_items,
+    )
+
     await _setup_initial_items()
     log.info("已初始化商店商品。")
 
@@ -320,6 +370,7 @@ async def main():
     # @register_tool 装饰器被执行，从而将工具函数及其 Schema
     # 添加到全局的 tool_registry 中。
     from src.chat.features.tools.functions import get_user_avatar
+
     log.info("已加载并注册 AI 工具。")
 
     # 4. 创建并运行机器人实例
@@ -328,7 +379,7 @@ async def main():
     # 在机器人启动时，将 bot 实例注入到 GeminiService 中
     # 这是确保工具能够访问 Discord API 的关键步骤
     gemini_service.set_bot(bot)
-    
+
     token = os.getenv("DISCORD_TOKEN")
     if not token:
         log.critical("错误: DISCORD_TOKEN 未在 .env 文件中设置！")
