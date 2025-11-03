@@ -157,7 +157,7 @@
 
 ---
 
-### 角色卡分区：男性向 (`thread(1374614257919987824)`)
+### 角色卡分区：男性向 (`thread(1434215095860203550)`)
 
 *   **永久消息面板 (`permanent_message`)**
     *   **Embed 标题:** `CHANNEL_NAME_PLACEHOLDER`
