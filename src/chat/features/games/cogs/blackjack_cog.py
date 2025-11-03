@@ -1,69 +1,59 @@
 # -*- coding: utf-8 -*-
 
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
 import logging
-
-from src.chat.features.games.ui.bet_view import BetView
-from src.chat.features.games.ui.blackjack_ui import BlackjackView
-from src.chat.features.games.services.blackjack_service import GameStatus
 
 log = logging.getLogger(__name__)
 
+# 这是Discord为21点游戏指定的官方应用ID
+# 将来如果Discord更新或您想换成别的官方活动，可以修改这个ID
+BLACKJACK_APPLICATION_ID = 945737671220174988
+
+
 class BlackjackCog(commands.Cog):
-    """21点游戏命令"""
+    """处理21点游戏活动的Cog"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="blackjack", description="开始一局21点游戏")
+    @app_commands.command(
+        name="blackjack", description="在语音频道中开始一个21点游戏活动"
+    )
     async def blackjack(self, interaction: discord.Interaction):
-        """处理 /blackjack 命令"""
-        try:
-            # 使用 BetView 让用户下注
-            bet_view = BetView(
-                user=interaction.user,
-                guild_id=interaction.guild.id,
-                game_starter=self.start_blackjack_game
+        """
+        当用户输入 /blackjack 命令时被调用
+        """
+        # 1. 检查用户是否在语音频道中
+        if interaction.user.voice and interaction.user.voice.channel:
+            voice_channel = interaction.user.voice.channel
+
+            # 2. 创建活动邀请链接
+            try:
+                # target_application_id 指向我们想要启动的游戏
+                invite = await voice_channel.create_invite(
+                    target_type=discord.InviteTarget.embedded_application,
+                    target_application_id=BLACKJACK_APPLICATION_ID,
+                )
+
+                # 3. 回复用户
+                await interaction.response.send_message(
+                    f"好的！点击下面的链接，在 **{voice_channel.name}** 频道开始21点游戏：\n{invite.url}",
+                    ephemeral=True,  # ephemeral=True 表示这条消息只有发送者自己能看到
+                )
+            except Exception as e:
+                log.error(f"创建21点活动邀请失败: {e}")
+                await interaction.response.send_message(
+                    "抱歉，创建游戏邀请时遇到了一个错误。", ephemeral=True
+                )
+        else:
+            # 如果用户不在语音频道，则提示他们
+            await interaction.response.send_message(
+                "你需要先加入一个语音频道才能开始21点游戏哦！", ephemeral=True
             )
-            
-            embed = discord.Embed(
-                title="🎲 21点",
-                description="请输入你的赌注。",
-                color=discord.Color.blue()
-            )
-            await interaction.response.send_message(embed=embed, view=bet_view, ephemeral=True)
-
-        except Exception as e:
-            log.error(f"开启21点游戏失败: {e}", exc_info=True)
-            await interaction.response.send_message("抱歉，开始游戏时遇到问题。", ephemeral=True)
-
-    async def start_blackjack_game(self, interaction: discord.Interaction, bet_amount: int):
-        """下注后，实际开始游戏的回调函数"""
-        try:
-            user = interaction.user
-            guild_id = interaction.guild.id
-            
-            # 创建并发送游戏视图
-            game_view = BlackjackView(user, guild_id, bet_amount)
-            
-            initial_embed = game_view.create_embed("21点游戏开始！")
-            
-            # 检查开局是否即为黑杰克
-            game_state = game_view.get_game_state(game_view.game_id)
-            if game_state["status"] == GameStatus.PLAYER_BLACKJACK:
-                initial_embed.title = "Blackjack! 你赢了！"
-                for item in game_view.children:
-                    item.disabled = True
-            
-            await interaction.response.send_message(embed=initial_embed, view=game_view)
-            game_view.message = await interaction.original_response()
-
-        except Exception as e:
-            log.error(f"启动21点游戏视图失败: {e}", exc_info=True)
-            await interaction.followup.send("启动游戏视图时出错。", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
+    """将这个Cog添加到机器人中"""
     await bot.add_cog(BlackjackCog(bot))

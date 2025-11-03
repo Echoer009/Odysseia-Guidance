@@ -8,8 +8,6 @@ from src import config
 from src.chat.config import chat_config  # 导入 chat_config
 from src.chat.utils.database import chat_db_manager
 from src.chat.services.regex_service import regex_service
-from src.chat.features.affection.service.affection_service import affection_service
-from src.chat.features.world_book.services.world_book_service import world_book_service
 
 log = logging.getLogger(__name__)
 
@@ -189,9 +187,6 @@ class ContextService:
                         ref_msg = await channel.fetch_message(msg.reference.message_id)
                         if ref_msg and ref_msg.author:
                             # 清理被回复消息的内容
-                            ref_content_cleaned = self.clean_message_content(
-                                ref_msg.content, ref_msg.guild
-                            )
                             # 创建更丰富的回复信息，包括被回复的内容摘要
                             # 使用更不容易被模型模仿的括号和格式来构造回复信息
                             reply_info = f"[{ref_msg.author.display_name}] "

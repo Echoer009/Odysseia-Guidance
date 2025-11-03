@@ -1,19 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import discord
-from discord.ui import View, Button, button, ChannelSelect
+from discord.ui import View, Button
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 from src.guidance.utils.database import guidance_db_manager as db_manager
 from src.guidance.ui.views.ui_elements import BackButton
-from src.guidance.ui.views.channel_panel import (
-    PermanentPanelView,
-)  # 这是我们要部署的用户端视图
 from src import config as root_config
-from src.guidance.utils.helpers import create_embed_from_template_data
 from src.guidance.services.deployment_service import deploy_all_panels
-import json
 
 log = logging.getLogger(__name__)
 

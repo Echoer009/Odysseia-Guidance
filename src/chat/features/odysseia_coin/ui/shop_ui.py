@@ -15,9 +15,6 @@ from src.chat.features.odysseia_coin.service.coin_service import (
 )
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
 from src.chat.utils.database import chat_db_manager
-from src.chat.features.personal_memory.services.personal_memory_service import (
-    personal_memory_service,
-)
 from src.chat.features.world_book.services.world_book_service import world_book_service
 from src.chat.config import chat_config
 from src.chat.features.affection.service.gift_service import GiftService
@@ -299,7 +296,7 @@ class SimpleShopView(discord.ui.View):
         if hasattr(self, "interaction"):
             try:
                 await self.interaction.edit_original_response(view=self)
-            except:
+            except discord.NotFound:
                 pass  # 忽略可能的错误，比如消息已被删除
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

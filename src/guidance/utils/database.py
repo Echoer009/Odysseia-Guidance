@@ -177,7 +177,6 @@ class GuidanceDatabaseManager:
 
     async def _execute(self, func: Callable, *args, **kwargs) -> Any:
         """在线程池中执行一个同步的数据库操作。"""
-        conn = None
         try:
             # 使用 functools.partial 将函数和参数绑定在一起
             blocking_task = partial(func, *args, **kwargs)
@@ -363,64 +362,6 @@ class GuidanceDatabaseManager:
         if deleted_rows > 0:
             log.info(f"已通过 ID {tag_id} 移除标签。")
         return deleted_rows
-
-    async def sync_tags_from_config(self, guild_id: int, config_data: Dict[str, Any]):
-        """从解析的 YAML/JSON 配置数据同步标签和路径。"""
-        tags_in_config = config_data.get("tags", [])
-
-        def _transaction():
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            try:
-                # 1. 获取当前数据库中的所有标签
-                cursor.execute(
-                    "SELECT tag_name, tag_id FROM tags WHERE guild_id = ?", (guild_id,)
-                )
-                db_tags = {row[0]: row[1] for row in cursor.fetchall()}
-
-                # 2. 遍历配置文件中的标签
-                config_tag_names = set()
-                for i, tag_config in enumerate(tags_in_config):
-                    tag_name = tag_config["name"]
-                    description = tag_config.get("description")
-                    sort_order = i
-                    config_tag_names.add(tag_name)
-
-                    if tag_name in db_tags:
-                        # 更新现有标签
-                        cursor.execute(
-                            "UPDATE tags SET description = ?, sort_order = ? WHERE tag_id = ?",
-                            (description, sort_order, db_tags[tag_name]),
-                        )
-                    else:
-                        # 插入新标签
-                        cursor.execute(
-                            "INSERT INTO tags (guild_id, tag_name, description, sort_order) VALUES (?, ?, ?, ?)",
-                            (guild_id, tag_name, description, sort_order),
-                        )
-
-                # 3. 删除配置文件中不再存在的标签
-                tags_to_delete = set(db_tags.keys()) - config_tag_names
-                if tags_to_delete:
-                    for tag_name in tags_to_delete:
-                        cursor.execute(
-                            "DELETE FROM tags WHERE tag_id = ?", (db_tags[tag_name],)
-                        )
-                        log.info(
-                            f"已从数据库中删除标签 '{tag_name}'，因为它不再存在于配置文件中。"
-                        )
-
-                conn.commit()
-                log.info(f"已成功为服务器 {guild_id} 同步标签。")
-
-            except sqlite3.Error as e:
-                conn.rollback()
-                log.error(f"从配置文件同步标签时出错: {e}")
-                raise
-            finally:
-                conn.close()
-
-        await self._execute(_transaction)
 
     async def sync_tags_from_config(self, guild_id: int, config_data: Dict[str, Any]):
         """从解析的 YAML/JSON 配置数据同步标签和路径。"""

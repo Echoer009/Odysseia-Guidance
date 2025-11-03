@@ -360,7 +360,7 @@ class PermanentPanelView(View):
 
         except discord.errors.NotFound:
             log.warning(
-                f"处理交互时失败 (NotFound: Unknown Interaction/Webhook)，可能由超时引起。交互已忽略。"
+                "处理交互时失败 (NotFound: Unknown Interaction/Webhook)，可能由超时引起。交互已忽略。"
             )
         except Exception as e:
             log.error(f"处理频道详情按钮时出现意外错误: {e}", exc_info=True)

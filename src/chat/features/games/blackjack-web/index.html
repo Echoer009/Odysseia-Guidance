@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>21点</title>
+</head>
+
+<body>
+  <div id="game-board">
+    <h1>21点游戏</h1>
+
+    <div id="messages"></div>
+
+    <h2>庄家 (<span id="dealer-score">0</span>)</h2>
+    <div id="dealer-hand" class="hand">
+      <!-- 庄家的牌会显示在这里 -->
+    </div>
+
+    <h2>玩家 (<span id="player-score">0</span>)</h2>
+    <div id="player-hand" class="hand">
+      <!-- 玩家的牌会显示在这里 -->
+    </div>
+
+    <div id="controls">
+      <button id="deal-button">发牌</button>
+      <button id="hit-button" disabled>要牌</button>
+      <button id="stand-button" disabled>停牌</button>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

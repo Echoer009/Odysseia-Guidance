@@ -5,7 +5,6 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 import asyncio
-from typing import Optional
 
 # 导入游戏服务和UI组件
 from src.chat.features.games.services.ghost_card_service import ghost_card_service

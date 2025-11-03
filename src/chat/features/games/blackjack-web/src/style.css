@@ -1,0 +1,85 @@
+body {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: #1a531a;
+  /* 深绿色背景 */
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
+#game-board {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #0f3d0f;
+  /* 更深的绿色 */
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+h1,
+h2 {
+  color: #ffd700;
+  /* 金色标题 */
+}
+
+.hand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 150px;
+  background-color: #0c2e0c;
+  border-radius: 5px;
+  margin: 10px 0;
+  padding: 10px;
+  flex-wrap: wrap;
+}
+
+.card {
+  width: 80px;
+  height: 120px;
+  background-color: white;
+  color: black;
+  border: 1px solid #333;
+  border-radius: 5px;
+  margin: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 2em;
+  font-weight: bold;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#controls {
+  margin-top: 20px;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 1em;
+  margin: 5px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background-color: #ffd700;
+  color: #1a1a1a;
+  font-weight: bold;
+  transition: background-color 0.3s;
+}
+
+button:hover:not(:disabled) {
+  background-color: #ffec80;
+}
+
+button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
+#messages {
+  min-height: 2em;
+  margin: 10px 0;
+  font-size: 1.2em;
+  color: #ffc107;
+}

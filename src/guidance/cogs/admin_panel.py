@@ -63,7 +63,7 @@ class AdminPanel(commands.Cog):
 
         except discord.errors.NotFound:
             log.warning(
-                f"在 open_admin_panel 中处理交互失败 (NotFound)，可能由超时引起。交互已忽略。"
+                "在 open_admin_panel 中处理交互失败 (NotFound)，可能由超时引起。交互已忽略。"
             )
         except Exception as e:
             log.error(f"打开管理面板时出现意外错误: {e}", exc_info=True)

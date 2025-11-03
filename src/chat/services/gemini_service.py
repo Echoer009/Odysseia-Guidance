@@ -357,8 +357,6 @@ class GeminiService:
 
         @wraps(func)
         async def wrapper(self: "GeminiService", *args, **kwargs):
-            last_exception = None
-
             while True:
                 key_obj = None
                 try:
@@ -408,7 +406,6 @@ class GeminiService:
                             genai_errors.ClientError,
                             genai_errors.ServerError,
                         ) as e:
-                            last_exception = e
                             error_str = str(e)
                             match = re.match(r"(\d{3})", error_str)
                             status_code = int(match.group(1)) if match else None

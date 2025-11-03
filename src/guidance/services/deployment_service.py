@@ -152,7 +152,7 @@ async def deploy_all_panels(
                         )
                         old_message = await channel.fetch_message(old_message_id)
                         await old_message.delete()
-                        log.info(f"  - 成功删除数据库记录的旧面板。")
+                        log.info("  - 成功删除数据库记录的旧面板。")
                         report_lines.append(
                             f"  - 在 **#{channel.name}** 删除了数据库记录的旧面板。"
                         )

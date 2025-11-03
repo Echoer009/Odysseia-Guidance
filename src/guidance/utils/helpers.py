@@ -3,8 +3,6 @@
 import discord
 from typing import Optional, Dict
 
-import re
-
 from src import config
 from typing import List, Tuple, Union
 

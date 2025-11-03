@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import discord
-from discord.ui import View, Button, button
+from discord.ui import View, Button
 import logging
-from typing import Dict
 from typing import Optional
 
 from src.guidance.utils.database import guidance_db_manager as db_manager

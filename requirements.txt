@@ -13,7 +13,8 @@ objgraph
 uvloop; sys_platform != 'win32'
 
 # Web UI 依赖
-Flask
+fastapi
+uvicorn
 gunicorn
 eventlet
 docker

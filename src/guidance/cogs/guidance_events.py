@@ -3,17 +3,12 @@
 import logging
 import discord
 from discord.ext import commands
-import json
 import asyncio
-from typing import List, Dict, Any
 
 # 从我们自己的模块中导入
 from src.guidance.utils.database import guidance_db_manager as db_manager
 from src.guidance.repositories.user_progress_repository import UserProgressRepository
-from src.guidance.models.user_progress import UserProgress
 from src.guidance.services.guidance_service import GuidanceService
-from src.guidance.utils.helpers import create_embed_from_template
-from src import config
 # UI 组件已移至新文件，此处不再需要
 # from ..utils.views.guidance_components import InitialGuidanceView, TagSelect
 

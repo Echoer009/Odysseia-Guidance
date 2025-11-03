@@ -1,6 +1,5 @@
 import os
 import json
-from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import logging
 
@@ -24,7 +23,6 @@ class EventService:
         从文件系统加载所有活动配置，并找出当前激活的活动。
         这个方法可以在服务初始化时调用，也可以通过定时任务定期调用以刷新状态。
         """
-        now = datetime.now(timezone.utc)
 
         if not os.path.exists(EVENTS_DIR):
             log.warning(f"活动配置目录不存在: {EVENTS_DIR}")

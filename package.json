@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.4.0"
+  }
+}
