@@ -188,6 +188,7 @@ def parse_channel_messages(file_path: str) -> Dict[str, Any]:
 
         if parsed_data["permanent_data"] or parsed_data["temporary_data"]:
             templates[template_name] = parsed_data
+            log.info(f"    - [Parser] 已解析消息配置: {template_name}")
 
     return templates
 
