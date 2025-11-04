@@ -1,21 +1,64 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* 防止出现滚动条 */
+}
+
 body {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   background-color: #1a531a;
   /* 深绿色背景 */
   color: white;
   text-align: center;
-  padding: 20px;
 }
 
-#game-board {
+#app-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+#betting-view,
+#game-view {
+  width: 100%;
+  height: 100%;
   max-width: 800px;
-  margin: 0 auto;
   background-color: #0f3d0f;
   /* 更深的绿色 */
   border-radius: 10px;
   padding: 20px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
 }
+
+#game-view {
+  justify-content: space-between;
+  /* 让游戏区域上下分布 */
+}
+
+.game-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  /* 允许flex子项收缩 */
+}
+
+.hidden {
+  display: none !important;
+}
+
 
 h1,
 h2 {
@@ -27,12 +70,13 @@ h2 {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 150px;
   background-color: #0c2e0c;
   border-radius: 5px;
   margin: 10px 0;
   padding: 10px;
   flex-wrap: wrap;
+  min-height: 150px;
+  /* 确保有足够空间容纳卡牌 */
 }
 
 .card {
@@ -77,9 +121,12 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#messages {
+.messages {
   min-height: 2em;
   margin: 10px 0;
   font-size: 1.2em;
   color: #ffc107;
+  /* 确保游戏内消息区域也可见 */
+  flex-grow: 0;
+  flex-shrink: 0;
 }

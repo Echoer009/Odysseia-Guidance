@@ -9,25 +9,39 @@
 </head>
 
 <body>
-  <div id="game-board">
-    <h1>21点游戏</h1>
-
-    <div id="messages"></div>
-
-    <h2>庄家 (<span id="dealer-score">0</span>)</h2>
-    <div id="dealer-hand" class="hand">
-      <!-- 庄家的牌会显示在这里 -->
+  <div id="app-container">
+    <!-- 视图1: 下注界面 -->
+    <div id="betting-view">
+      <h1>21点游戏</h1>
+      <div id="messages" class="messages"></div>
+      <div id="betting-area">
+        <p>你的余额: <span id="balance">--</span></p>
+        <input type="number" id="bet-amount" placeholder="输入赌注" min="1">
+        <button id="bet-button">下注</button>
+      </div>
     </div>
 
-    <h2>玩家 (<span id="player-score">0</span>)</h2>
-    <div id="player-hand" class="hand">
-      <!-- 玩家的牌会显示在这里 -->
-    </div>
+    <!-- 视图2: 游戏界面 (默认隐藏) -->
+    <div id="game-view" class="hidden">
+      <div class="game-area">
+        <h2>庄家 (<span id="dealer-score">0</span>)</h2>
+        <div id="dealer-hand" class="hand">
+          <!-- 庄家的牌会显示在这里 -->
+        </div>
+      </div>
 
-    <div id="controls">
-      <button id="deal-button">发牌</button>
-      <button id="hit-button" disabled>要牌</button>
-      <button id="stand-button" disabled>停牌</button>
+      <div class="game-area">
+        <h2>玩家 (<span id="player-score">0</span>)</h2>
+        <div id="player-hand" class="hand">
+          <!-- 玩家的牌会显示在这里 -->
+        </div>
+      </div>
+
+      <div id="game-messages" class="messages"></div>
+      <div id="controls">
+        <button id="hit-button" disabled>要牌</button>
+        <button id="stand-button" disabled>停牌</button>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
