@@ -1,17 +1,30 @@
-html,
-body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  /* 防止出现滚动条 */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;700&display=swap');
+
+:root {
+  --color-bg: #1E4D2B;
+  /* Deep Casino Green */
+  --color-primary: #C0A062;
+  /* Matte Gold */
+  --color-text: #F5F5DC;
+  /* Beige/Cream */
+  --color-text-light: #F5F5DC;
+  --color-button-bg: #143D20;
+  /* Dark Green Button */
+  --color-button-hover-bg: #2A5D3A;
+  /* Lighter Green Hover */
+  --color-button-active-bg: #0E2D16;
+  /* Darkest Green Active */
+  --color-disabled-bg: #555555;
+  --color-disabled-text: #888888;
 }
 
+html,
 body {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  background-color: #1a531a;
-  /* 深绿色背景 */
-  color: white;
+  font-family: 'Poppins', sans-serif;
+  background:
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.4) 100%),
+    var(--color-bg);
+  color: var(--color-text-light);
   text-align: center;
 }
 
@@ -21,20 +34,22 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: 0;
   box-sizing: border-box;
 }
 
 #betting-view,
-#game-view {
+#game-view,
+#end-game-view {
   width: 100%;
   height: 100%;
-  max-width: 800px;
-  background-color: #0f3d0f;
-  /* 更深的绿色 */
-  border-radius: 10px;
-  padding: 20px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  /* 适当放大游戏区域 */
+  /* 移除背景、边框和阴影，使其融入桌面 */
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
+  /* 恢复padding以区分红蓝框 */
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -42,17 +57,325 @@ body {
 }
 
 #game-view {
-  justify-content: space-between;
-  /* 让游戏区域上下分布 */
+  /* 恢复为简单的flex容器，因为它现在只负责居中 game-table */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  /* 确保内容不会溢出整个视图 */
+}
+
+#game-table {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  /* 终极修复 V2: 使用 minmax(0, auto) 防止行高贪婪扩展，确保内容优先 */
+  grid-template-rows: minmax(0, auto) minmax(0, auto) 1fr auto;
+  gap: 5px;
+  /* 减小间距以节省空间 */
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* 防止grid内部内容溢出 */
+}
+
+/* --- NEW: Generic Dealer Styles --- */
+.dealer-section {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  position: relative;
+}
+
+.dealer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.dialogue-box {
+  background-color: rgba(0, 0, 0, 0.75);
+  color: var(--color-text-light);
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  box-sizing: border-box;
+  position: absolute;
+  min-height: 40px;
+  display: none;
+  /* Default hidden */
+  z-index: 11;
+  top: -10px;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  max-width: 300px;
+}
+
+.dialogue-box p {
+  margin: 0;
+  font-size: 0.9em;
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+
+/* --- View-Specific Dealer Styles --- */
+
+/* Betting and Game View Dealers (PC) */
+#betting-dealer-section,
+#game-dealer-section {
+  position: fixed;
+  bottom: 0;
+  right: 20px;
+  width: 300px;
+  height: 360px;
+  z-index: 10;
 }
 
 .game-area {
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 0;
-  /* 允许flex子项收缩 */
+  align-items: center;
+  /* 移除固定的min-height，让其由内容决定 */
+}
+
+/* --- 诊断模式 --- */
+.debug-mode #betting-view {
+  border: 2px solid purple;
+  position: relative;
+}
+
+.debug-mode #game-view {
+  border: 2px solid red;
+  position: relative;
+}
+
+.debug-mode #end-game-view {
+  border: 2px solid orange;
+  position: relative;
+}
+
+.debug-mode #game-table {
+  border: 2px solid blue;
+  position: relative;
+}
+
+.debug-mode .game-area {
+  border: 2px solid limegreen;
+  position: relative;
+}
+
+.debug-mode #dealer-section {
+  border: 2px dashed white;
+  /* 白色虚线框表示浮动元素 */
+  position: relative;
+}
+
+.debug-mode #betting-area {
+  border: 2px solid cyan;
+  position: relative;
+}
+
+.debug-mode #controls {
+  border: 2px solid yellow;
+  position: relative;
+}
+
+.debug-mode #end-game-controls {
+  border: 2px solid pink;
+  position: relative;
+}
+
+/* 调试模式 - 显示元素尺寸 */
+.debug-mode #betting-view::before {
+  content: "下注区域: " attr(data-debug-size);
+  position: absolute;
+  top: -25px;
+  left: 0;
+  background-color: rgba(128, 0, 128, 0.9);
+  color: white;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #game-view::before {
+  content: "游戏区域: " attr(data-debug-size);
+  position: absolute;
+  top: -25px;
+  left: 0;
+  background-color: rgba(255, 0, 0, 0.9);
+  color: white;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #end-game-view::before {
+  content: "结束区域: " attr(data-debug-size);
+  position: absolute;
+  top: -25px;
+  left: 0;
+  background-color: rgba(255, 165, 0, 0.9);
+  color: white;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #betting-area::before {
+  content: "下注区: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(0, 255, 255, 0.9);
+  color: black;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #controls::before {
+  content: "控制区: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(255, 255, 0, 0.9);
+  color: black;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #end-game-controls::before {
+  content: "结束控制: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(255, 192, 203, 0.9);
+  color: black;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #dealer-section::before {
+  content: "荷官区: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: black;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode .game-area::before {
+  content: "游戏区: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(0, 255, 0, 0.9);
+  color: black;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode .hand::before {
+  content: "手牌: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(128, 128, 255, 0.9);
+  color: white;
+  font-size: 9px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode .card::before {
+  content: attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(255, 165, 0, 0.9);
+  color: white;
+  font-size: 9px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode #progress-bar-container::before {
+  content: "进度条: " attr(data-debug-size);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: rgba(0, 128, 0, 0.9);
+  color: white;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.debug-mode button::before {
+  content: attr(data-debug-size);
+  position: absolute;
+  top: -18px;
+  left: 0;
+  background-color: rgba(0, 0, 255, 0.9);
+  color: white;
+  font-size: 9px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+#loading-view>div {
+  width: 90%;
+  max-width: 600px;
+}
+
+#progress-bar-container {
+  width: 100%;
+  height: 20px;
+  border: 2px solid var(--color-primary);
+  border-radius: 10px;
+  margin-top: 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#progress-bar {
+  width: 0%;
+  height: 100%;
+  background-color: var(--color-primary);
+  transition: width 0.2s ease-in-out;
 }
 
 .hidden {
@@ -62,71 +385,657 @@ body {
 
 h1,
 h2 {
-  color: #ffd700;
-  /* 金色标题 */
+  color: var(--color-primary);
+  font-family: 'Playfair Display', serif;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#betting-view>h1 {
+  margin-top: 12vh;
+  margin-bottom: 1vh;
+}
+
+.game-area h2 {
+  margin-bottom: 5px;
 }
 
 .hand {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #0c2e0c;
-  border-radius: 5px;
-  margin: 10px 0;
-  padding: 10px;
+  /* 移除背景、圆角和内边距，使其透明 */
+  background-color: transparent;
+  border-radius: 0;
+  margin: 5px 0;
+  padding: 0;
   flex-wrap: wrap;
-  min-height: 150px;
-  /* 确保有足够空间容纳卡牌 */
+  min-height: 120px;
+  /* 减小最小高度以适应新布局 */
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .card {
-  width: 80px;
-  height: 120px;
-  background-color: white;
-  color: black;
+  width: 90px;
+  height: 135px;
+  background-color: var(--color-text-light);
+  color: var(--color-bg);
   border: 1px solid #333;
   border-radius: 5px;
-  margin: 5px;
+  margin: 3px;
+  /* 减小外边距以节省空间 */
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 2em;
+  font-size: 1.8em;
+  /* 调整字体以适应更大的牌面 */
   font-weight: bold;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
-#controls {
-  margin-top: 20px;
+/* --- PC Card Stacking --- */
+.hand .card:not(:first-child) {
+  margin-left: -45px;
+}
+
+#controls,
+#betting-controls {
+  margin-top: 10px;
+  flex-shrink: 0;
+  /* 防止控制按钮区域被压缩 */
+}
+
+#betting-controls {
+  display: flex;
+  flex-direction: column;
+  /* 垂直布局 */
+  align-items: center;
+  /* 居中对齐 */
+  gap: 15px;
+  /* 增加行间距 */
+}
+
+#manual-bet-container,
+#bet-options-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  align-items: center;
 }
 
 button {
+  background-color: var(--color-button-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-primary);
   padding: 10px 20px;
+  border-radius: 8px;
   font-size: 1em;
-  margin: 5px;
-  border-radius: 5px;
-  border: none;
-  cursor: pointer;
-  background-color: #ffd700;
-  color: #1a1a1a;
   font-weight: bold;
-  transition: background-color 0.3s;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-button:hover:not(:disabled) {
-  background-color: #ffec80;
+button:hover {
+  background-color: var(--color-button-hover-bg);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+button:active {
+  background-color: var(--color-button-active-bg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(0);
 }
 
 button:disabled {
-  background-color: #555;
+  background-color: var(--color-disabled-bg);
+  border-color: var(--color-disabled-text);
+  color: var(--color-disabled-text);
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.balance-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.5em;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-shadow: none;
+  margin: 15px 0;
 }
 
 .messages {
   min-height: 2em;
   margin: 10px 0;
   font-size: 1.2em;
-  color: #ffc107;
-  /* 确保游戏内消息区域也可见 */
+  color: var(--color-primary);
   flex-grow: 0;
   flex-shrink: 0;
+}
+
+input[type="number"] {
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--color-primary);
+  color: var(--color-text-light);
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 1em;
+  margin: 5px;
+}
+
+input[type="number"]::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+input[type="number"]:focus {
+  outline: none;
+  box-shadow: 0 0 8px var(--color-primary);
+}
+
+/* --- End Game View Styles --- */
+#end-game-view {
+  justify-content: flex-end;
+  /* Align content to the bottom */
+}
+
+#end-game-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#end-game-dealer-section {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  position: relative;
+}
+
+#end-game-dealer-image {
+  max-height: 70vh;
+  /* Use viewport height */
+  width: auto;
+  z-index: 1;
+}
+
+#end-game-dialogue-box {
+  position: absolute;
+  /* Position relative to the section */
+  z-index: 2;
+  /* Above the image */
+  bottom: 100px;
+  /* Position above controls */
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 300px;
+  max-width: 90%;
+}
+
+#end-game-dialogue-text {
+  margin: 0;
+  margin-bottom: 10px;
+  font-size: 1.2em;
+}
+
+#end-game-countdown {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 100vh;
+  /* 进一步放大数字 */
+  color: rgb(108, 102, 35);
+  /* 初始颜色设置为不透明的暗金色 */
+  text-shadow: 2px 2px 15px rgba(0, 0, 0, 0.7);
+  /* 增强阴影 */
+  display: block;
+  line-height: 1;
+  transition: color 0.5s ease-in-out;
+  /* 添加颜色过渡动画 */
+}
+
+#end-game-countdown.warning {
+  color: rgba(255, 0, 0, 0.5);
+  /* 醒目的红色 */
+}
+
+#end-game-controls {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 3;
+  /* Above dialogue */
+}
+
+#continue-game-button,
+#quit-game-button {
+  padding: 12px 25px;
+  font-size: 1.1em;
+}
+
+/* ===== 响应式设计 - 平板设备 ===== */
+@media (max-width: 768px) {
+
+  /* 调整卡片尺寸 */
+  .card {
+    width: 70px;
+    height: 105px;
+    font-size: 1.4em;
+    margin: 2px;
+  }
+
+  /* 调整手牌区域 */
+  .hand {
+    min-height: 100px;
+    margin: 8px 0;
+  }
+
+
+  /* 调整余额文字 */
+  .balance-text {
+    font-size: 1.3em;
+    margin: 12px 0;
+  }
+
+  /* 调整按钮 */
+  button {
+    padding: 8px 16px;
+    font-size: 0.9em;
+  }
+
+  /* 调整输入框 */
+  input[type="number"] {
+    padding: 6px 10px;
+    font-size: 0.9em;
+  }
+
+  /* 调整荷官对话框 */
+
+  /* 调整游戏结束对话框 */
+  #end-game-dialogue-box {
+    min-width: 280px;
+    padding: 12px 16px;
+  }
+
+  #end-game-dialogue-text {
+    font-size: 1.1em;
+  }
+
+  #end-game-countdown {
+    font-size: 2.2em;
+  }
+
+  /* 调整荷官区域位置 */
+  #betting-dealer-section,
+  #game-dealer-section {
+    width: 200px;
+    height: 250px;
+    bottom: 15px;
+    right: 15px;
+  }
+}
+
+/* ===== 响应式设计 - 手机设备 ===== */
+@media (max-width: 480px) {
+
+  #betting-view,
+  #game-view {
+    justify-content: space-between;
+    /* Push content to top and dealer to bottom */
+  }
+
+  #betting-dealer-section,
+  #game-dealer-section {
+    position: relative;
+    width: 100%;
+    height: auto;
+    bottom: auto;
+    right: auto;
+    display: flex;
+    align-items: flex-end;
+    /* Align items to the bottom */
+    justify-content: flex-start;
+    /* Align items to the left */
+    padding: 0 10px;
+    /* Add some padding */
+    box-sizing: border-box;
+  }
+
+  #betting-dealer-image,
+  #game-dealer-image {
+    max-height: 220px;
+    /* Adjust size */
+    flex-shrink: 0;
+    /* Prevent image from shrinking */
+    margin-right: 10px;
+    /* Space between image and bubble */
+  }
+
+  .dialogue-box {
+    /* Override absolute positioning for mobile */
+    position: relative;
+    transform: none;
+    top: auto;
+    left: auto;
+    flex-grow: 1;
+    /* Allow bubble to take remaining space */
+    margin-bottom: 10px;
+    /* Align with bottom of image */
+    text-align: left;
+  }
+
+  /* --- Mobile Card Adjustments for Overflow --- */
+  .card {
+    /* Further reduce card size for mobile */
+    width: 60px;
+    height: 90px;
+    font-size: 1.2em;
+  }
+
+  .hand .card:not(:first-child) {
+    /* Overlap cards to fit more in a row */
+    margin-left: -30px;
+  }
+
+  #end-game-view {
+    justify-content: center;
+    /* Center the main content block */
+  }
+
+  #end-game-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* Vertically center the controls */
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    position: relative;
+    /* New context for absolute positioning */
+    padding-bottom: 280px;
+    /* Make space for the larger dealer + bubble */
+    box-sizing: border-box;
+  }
+
+  #end-game-dealer-section {
+    z-index: 10;
+    position: absolute;
+    /* Position at the bottom */
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    /* Stack bubble on top of image */
+    align-items: center;
+    /* Center them horizontally */
+    justify-content: flex-end;
+    padding: 0 10px 20px 10px;
+    /* Add bottom padding */
+    box-sizing: border-box;
+  }
+
+  #end-game-dealer-image {
+    max-height: 300px;
+    /* Larger size */
+    margin-right: 0;
+  }
+
+  #end-game-dialogue-box {
+    position: relative;
+    transform: none;
+    top: auto;
+    left: auto;
+    bottom: auto;
+    width: 90%;
+    max-width: 400px;
+    margin-bottom: 10px;
+    /* Space between bubble and image */
+    text-align: center;
+    flex-grow: 0;
+    z-index: auto;
+  }
+
+  #end-game-controls {
+    position: relative;
+    z-index: 15;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  #countdown-container {
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    pointer-events: none;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #end-game-countdown {
+    font-size: 50vh;
+  }
+
+  /* 调整消息区域 */
+  .messages {
+    font-size: 1em;
+    margin: 8px 0;
+  }
+}
+
+/* ===== 响应式设计 - PC端结算界面 (采用 position: fixed 方案) ===== */
+@media (min-width: 481px) {
+  #end-game-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  #countdown-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    /* 1. 倒计时图层 (最底层) */
+    pointer-events: none;
+  }
+
+  #end-game-dealer-section {
+    position: fixed;
+    /* 使用 fixed 定位，与游戏/下注界面逻辑统一 */
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 75vh;
+    width: auto;
+    z-index: 10;
+    /* 2. 看板娘图层 */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  #end-game-dealer-image {
+    max-height: 100%;
+    width: auto;
+    order: 2;
+    /* 让图片在气泡下方 */
+  }
+
+  #end-game-dialogue-box {
+    position: relative;
+    /* 恢复到flex流中 */
+    order: 1;
+    /* 让气泡在图片上方 */
+    margin-bottom: -40px;
+    /* 修复：降低气泡位置，使其更贴近头顶 */
+    z-index: 20;
+    /* 4. 对话框图层 (最顶层) */
+    width: auto;
+    height: auto;
+    min-height: 0;
+    max-width: 500px;
+    /* 重置不再需要的绝对定位属性 */
+    top: auto;
+    left: auto;
+    transform: none;
+    flex-shrink: 0;
+    /* 防止flex容器压缩气泡高度 */
+  }
+
+  #end-game-controls {
+    position: fixed;
+    /* 同样使用 fixed 定位，确保其位置稳定 */
+    bottom: 40px;
+    left: 0;
+    width: 100%;
+    z-index: 15;
+    /* 3. 按钮图层 (看板娘之上, 气泡之下) */
+    display: flex;
+    justify-content: space-between;
+    padding: 0 5vw;
+    box-sizing: border-box;
+    pointer-events: none;
+    /* 父容器不捕获事件 */
+  }
+
+  #continue-game-button,
+  #quit-game-button {
+    pointer-events: auto;
+    /* 按钮恢复事件捕获 */
+  }
+
+  #continue-game-button {
+    margin-right: auto;
+  }
+
+  #quit-game-button {
+    margin-left: auto;
+  }
+
+  /* Screen Shake Animation */
+  @keyframes shake {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+      transform: translateX(-5px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+      transform: translateX(5px);
+    }
+  }
+
+  .shake {
+    animation: shake 0.5s ease-in-out;
+  }
+}
+
+/* --- Multi-level Shake Animations (Global) --- */
+@keyframes shake-light {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-2px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes shake-medium {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  15%,
+  45%,
+  75% {
+    transform: translateX(-6px);
+  }
+
+  30%,
+  60%,
+  90% {
+    transform: translateX(6px);
+  }
+}
+
+@keyframes shake-strong {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-12px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(12px);
+  }
+}
+
+.shake-light {
+  animation: shake-light 0.4s ease-in-out;
+}
+
+.shake-medium {
+  animation: shake-medium 0.4s ease-in-out;
+}
+
+.shake-strong {
+  animation: shake-strong 0.4s ease-in-out;
 }

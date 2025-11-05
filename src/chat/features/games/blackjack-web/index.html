@@ -5,42 +5,143 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
   <title>21点</title>
+  <style>
+    /* Initial styles to prevent flash of unstyled content */
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      /* Prevent scrollbars during load */
+      font-family: 'Poppins', sans-serif;
+      background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.4) 100%), #0f3d0f;
+      color: white;
+      text-align: center;
+    }
+
+    #loading-view {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #loading-view h1 {
+      color: #D4AF37;
+      font-family: 'Cinzel Decorative', cursive;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+  </style>
 </head>
 
 <body>
-  <div id="app-container">
+  <div id="loading-view">
+    <div>
+      <h1 id="loading-message"></h1>
+      <div id="progress-bar-container">
+        <div id="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+  <div id="app-container" class="hidden">
     <!-- 视图1: 下注界面 -->
     <div id="betting-view">
-      <h1>21点游戏</h1>
+      <h1>类脑娘的BlackJack</h1>
       <div id="messages" class="messages"></div>
       <div id="betting-area">
-        <p>你的余额: <span id="balance">--</span></p>
-        <input type="number" id="bet-amount" placeholder="输入赌注" min="1">
-        <button id="bet-button">下注</button>
+        <p class="balance-text">你的余额: <span id="balance">--</span></p>
+        <div id="betting-controls">
+          <div id="manual-bet-container">
+            <input type="number" id="bet-amount" placeholder="输入赌注" min="1">
+            <button id="bet-button">下注</button>
+          </div>
+          <div id="bet-options-container">
+            <!-- 动态下注按钮将在这里生成 -->
+          </div>
+        </div>
+      </div>
+      <!-- Betting View Dealer -->
+      <div id="betting-dealer-section" class="dealer-section">
+        <img id="betting-dealer-image" class="dealer-image" src="/character/normal.png" alt="荷官">
+        <div id="betting-dealer-dialogue-box" class="dialogue-box">
+          <p id="betting-dealer-dialogue-text"></p>
+        </div>
       </div>
     </div>
 
     <!-- 视图2: 游戏界面 (默认隐藏) -->
     <div id="game-view" class="hidden">
-      <div class="game-area">
-        <h2>庄家 (<span id="dealer-score">0</span>)</h2>
-        <div id="dealer-hand" class="hand">
-          <!-- 庄家的牌会显示在这里 -->
+      <div id="game-table">
+        <div class="game-area">
+          <h2>类脑娘 (<span id="dealer-score">0</span>)</h2>
+          <div id="dealer-hand" class="hand">
+            <!-- 庄家的牌会显示在这里 -->
+          </div>
+        </div>
+
+        <div class="game-area">
+          <h2>玩家 (<span id="player-score">0</span>)</h2>
+          <div id="player-hand" class="hand">
+            <!-- 玩家的牌会显示在这里 -->
+          </div>
+        </div>
+
+        <div id="game-messages" class="messages"></div>
+        <div id="controls">
+          <button id="hit-button" disabled>要牌</button>
+          <button id="stand-button" disabled>停牌</button>
+          <button id="double-button" disabled>双倍下注</button>
         </div>
       </div>
-
-      <div class="game-area">
-        <h2>玩家 (<span id="player-score">0</span>)</h2>
-        <div id="player-hand" class="hand">
-          <!-- 玩家的牌会显示在这里 -->
+      <!-- Game View Dealer -->
+      <div id="game-dealer-section" class="dealer-section">
+        <img id="game-dealer-image" class="dealer-image" src="/character/normal.png" alt="荷官">
+        <div id="game-dealer-dialogue-box" class="dialogue-box">
+          <p id="game-dealer-dialogue-text"></p>
         </div>
       </div>
+    </div>
 
-      <div id="game-messages" class="messages"></div>
-      <div id="controls">
-        <button id="hit-button" disabled>要牌</button>
-        <button id="stand-button" disabled>停牌</button>
+    <!-- 视图3: 游戏结束界面 (默认隐藏) -->
+    <div id="end-game-view" class="hidden">
+      <div id="end-game-content">
+        <!-- End Game View Dealer -->
+        <!-- Countdown element, behind the dealer -->
+        <div id="countdown-container">
+          <span id="end-game-countdown"></span>
+        </div>
+        <!-- End Game View Dealer -->
+        <div id="end-game-dealer-section" class="dealer-section">
+          <img id="end-game-dealer-image" class="dealer-image" src="/character/normal.png" alt="荷官">
+          <div id="end-game-dialogue-box" class="dialogue-box">
+            <p id="end-game-dialogue-text"></p>
+          </div>
+        </div>
+        <div id="end-game-controls">
+          <button id="continue-game-button">继续挑战</button>
+          <button id="quit-game-button">不玩了</button>
+        </div>
       </div>
     </div>
   </div>

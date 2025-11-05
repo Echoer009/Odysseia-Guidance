@@ -2,7 +2,7 @@ import os
 import requests
 import logging
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 # --- 类脑币服务 ---
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.chat.features.games.config import blackjack_config
 
 # 从根目录加载 .env 文件
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -106,7 +107,7 @@ async def exchange_code_for_token(request: TokenRequest):
         log.info("Successfully exchanged code for token.")
         return JSONResponse(content=response.json())
     except requests.exceptions.RequestException as e:
-        log.error(f"Failed to exchange code with Discord API.", exc_info=True)
+        log.error("Failed to exchange code with Discord API.", exc_info=True)
         if e.response is not None:
             log.error(f"Discord API response status: {e.response.status_code}")
             log.error(f"Discord API response body: {e.response.text}")
@@ -124,8 +125,18 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
     try:
         balance = await coin_service.get_balance(user_id)
         log.info(f"User {user_id} balance is {balance}")
-        return JSONResponse(content={"user_id": str(user_id), "balance": balance})
-    except Exception as e:
+
+        # --- 从配置文件获取荷官阈值 ---
+        dealer_thresholds = blackjack_config.DEALER_BET_THRESHOLDS
+
+        return JSONResponse(
+            content={
+                "user_id": str(user_id),
+                "balance": balance,
+                "dealer_thresholds": dealer_thresholds,
+            }
+        )
+    except Exception:
         log.error(f"Failed to get balance for user {user_id}.", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to get user balance")
 

@@ -31,56 +31,45 @@ class BlackjackCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="blackjack", description="获取一个21点游戏的开始链接")
+    @app_commands.command(name="blackjack", description="来一场紧张刺激的Blackjack吧?")
     async def blackjack(self, interaction: discord.Interaction):
         """
         当用户输入 /blackjack 命令时被调用。
-        机器人会自动寻找一个可用的语音频道来创建活动。
+        直接使用应用的 Application ID 发送 LAUNCH_ACTIVITY (类型12) 响应，
+        以实现无缝启动游戏，不依赖语音频道。
         """
-        # 检查我们是否成功获取了应用ID
+        # 检查应用ID是否已在 .env 文件中正确配置
         if BLACKJACK_APPLICATION_ID == 0:
+            log.error(
+                "VITE_DISCORD_CLIENT_ID not found or is invalid in .env file. Blackjack command failed."
+            )
             await interaction.response.send_message(
-                "抱歉，21点游戏的应用ID未正确配置，请联系管理员。", ephemeral=True
-            )
-            return
-
-        # 检查命令是否在服务器（guild）中使用
-        if not interaction.guild:
-            await interaction.response.send_message(
-                "这个命令只能在服务器中使用。", ephemeral=True
-            )
-            return
-
-        # 活动将在当前频道创建
-        target_channel = interaction.channel
-
-        try:
-            # 为找到的频道创建活动邀请
-            invite = await target_channel.create_invite(
-                target_type=discord.InviteTarget.embedded_application,
-                target_application_id=BLACKJACK_APPLICATION_ID,
-                max_age=600,  # 邀请10分钟后失效
-            )
-
-            view = discord.ui.View()
-            button = discord.ui.Button(
-                label="点击开始21点",
-                style=discord.ButtonStyle.link,
-                url=invite.url,
-            )
-            view.add_item(button)
-
-            await interaction.response.send_message(
-                f"游戏已在 **{target_channel.name}** 频道准备就绪，点击按钮加入：",
-                view=view,
+                "抱歉，游戏启动失败，因为缺少关键的应用ID配置。",
                 ephemeral=True,
             )
+            return
 
-        except Exception as e:
-            log.error(f"为频道 {target_channel.name} 创建21点活动时出错: {e}")
-            await interaction.response.send_message(
-                "抱歉，创建游戏时遇到了一个未知错误。", ephemeral=True
+        try:
+            # 根据最新的 discord.py 文档 (v2.6+)，
+            # 使用官方提供的 launch_activity() 方法来直接启动活动。
+            # 这是最正确、最稳定的方式。
+            await interaction.response.launch_activity()
+            log.info(
+                f"Successfully launched Blackjack activity for user {interaction.user.id}"
             )
+
+        except discord.InteractionResponded:
+            log.warning(
+                f"Attempted to launch activity for {interaction.user.id}, but interaction was already responded to."
+            )
+        except Exception as e:
+            log.error(
+                f"使用 interaction.response.launch_activity() 启动21点时出错: {e}"
+            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "抱歉，启动游戏时遇到了一个未知错误。", ephemeral=True
+                )
 
 
 async def setup(bot: commands.Bot):
