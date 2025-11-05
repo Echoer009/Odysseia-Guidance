@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
     base: './',
     publicDir: 'public',
     plugins: [
-        basicSsl()
+        // 只在开发模式下启用SSL插件
+        command === 'serve' ? basicSsl() : null
     ],
     // 设置环境变量目录为项目的根目录 (修正路径)
     envDir: '../../../../../',
@@ -19,4 +20,4 @@ export default defineConfig({
             },
         },
     },
-});
+}));
