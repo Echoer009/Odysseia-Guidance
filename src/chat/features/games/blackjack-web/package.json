@@ -12,7 +12,6 @@
     "@discord/embedded-app-sdk": "^2.4.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-basic-ssl": "^2.1.0",
     "typescript": "~5.9.3",
     "vite": "^7.1.7"
   }
