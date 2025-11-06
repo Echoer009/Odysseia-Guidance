@@ -20,6 +20,7 @@ from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_per
 from src.chat.utils.database import chat_db_manager
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.world_book.services.world_book_service import world_book_service
+from src.chat.config import chat_config
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ class ThreadCommentorService:
                     user_id=user_id,
                     guild_id=thread.guild.id,
                     user_name=user_nickname,
-                    n_results=3,  # 最多获取3个相关条目
+                    n_results=chat_config.RAG_N_RESULTS_THREAD_COMMENTOR,  # 最多获取10个相关条目
                     max_distance=0.7,
                 )
                 if rag_results:

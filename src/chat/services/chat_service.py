@@ -14,6 +14,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.config import chat_config
 from src.chat.config.chat_config import PERSONAL_MEMORY_CONFIG, DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
@@ -188,6 +189,7 @@ class ChatService:
                 guild_id=guild_id,
                 user_name=author.display_name,
                 conversation_history=channel_context,
+                n_results=chat_config.RAG_N_RESULTS_DEFAULT,
             )
 
             # --- 新增：集中获取所有上下文数据 ---

@@ -350,6 +350,23 @@ class PersonalMemoryService:
         # 注意：由于我们没有 discord.Member 对象，我们无法直接发送私信提示用户创建档案。
         # 这个提示将在用户下次与机器人互动时触发（例如，通过 /个人档案 命令或在聊天中）。
 
+    async def get_memory_summary(self, user_id: int) -> str:
+        """根据用户ID获取其个人记忆摘要。"""
+        log.debug(f"正在为用户 {user_id} 查询个人记忆摘要...")
+        user_profile = await self.db_manager.get_user_profile(user_id)
+        if user_profile and user_profile["personal_summary"]:
+            log.debug(f"成功找到用户 {user_id} 的记忆摘要。")
+            return user_profile["personal_summary"]
+        else:
+            log.debug(f"用户 {user_id} 没有找到个人记忆摘要。")
+            return "该用户当前没有个人记忆摘要。"
+
+    async def update_memory_summary(self, user_id: int, new_summary: str):
+        """更新指定用户的个人记忆摘要。"""
+        log.debug(f"准备为用户 {user_id} 更新个人记忆摘要...")
+        await self.db_manager.update_personal_summary(user_id, new_summary)
+        log.info(f"已成功为用户 {user_id} 更新记忆摘要。")
+
 
 # 单例实例
 personal_memory_service = PersonalMemoryService()

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from src.chat.services.gemini_service import GeminiService, gemini_service
 from src.chat.services.vector_db_service import VectorDBService, vector_db_service
 from src import config
+from src.chat.config import chat_config
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class WorldBookService:
         guild_id: int,
         user_name: str,  # 新增：接收提问者的名字
         conversation_history: Optional[List[Dict[str, Any]]] = None,
-        n_results: int = 5,
+        n_results: int = chat_config.RAG_N_RESULTS_DEFAULT,
         max_distance: float = 0.75,
     ) -> List[Dict[str, Any]]:
         """

@@ -26,6 +26,10 @@ SUMMARY_MODEL = "gemini-2.5-flash-lite"
 # 用于查询重写的模型。通常可以使用一个更小、更快的模型来降低成本和延迟。
 QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"
 
+# RAG 搜索返回的结果数量
+RAG_N_RESULTS_DEFAULT = 3  # 普通聊天的默认值
+RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
+
 
 # --- Gemini Service 配置 ---
 GEMINI_CHAT_CONFIG = {
@@ -283,7 +287,7 @@ CONFESSION_PROMPT = """
 
 # --- 帖子评价功能 ---
 THREAD_COMMENTOR_CONFIG = {
-    "INITIAL_DELAY_SECONDS": 3,  # 暖贴功能的初始延迟（秒）
+    "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）
 }
 
 WARMUP_MESSAGES = {
