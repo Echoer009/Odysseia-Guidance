@@ -55,9 +55,21 @@ async def sync_commands(
         )
 
     # 4. 合并本地待同步命令和需要保留的远程命令
-    final_payload = local_payload + unmanaged_remote_commands_payload
+    # 4. 从不由本地管理的远程命令中，只保留我们明确想要保留的（如活动入口点）
+    commands_to_keep_remotely = ["launch"]
+    kept_unmanaged_commands = [
+        cmd
+        for cmd in unmanaged_remote_commands_payload
+        if cmd["name"] in commands_to_keep_remotely
+    ]
+    if kept_unmanaged_commands:
+        kept_names = [cmd["name"] for cmd in kept_unmanaged_commands]
+        logger.info(f"根据白名单，将从服务器保留以下命令: {kept_names}")
 
-    # 5. 执行批量更新
+    # 5. 合并本地命令和需要保留的远程命令，形成最终的命令列表
+    final_payload = local_payload + kept_unmanaged_commands
+
+    # 6. 执行批量更新
     try:
         logger.info(f"正在向 Discord 推送 {len(final_payload)} 个命令进行同步...")
         await bot.http.bulk_upsert_global_commands(

@@ -267,6 +267,11 @@ class GuidanceBot(commands.Bot):
                 if file.name.startswith("__"):
                     continue
 
+                # --- 临时禁用抽鬼牌 ---
+                if file.name == "ghost_card_cog.py":
+                    log.warning(f"已跳过加载有问题的模块: {file.name}")
+                    continue
+
                 # 从文件系统路径构建 Python 模块路径
                 # 例如: E:\...\src\chat\...\feeding_cog.py -> src.chat....feeding_cog
                 relative_path = file.relative_to(src_root.parent)
@@ -326,13 +331,6 @@ class GuidanceBot(commands.Bot):
             log.error(f"同步命令时出错: {e}", exc_info=True)
 
         log.info("--------------------")
-        # --- 内存诊断代码 ---
-        import objgraph
-
-        log.info("--- 开始内存诊断 ---")
-        log.info("内存中数量最多的前 20 个对象类型:")
-        objgraph.show_most_common_types(limit=20)
-        log.info("--- 内存诊断结束 ---")
         log.info("--- 启动成功 ---")
 
 
