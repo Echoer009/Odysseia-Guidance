@@ -435,7 +435,7 @@ class SearchUserModal(discord.ui.Modal):
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, discord_number_id FROM community_members ORDER BY id"
+                "SELECT id, discord_number_id FROM community_members ORDER BY id DESC"
             )
             all_users = cursor.fetchall()
             for i, user in enumerate(all_users):
@@ -515,6 +515,77 @@ class SearchUserModal(discord.ui.Modal):
                 )
 
 
+# --- 搜索社区知识的模态窗口 ---
+class SearchKnowledgeModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView"):
+        super().__init__(title="搜索社区知识")
+        self.db_view = db_view
+        self.keyword_input = discord.ui.TextInput(
+            label="输入搜索关键词",
+            placeholder="搜索标题和内容...",
+            required=True,
+            max_length=100,
+        )
+        self.add_item(self.keyword_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        keyword = self.keyword_input.value.strip()
+        if not keyword:
+            await interaction.response.send_message(
+                "请输入有效的搜索关键词。", ephemeral=True
+            )
+            return
+
+        conn = self.db_view._get_db_connection()
+        if not conn:
+            await interaction.response.send_message("数据库连接失败。", ephemeral=True)
+            return
+
+        try:
+            cursor = conn.cursor()
+            # 搜索标题和内容字段，使用LIKE进行模糊匹配
+            cursor.execute(
+                """
+                SELECT id, title, content_json FROM general_knowledge
+                WHERE title LIKE ? OR content_json LIKE ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (f"%{keyword}%", f"%{keyword}%"),
+            )
+            results = cursor.fetchall()
+
+            if not results:
+                await interaction.response.send_message(
+                    f"❌ 未找到包含关键词 `{keyword}` 的社区知识。", ephemeral=True
+                )
+                return
+
+            # 将搜索结果设置为当前列表项，并跳转到第一页
+            self.db_view.current_list_items = results
+            self.db_view.current_page = 0
+            self.db_view.total_pages = (
+                len(results) + self.db_view.items_per_page - 1
+            ) // self.db_view.items_per_page
+            self.db_view.search_mode = True
+            self.db_view.search_keyword = keyword
+
+            await interaction.response.defer()
+            await self.db_view.update_view()
+            await interaction.followup.send(
+                f"✅ 找到 {len(results)} 条包含关键词 `{keyword}` 的社区知识。",
+                ephemeral=True,
+            )
+
+        except sqlite3.Error as e:
+            log.error(f"搜索社区知识时发生数据库错误: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"搜索时发生数据库错误: {e}", ephemeral=True
+            )
+        finally:
+            if conn:
+                conn.close()
+
+
 # --- 数据库浏览器视图 ---
 class DBView(discord.ui.View):
     """数据库浏览器的交互式视图"""
@@ -533,6 +604,8 @@ class DBView(discord.ui.View):
         self.total_pages: int = 0
         self.current_item_id: Optional[str] = None
         self.current_list_items: List[sqlite3.Row] = []
+        self.search_mode: bool = False
+        self.search_keyword: Optional[str] = None
 
         # 初始化时就构建好初始组件
         self._initialize_components()
@@ -602,6 +675,28 @@ class DBView(discord.ui.View):
                 self.search_user_button.callback = self.search_user
                 self.add_item(self.search_user_button)
 
+            # --- 新增：仅在 general_knowledge 表中显示搜索按钮 ---
+            if self.current_table == "general_knowledge":
+                self.search_knowledge_button = discord.ui.Button(
+                    label="搜索知识",
+                    emoji="🔍",
+                    style=discord.ButtonStyle.success,
+                    row=1,
+                )
+                self.search_knowledge_button.callback = self.search_knowledge
+                self.add_item(self.search_knowledge_button)
+
+                # 添加退出搜索模式的按钮
+                if self.search_mode:
+                    self.exit_search_button = discord.ui.Button(
+                        label="退出搜索",
+                        emoji="❌",
+                        style=discord.ButtonStyle.secondary,
+                        row=1,
+                    )
+                    self.exit_search_button.callback = self.exit_search
+                    self.add_item(self.exit_search_button)
+
             if self.current_list_items:
                 self.add_item(self._create_item_select())
 
@@ -670,6 +765,9 @@ class DBView(discord.ui.View):
         self.current_table = interaction.data["values"][0]
         self.current_page = 0
         self.view_mode = "list"
+        # 切换表时退出搜索模式
+        self.search_mode = False
+        self.search_keyword = None
         await self.update_view()
 
     async def on_item_select(self, interaction: discord.Interaction):
@@ -710,6 +808,19 @@ class DBView(discord.ui.View):
         """显示一个模态窗口让用户输入 Discord ID 进行搜索"""
         modal = SearchUserModal(self)
         await interaction.response.send_modal(modal)
+
+    async def search_knowledge(self, interaction: discord.Interaction):
+        """显示一个模态窗口让用户输入关键词搜索社区知识"""
+        modal = SearchKnowledgeModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def exit_search(self, interaction: discord.Interaction):
+        """退出搜索模式，恢复正常浏览"""
+        await interaction.response.defer()
+        self.search_mode = False
+        self.search_keyword = None
+        self.current_page = 0
+        await self.update_view()
 
     async def view_memory(self, interaction: discord.Interaction):
         """打开模态框以查看和编辑社区成员的个人记忆摘要"""
@@ -771,7 +882,7 @@ class DBView(discord.ui.View):
             cursor = conn.cursor()
             # 1. 获取所有用户的 ID 和 discord_number_id，按主键排序
             cursor.execute(
-                "SELECT id, discord_number_id FROM community_members ORDER BY id"
+                "SELECT id, discord_number_id FROM community_members ORDER BY id DESC"
             )
             all_users = cursor.fetchall()
 
@@ -825,90 +936,9 @@ class DBView(discord.ui.View):
                         # 直接发送 modal 是 interaction response 的一部分，不能在 followup 中使用
                         # 因此，我们先发送一个提示消息
                         await interaction.followup.send(
-                            f"ℹ️ 未找到该用户的社区档案，但找到了其个人记忆。",
+                            "ℹ️ 未找到该用户的社区档案，但找到了其个人记忆。",
                             ephemeral=True,
                         )
-                        # 然后直接调用 send_modal (这在 followup 之后可能不会按预期工作，但值得一试)
-                        # 修正：模态框必须作为对交互的初始响应。我们不能在followup之后发送它。
-                        # 正确的做法是在 on_submit 中决定是 followup 还是 send_modal。
-                        # 但这里的结构限制了我们。
-                        # 一个可行的解决方法是，如果找到记忆，就不跳转页面，而是直接弹出模态框。
-                        # 这需要重构 SearchUserModal 的 on_submit。
-                        # 暂时，我们先实现一个简单的版本：提示用户，但不自动弹出。
-                        # 更好的方案是重构，但我们先实现核心功能。
-                        #
-                        # 最终决定：直接在 SearchUserModal 的 on_submit 中处理。
-                        # 这意味着我们需要把逻辑移到那里。
-                        # 为了保持这个函数的单一职责，我们在这里返回一个特殊值或直接调用一个新方法。
-                        #
-                        # 让我们在这里直接打开模态框，这需要 interaction 对象能支持。
-                        # interaction.response.send_modal 只能用一次。
-                        # SearchUserModal 的 on_submit 已经 defer() 了。
-                        #
-                        # 最终方案：修改 SearchUserModal 的 on_submit
-                        # 我们先在这里把代码写好，然后移动过去。
-                        #
-                        # 算了，直接在这里修改，因为 interaction 对象是传递进来的。
-                        # 我们不能在 defer() 之后 send_modal()。
-                        #
-                        # 让我们改变策略：
-                        # 1. 在 SearchUserModal.on_submit 中，我们不再 defer()
-                        # 2. 我们把 find_user_and_jump 的逻辑移入 on_submit
-                        # 3. 这样我们就可以根据查找结果决定是 followup.send() 还是 response.send_modal()
-
-                        # --- 考虑到上述复杂性，我们先做一个临时的、能工作的修改 ---
-                        # 我们将直接在 SearchUserModal 的 on_submit 中实现这个逻辑。
-                        # 所以这个函数的修改将作废，我们去修改 SearchUserModal。
-                        #
-                        # --- 重新评估 ---
-                        # `interaction.response.defer()` 之后确实不能 `send_modal`。
-                        # `SearchUserModal` 的 `on_submit` 调用了 `find_user_and_jump`。
-                        # 让我们修改 `SearchUserModal` 的 `on_submit`，而不是这个函数。
-
-                        # --- 最终决定，还是修改这个函数，但改变交互方式 ---
-                        # 如果找到记忆，我们就不跳转，而是发送一条不同的消息，并弹出一个新的视图让用户确认编辑。
-                        # 这太复杂了。
-                        #
-                        # --- 最简单的修改 ---
-                        # 就在找不到用户时检查记忆，如果找到，就弹窗。
-                        # 为了解决 defer 的问题，我们必须修改调用链。
-
-                        # 让我们先假设可以直接调用，如果不行再调整。
-                        # `interaction.followup` 不能发送模态框。
-                        # 必须是 `interaction.response.send_modal`。
-
-                        # 让我们把这个函数的逻辑直接合并到 SearchUserModal 的 on_submit 中。
-                        # 这样我们就可以灵活控制 response。
-
-                        # 步骤：
-                        # 1. 撤销对这个函数的修改。
-                        # 2. 修改 SearchUserModal.on_submit。
-
-                        # --- 最终决定：还是修改这个函数，但要用一种聪明的方式 ---
-                        # 我们不在这里发送模态框，而是返回一个状态，让调用者决定做什么。
-                        # 但当前代码没有返回值。
-                        #
-                        # 好了，让我们进行最直接的修改，即使它可能违反 discord.py 的一些规则，
-                        # 看看它是否能工作，或者会抛出什么错误。
-                        # 事实证明，这是行不通的。
-
-                        # --- 正确的修改方案 ---
-                        # 我们将修改 `SearchUserModal` 的 `on_submit` 方法。
-                        # 我将撤销对 `find_user_and_jump` 的修改，并对 `SearchUserModal` 进行修改。
-                        # 为了在一个 diff 中完成，我将同时修改两个地方。
-
-                        # 实际上，我应该先修改 `SearchUserModal`，然后再看 `find_user_and_jump` 是否需要修改。
-                        # 我将只修改 `SearchUserModal.on_submit`。
-
-                        # 让我们先只修改 `find_user_and_jump` 的 `else` 部分。
-                        # 如果找不到用户，就检查记忆。如果找到记忆，就弹窗。
-                        # 为了解决 `defer` 的问题，我将把 `defer` 从 `on_submit` 移到 `find_user_and_jump` 内部。
-
-                        # 不，最简单的办法是直接在这里检查，如果找到记忆，就直接弹窗。
-                        # 这需要 `interaction` 对象没有被 `defer`。
-                        # 我将假设 `SearchUserModal` 的 `on_submit` 没有 `defer`。
-
-                        # 最终的修改方案：
                         modal = EditMemoryModal(
                             self,
                             user_id_int,
@@ -919,8 +949,8 @@ class DBView(discord.ui.View):
                         # 我们必须在 SearchUserModal.on_submit 中处理。
                         # 所以，我将在这里添加逻辑，然后在下一个步骤中重构它。
                         await interaction.followup.send(
-                            f"❌ 未在社区成员档案中找到该用户，但检测到其拥有个人记忆。\n"
-                            f"请在详情页点击“查看/编辑记忆”按钮进行修改。",
+                            "❌ 未在社区成员档案中找到该用户，但检测到其拥有个人记忆。\n"
+                            "请在详情页点击“查看/编辑记忆”按钮进行修改。",
                             ephemeral=True,
                         )
 
@@ -1131,16 +1161,61 @@ class DBView(discord.ui.View):
 
         try:
             cursor = conn.cursor()
+
+            # 如果是搜索模式，使用已加载的搜索结果
+            if self.search_mode and self.current_table == "general_knowledge":
+                # 从搜索结果中获取当前页的数据
+                start_idx = self.current_page * self.items_per_page
+                end_idx = start_idx + self.items_per_page
+                page_items = self.current_list_items[start_idx:end_idx]
+
+                table_display_name = f"通用知识 (搜索: '{self.search_keyword}')"
+                embed = discord.Embed(
+                    title=f"搜索结果：{table_display_name}", color=discord.Color.gold()
+                )
+
+                if not page_items:
+                    embed.description = "当前页没有搜索结果。"
+                else:
+                    list_text = "\n".join(
+                        [
+                            f"**`#{item['id']}`** - {item['title']}"
+                            for item in page_items
+                        ]
+                    )
+                    embed.description = list_text
+
+                embed.set_footer(
+                    text=f"第 {self.current_page + 1} / {self.total_pages or 1} 页 (共 {len(self.current_list_items)} 条结果)"
+                )
+                return embed
+
+            # 正常浏览模式
             cursor.execute(f"SELECT COUNT(*) FROM {self.current_table}")
             total_rows = cursor.fetchone()[0]
             self.total_pages = (
                 total_rows + self.items_per_page - 1
             ) // self.items_per_page
             offset = self.current_page * self.items_per_page
-            cursor.execute(
-                f"SELECT * FROM {self.current_table} ORDER BY id LIMIT ? OFFSET ?",
-                (self.items_per_page, offset),
-            )
+            # 根据不同的表使用不同的排序方式，确保最新创建的条目在第一页
+            if self.current_table == "general_knowledge":
+                # 通用知识按创建时间降序排序（最新的在前）
+                cursor.execute(
+                    f"SELECT * FROM {self.current_table} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+                    (self.items_per_page, offset),
+                )
+            elif self.current_table == "community_members":
+                # 社区成员档案按ID降序排序（最新的在前）
+                cursor.execute(
+                    f"SELECT * FROM {self.current_table} ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (self.items_per_page, offset),
+                )
+            else:
+                # 其他表默认按ID降序排序（最新的在前）
+                cursor.execute(
+                    f"SELECT * FROM {self.current_table} ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (self.items_per_page, offset),
+                )
             self.current_list_items = cursor.fetchall()
 
             table_name_map = {
