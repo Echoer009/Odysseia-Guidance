@@ -1,6 +1,7 @@
 import os
 import json
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
 import logging
 
 # 假设的配置路径
@@ -23,7 +24,7 @@ class EventService:
         从文件系统加载所有活动配置，并找出当前激活的活动。
         这个方法可以在服务初始化时调用，也可以通过定时任务定期调用以刷新状态。
         """
-
+        now = datetime.now(timezone.utc)
         if not os.path.exists(EVENTS_DIR):
             log.warning(f"活动配置目录不存在: {EVENTS_DIR}")
             return
@@ -41,17 +42,18 @@ class EventService:
             if not is_active_flag:
                 continue
 
-            # start_date = datetime.fromisoformat(manifest["start_date"])
-            # end_date = datetime.fromisoformat(manifest["end_date"])
-
-            # if start_date <= now < end_date: # NOTE: 为方便测试，暂时禁用日期检查
-            # 只要 is_active 为 true, 就加载活动
-            self._active_event = self._load_full_event_config(event_id)
-            log.info(
-                f"活动已激活 (测试模式，日期检查已绕过): {self._active_event['event_name']}"
+            start_date = datetime.fromisoformat(
+                manifest["start_date"].replace("Z", "+00:00")
             )
-            # 假设一次只有一个活动是激活的
-            return
+            end_date = datetime.fromisoformat(
+                manifest["end_date"].replace("Z", "+00:00")
+            )
+
+            if start_date <= now < end_date:
+                self._active_event = self._load_full_event_config(event_id)
+                log.info(f"活动已激活: {self._active_event['event_name']}")
+                # 假设一次只有一个活动是激活的
+                return
 
         # 如果没有找到激活的活动
         self._active_event = None
