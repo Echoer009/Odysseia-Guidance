@@ -28,8 +28,15 @@ class MessageProcessor:
     ) -> Optional[bytes]:
         """下载图片"""
         try:
+            headers = {
+                "Accept": "image/gif,image/png,image/jpeg,image/webp,*/*",
+                "User-Agent": "OdysseiaDiscordBot/1.0",
+            }
             async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=5), proxy=proxy
+                url,
+                timeout=aiohttp.ClientTimeout(total=5),
+                proxy=proxy,
+                headers=headers,
             ) as response:
                 response.raise_for_status()
                 return await response.read()

@@ -2,6 +2,8 @@ import discord
 import aiohttp
 import logging
 from typing import Dict, Any, Optional
+from PIL import Image
+import io
 
 # 获取日志记录器
 log = logging.getLogger(__name__)
@@ -53,6 +55,27 @@ async def get_user_avatar(
                 if response.status == 200:
                     image_bytes = await response.read()
                     mime_type = response.headers.get("Content-Type", "image/png")
+
+                    # 如果是 GIF，则转换为 PNG 以兼容 Gemini API
+                    if mime_type == "image/gif":
+                        if log_detailed:
+                            log.info("检测到 GIF 头像，正在转换为 PNG...")
+                        try:
+                            with Image.open(io.BytesIO(image_bytes)) as img:
+                                # 提取第一帧并保存为 PNG
+                                output_buffer = io.BytesIO()
+                                img.save(output_buffer, format="PNG")
+                                image_bytes = output_buffer.getvalue()
+                                mime_type = "image/png"  # 更新 MIME 类型
+                                if log_detailed:
+                                    log.info(
+                                        f"成功转换为 PNG，新大小: {len(image_bytes)} bytes"
+                                    )
+                        except Exception as e:
+                            log.error(f"GIF 转换为 PNG 失败: {e}", exc_info=True)
+                            # 转换失败，返回错误而不是原始 GIF
+                            return {"error": "Failed to convert animated avatar."}
+
                     if log_detailed:
                         log.info(
                             f"成功下载头像，大小: {len(image_bytes)} bytes, MIME: {mime_type}"
