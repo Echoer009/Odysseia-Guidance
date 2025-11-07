@@ -1,7 +1,7 @@
 from google.genai import types
 import discord
 import inspect
-from typing import Optional, Dict, Callable, Any
+from typing import Optional, Dict, Callable
 import logging
 
 log = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ class ToolService:
         self,
         tool_call: types.FunctionCall,
         author_id: Optional[int] = None,
+        log_detailed: bool = False,  # 新增：接收详细日志开关
     ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
@@ -44,7 +45,8 @@ class ToolService:
             一个格式化为 FunctionResponse 的 Part 对象，其中包含工具的输出。
         """
         tool_name = tool_call.name
-        log.info(f"--- [工具执行流程]: 准备执行 '{tool_name}' ---")
+        if log_detailed:
+            log.info(f"--- [工具执行流程]: 准备执行 '{tool_name}' ---")
 
         tool_function = self.tool_map.get(tool_name)
 
@@ -57,45 +59,57 @@ class ToolService:
         try:
             # 步骤 1: 从模型响应中提取参数
             tool_args = dict(tool_call.args)
-            log.info(f"模型提供的参数: {tool_args}")
+            if log_detailed:
+                log.info(f"模型提供的参数: {tool_args}")
 
             # 步骤 2: 注入应用程序级别的依赖项 (依赖注入)
-            # 这些是模型不知道也不需要知道的运行时对象。
             tool_args["bot"] = self.bot
-            log.info("已注入 'bot' 实例。")
+            if log_detailed:
+                log.info("已注入 'bot' 实例。")
 
             # 步骤 3: 注入上下文信息
-            # 如果工具需要 user_id 但模型没有提供，则使用 author_id 作为备用
             if author_id is not None:
-                # 使用 setdefault 避免覆盖模型已经提供的 user_id
                 tool_args.setdefault("user_id", str(author_id))
-                log.info(
-                    f"确保 'user_id' 存在 (备用值为 author_id): {tool_args['user_id']}"
-                )
+                if log_detailed:
+                    log.info(
+                        f"确保 'user_id' 存在 (备用值为 author_id): {tool_args['user_id']}"
+                    )
 
-            # 步骤 4: 执行工具函数
+            # 步骤 4: 智能地传递 log_detailed 参数
+            # 检查工具函数是否接受 'log_detailed' 关键字参数
+            sig = inspect.signature(tool_function)
+            if "log_detailed" in sig.parameters:
+                tool_args["log_detailed"] = log_detailed
+
+            # 步骤 5: 执行工具函数
             result = await tool_function(**tool_args)
-            log.info(f"工具 '{tool_name}' 执行完毕。")
+            if log_detailed:
+                log.info(f"工具 '{tool_name}' 执行完毕。")
 
             # 步骤 5: 根据工具返回的结果，构造相应的 Part
             if "image_data" in result and isinstance(result["image_data"], dict):
                 # 这是一个多模态（图片）结果
                 image_info = result["image_data"]
-                log.info(f"检测到图片结果，MIME 类型: {image_info.get('mime_type')}")
+                if log_detailed:
+                    log.info(
+                        f"检测到图片结果，MIME 类型: {image_info.get('mime_type')}"
+                    )
                 part = types.Part(
                     inline_data=types.Blob(
                         mime_type=image_info.get("mime_type", "image/png"),
                         data=image_info.get("data", b""),
                     )
                 )
-                log.info(f"已为 '{tool_name}' 构造包含图片的 Part。")
+                if log_detailed:
+                    log.info(f"已为 '{tool_name}' 构造包含图片的 Part。")
                 return part
             else:
                 # 这是一个标准的文本/JSON结果（包括错误信息）
                 part = types.Part.from_function_response(
                     name=tool_name, response={"result": result}
                 )
-                log.info(f"已为 '{tool_name}' 构造标准的 FunctionResponse Part。")
+                if log_detailed:
+                    log.info(f"已为 '{tool_name}' 构造标准的 FunctionResponse Part。")
                 return part
 
         except Exception as e:

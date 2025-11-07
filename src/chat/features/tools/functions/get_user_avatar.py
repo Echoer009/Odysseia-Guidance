@@ -7,7 +7,9 @@ from typing import Dict, Any
 log = logging.getLogger(__name__)
 
 
-async def get_user_avatar(user_id: str, **kwargs) -> Dict[str, Any]:
+async def get_user_avatar(
+    user_id: str, log_detailed: bool = False, **kwargs
+) -> Dict[str, Any]:
     """
     获取指定 Discord 用户 ID 的头像图片数据。
     重要: 如果用户使用 "我"、"我的" 等词语指代自己，请不要提供 user_id 参数，系统会自动使用提问者的 ID。
@@ -20,9 +22,10 @@ async def get_user_avatar(user_id: str, **kwargs) -> Dict[str, Any]:
         一个包含图片 MIME 类型和二进制数据的字典，如果失败则返回错误信息。
     """
     bot = kwargs.get("bot")
-    log.info(
-        f"--- [工具执行]: get_user_avatar (新版-图片下载), 参数: user_id={user_id} ---"
-    )
+    if log_detailed:
+        log.info(
+            f"--- [工具执行]: get_user_avatar (新版-图片下载), 参数: user_id={user_id} ---"
+        )
 
     if not bot:
         log.error("工具 'get_user_avatar' 执行失败: Discord bot 实例不可用。")
@@ -34,23 +37,26 @@ async def get_user_avatar(user_id: str, **kwargs) -> Dict[str, Any]:
 
     try:
         target_id = int(user_id)
-        log.info(f"正在获取用户 {target_id} 的信息...")
+        if log_detailed:
+            log.info(f"正在获取用户 {target_id} 的信息...")
         user = await bot.fetch_user(target_id)
         if not user or not user.display_avatar:
             log.warning(f"未找到用户 {target_id} 或该用户没有头像。")
             return {"error": "User not found or user has no avatar."}
 
         avatar_url = str(user.display_avatar.url)
-        log.info(f"成功获取头像 URL: {avatar_url}，准备下载...")
+        if log_detailed:
+            log.info(f"成功获取头像 URL: {avatar_url}，准备下载...")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(avatar_url) as response:
                 if response.status == 200:
                     image_bytes = await response.read()
                     mime_type = response.headers.get("Content-Type", "image/png")
-                    log.info(
-                        f"成功下载头像，大小: {len(image_bytes)} bytes, MIME: {mime_type}"
-                    )
+                    if log_detailed:
+                        log.info(
+                            f"成功下载头像，大小: {len(image_bytes)} bytes, MIME: {mime_type}"
+                        )
                     # 返回一个特殊结构，包含图片数据，供上游服务处理
                     return {"image_data": {"mime_type": mime_type, "data": image_bytes}}
                 else:

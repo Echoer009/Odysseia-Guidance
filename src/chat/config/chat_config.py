@@ -41,7 +41,7 @@ GEMINI_CHAT_CONFIG = {
     "top_p": 0.97,
     "top_k": 60,
     "max_output_tokens": 3000,
-    "thinking_budget": 1500,  # 思考预算 (增加预算以提升人设一致性)
+    "thinking_budget": -1,  # 思考预算 (设置为-1以启用动态思考模式)
 }
 
 GEMINI_TEXT_GEN_CONFIG = {
@@ -66,6 +66,7 @@ GEMINI_THREAD_PRAISE_CONFIG = {
     "top_p": 0.97,
     "top_k": 40,
     "max_output_tokens": 8192,
+    "thinking_budget": 2000,  # 为暖贴功能设置独立的思考预算
 }
 
 # 用于生成个人记忆摘要的配置
@@ -320,4 +321,8 @@ DEBUG_CONFIG = {
     "LOG_FINAL_CONTEXT": False,  # 是否在日志中打印发送给AI的最终上下文，用于调试
     "LOG_AI_FULL_CONTEXT": os.getenv("LOG_AI_FULL_CONTEXT", "False").lower()
     == "true",  # 是否记录AI可见的完整上下文日志
+    "LOG_DETAILED_GEMINI_PROCESS": os.getenv(
+        "LOG_DETAILED_GEMINI_PROCESS", "False"
+    ).lower()
+    == "true",  # 控制是否输出详细的Gemini处理过程日志（工具调用、思考等）
 }

@@ -67,6 +67,12 @@ class GeminiService:
     def __init__(self):
         self.bot = None  # 用于存储 Discord Bot 实例
 
+        # --- (新) SDK 底层调试日志 ---
+        # 根据最新指南 (2025)，开启此选项可查看详细的 HTTP 请求/响应
+        if app_config.DEBUG_CONFIG.get("LOG_SDK_HTTP_REQUESTS", False):
+            log.info("已开启 google-genai SDK 底层 DEBUG 日志。")
+            # 设置基础日志记录器以捕获 httpx 的调试信息
+            logging.basicConfig(level=logging.DEBUG)
         # --- 密钥轮换服务 ---
         google_api_keys_str = os.getenv("GOOGLE_API_KEYS_LIST", "")
         if not google_api_keys_str:
@@ -581,11 +587,15 @@ class GeminiService:
 
         gen_config = types.GenerateContentConfig(**gen_config_params)
 
+        # 3.3. 根据最新指南 (2025) 配置思维链
         if thinking_budget is not None:
             gen_config.thinking_config = types.ThinkingConfig(
-                thinking_budget=thinking_budget
+                include_thoughts=True,  # 关键：要求 API 返回思考过程
+                thinking_budget=thinking_budget,
             )
-            log.info(f"已为模型启用思考功能，预算: {thinking_budget}。")
+            log.info(
+                f"已为模型启用思维链 (Thinking)，预算: {thinking_budget}，并要求返回思考内容。"
+            )
 
         # 4. 准备初始对话历史
         conversation_history = self._prepare_api_contents(final_conversation)
@@ -606,9 +616,17 @@ class GeminiService:
             log.info("------------------------------------")
 
         # 5. 实现手动、顺序工具调用循环 (文档代码示例 2.1)
+        called_tool_names = []  # 用于记录本次请求调用的所有工具
+        thinking_was_used = False  # 新增：跟踪本次调用是否实际使用了思考功能
         max_calls = 5  # 设置最大工具调用循环次数，防止无限循环
         for i in range(max_calls):
-            log.info(f"--- [工具调用循环: 第 {i + 1}/{max_calls} 次] ---")
+            # --- (新增) 详细过程日志开关 ---
+            log_detailed = app_config.DEBUG_CONFIG.get(
+                "LOG_DETAILED_GEMINI_PROCESS", False
+            )
+
+            if log_detailed:
+                log.info(f"--- [工具调用循环: 第 {i + 1}/{max_calls} 次] ---")
 
             # 步骤 2: 调用模型并接收建议
             response = await client.aio.models.generate_content(
@@ -617,29 +635,57 @@ class GeminiService:
                 config=gen_config,
             )
 
+            # --- 核心日志：根据最新指南 (2025) 提取并记录思考过程 ---
+            if log_detailed:
+                if response.candidates:
+                    candidate = response.candidates[0]
+                    for part in candidate.content.parts:
+                        # 检查 part 是否代表思考过程
+                        if hasattr(part, "thought") and part.thought:
+                            thinking_was_used = True  # 标记思考功能已被使用
+                            log.info("--- 模型思考过程 (Thinking) ---")
+                            log.info(part.text)
+                            log.info("---------------------------------")
+
             # 检查是否有函数调用建议
-            # 新版 SDK (0.7.2) 将 function_calls 直接放在 response 对象上
             function_calls = response.function_calls
 
             if not function_calls:
-                log.info("模型返回了最终文本响应，工具调用流程结束。")
+                if log_detailed:
+                    log.info("--- 模型决策：直接生成文本回复 (未调用工具) ---")
+                    log.info("模型返回了最终文本响应，工具调用流程结束。")
                 # 步骤 4 (结束): 模型返回最终文本，流程结束
                 break  # 退出循环
 
+            # 如果代码执行到这里，说明模型建议了工具调用
+            if log_detailed:
+                log.info("--- 模型决策：建议进行工具调用 ---")
+                # 使用 json.dumps 格式化参数以提高可读性
+                for call in function_calls:
+                    args_str = json.dumps(dict(call.args), ensure_ascii=False, indent=2)
+                    log.info(f"  - 工具名称: {call.name}")
+                    log.info(f"  - 调用参数:\n{args_str}")
+                log.info("------------------------------------")
+
+            # 记录工具名称（无论是否打印详细日志都需要）
+            for call in function_calls:
+                called_tool_names.append(call.name)
+
             # 将包含 FunctionCall 建议的模型响应添加到历史记录中
-            # 这是保持上下文和思维签名的关键
             conversation_history.append(response.candidates[0].content)
 
             # 步骤 3: 提取并执行函数
-            log.info(f"模型建议调用 {len(function_calls)} 个工具。")
+            if log_detailed:
+                log.info(f"准备执行 {len(function_calls)} 个工具调用...")
 
             # 用于收集本次所有工具执行结果的 Part 列表
             tool_result_parts = []
 
             # 并行执行所有建议的工具调用
-            # 使用 asyncio.gather 来并发执行，提高效率
             tasks = [
-                self.tool_service.execute_tool_call(tool_call=call, author_id=user_id)
+                self.tool_service.execute_tool_call(
+                    tool_call=call, author_id=user_id, log_detailed=log_detailed
+                )
                 for call in function_calls
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -647,9 +693,6 @@ class GeminiService:
             for result in results:
                 if isinstance(result, Exception):
                     log.error(f"执行工具时发生异常: {result}", exc_info=result)
-                    # 即使工具执行失败，也要将错误信息返回给模型
-                    # 注意：这里我们无法知道是哪个工具失败了，这是一个简化的处理
-                    # 在生产环境中可能需要更复杂的错误追踪
                     tool_result_parts.append(
                         types.Part.from_function_response(
                             name="unknown_tool",
@@ -661,7 +704,10 @@ class GeminiService:
                 else:
                     tool_result_parts.append(result)
 
-            log.info(f"已收集 {len(tool_result_parts)} 个工具执行结果。")
+            if log_detailed:
+                log.info(
+                    f"已收集 {len(tool_result_parts)} 个工具执行结果，准备将其返回给模型。"
+                )
 
             # 步骤 4: 将所有工具结果作为单个用户回合添加到历史记录，准备下一次 API 调用
             conversation_history.append(
@@ -673,21 +719,62 @@ class GeminiService:
                 log.warning("已达到最大工具调用限制，流程终止。")
                 return "哎呀，我好像陷入了一个复杂的思考循环里，我们换个话题聊聊吧！"
 
-        # 3. 处理响应
+        # 3. 处理最终响应 (已重构以分离思考和文本)
         if response.parts:
-            # 严谨地从 parts 中提取文本，避免 'thought_signature' 警告
-            raw_ai_response = "".join(
-                part.text for part in response.parts if hasattr(part, "text")
-            ).strip()
-            from src.chat.services.context_service import context_service
+            final_thought = ""
+            final_text = ""
 
-            await context_service.update_user_conversation_history(
-                user_id, guild_id, message if message else "", raw_ai_response
-            )
-            formatted_response = await self._post_process_response(
-                raw_ai_response, user_id, guild_id
-            )
-            return formatted_response
+            # 遍历最终响应的 parts，分离思考过程和文本回复
+            for part in response.parts:
+                if hasattr(part, "thought") and part.thought:
+                    thinking_was_used = True  # 标记思考功能已被使用
+                    final_thought += part.text
+                elif hasattr(part, "text"):
+                    final_text += part.text
+
+            if log_detailed:
+                if final_thought:
+                    log.info("--- 模型最终回复的思考过程 ---")
+                    log.info(final_thought.strip())
+                    log.info("-----------------------------")
+                else:
+                    log.info("--- 模型最终回复未提供明确的思考过程。---")
+
+            raw_ai_response = final_text.strip()
+
+            if raw_ai_response:
+                from src.chat.services.context_service import context_service
+
+                await context_service.update_user_conversation_history(
+                    user_id, guild_id, message if message else "", raw_ai_response
+                )
+                formatted_response = await self._post_process_response(
+                    raw_ai_response, user_id, guild_id
+                )
+                # --- (新增) 请求摘要日志 ---
+                total_tokens = 0
+                if response.usage_metadata:
+                    total_tokens = response.usage_metadata.total_token_count
+
+                log.info("--- Gemini API 请求摘要 ---")
+                log.info(
+                    f"  - 本次调用是否使用思考功能: {'是' if thinking_was_used else '否'}"
+                )
+
+                # 仅在实际使用了思考功能时，才记录与该轮次相关的Token消耗
+                if thinking_was_used:
+                    log.info(f"  - 思考过程Token消耗: {total_tokens}")
+
+                if called_tool_names:
+                    unique_tools = sorted(list(set(called_tool_names)))
+                    log.info(
+                        f"  - 调用了 {len(unique_tools)} 个工具: {', '.join(unique_tools)}"
+                    )
+                else:
+                    log.info("  - 未调用任何工具。")
+                log.info("--------------------------")
+
+                return formatted_response
 
         elif response.prompt_feedback and response.prompt_feedback.block_reason:
             # --- 增强日志记录 ---
@@ -865,10 +952,21 @@ class GeminiService:
             raise ValueError("装饰器未能提供客户端实例。")
 
         loop = asyncio.get_event_loop()
+        # --- (新增) 为暖贴功能启用思考 ---
+        praise_config = app_config.GEMINI_THREAD_PRAISE_CONFIG.copy()
+        thinking_budget = praise_config.pop("thinking_budget", None)
+
         gen_config = types.GenerateContentConfig(
-            **app_config.GEMINI_THREAD_PRAISE_CONFIG,
+            **praise_config,
             safety_settings=self.safety_settings,
         )
+
+        if thinking_budget is not None:
+            gen_config.thinking_config = types.ThinkingConfig(
+                include_thoughts=True, thinking_budget=thinking_budget
+            )
+            log.info(f"已为暖贴功能启用思维链 (Thinking)，预算: {thinking_budget}。")
+
         final_model_name = self.default_model_name
 
         final_contents = self._prepare_api_contents(conversation_history)
@@ -896,7 +994,17 @@ class GeminiService:
         )
 
         if response.parts:
-            return response.text.strip()
+            # --- (修正) 采用与主对话相同的逻辑，正确分离思考过程和最终回复 ---
+            final_text = ""
+            for part in response.parts:
+                # 关键：只有当 part 不是思考过程时，才将其文本内容计入最终回复
+                if hasattr(part, "thought") and part.thought:
+                    # 这是思考过程，忽略它
+                    pass
+                elif hasattr(part, "text"):
+                    # 这是最终回复
+                    final_text += part.text
+            return final_text.strip()
 
         log.warning(f"generate_thread_praise 未能生成有效内容。API 响应: {response}")
         if response.prompt_feedback and response.prompt_feedback.block_reason:
