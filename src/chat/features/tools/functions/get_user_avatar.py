@@ -1,22 +1,22 @@
 import discord
 import aiohttp
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # 获取日志记录器
 log = logging.getLogger(__name__)
 
 
 async def get_user_avatar(
-    user_id: str, log_detailed: bool = False, **kwargs
+    user_id: Optional[str] = None, log_detailed: bool = False, **kwargs
 ) -> Dict[str, Any]:
     """
-    获取指定 Discord 用户 ID 的头像图片数据。
-    重要: 如果用户使用 "我"、"我的" 等词语指代自己，请不要提供 user_id 参数，系统会自动使用提问者的 ID。
-    只有当用户明确提到其他人的 ID 时，才提供 user_id 参数。
+    查看用户的 Discord 头像。当用户让你看、检查或提及他们的头像时，调用此工具来获取图片。
+    仅当用户明确提供其他用户的ID时，才使用 user_id 参数。
+    如果用户是想看自己的头像, 不要提供任何参数。
 
     Args:
-        user_id: (可选) 用户的 Discord ID。仅在用户明确指定时使用。
+        user_id (Optional[str]): 目标用户的纯数字 Discord ID (例如: "123456789012345678")。绝对不要传入用户名或昵称。
 
     Returns:
         一个包含图片 MIME 类型和二进制数据的字典，如果失败则返回错误信息。
