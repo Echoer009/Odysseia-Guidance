@@ -327,8 +327,10 @@ class MessageProcessor:
                 content = content.replace(mention_str_1, replacement).replace(
                     mention_str_2, replacement
                 )
-            else:
-                content = content.replace(mention_str_1, "").replace(mention_str_2, "")
+            # else:
+            #     # 根据新需求，不再移除对其他用户的 @mention
+            #     # 这样 AI 模型就可以接收到 <@user_id> 格式的字符串并提取 ID
+            #     pass
 
         content = regex_service.clean_user_input(content)
         content = content.strip()
