@@ -1,70 +1,108 @@
 from google.genai import types
 import discord
 import inspect
-from typing import Optional
+from typing import Optional, Dict, Callable, Any
 import logging
-from src.chat.features.tools.tool_registry import tool_registry
 
 log = logging.getLogger(__name__)
+
 
 class ToolService:
     """
     一个负责执行 Gemini 模型请求的工具函数调用的服务。
-    它充当调度程序，使用 ToolRegistry 查找并运行适当的工具。
+    它使用一个从工具名称到可调用函数的映射来查找和运行适当的工具。
     """
 
-    async def execute_tool_call(self, tool_call: types.FunctionCall, bot: Optional[discord.Client] = None, author_id: Optional[int] = None) -> types.Part:
+    def __init__(self, bot: discord.Client, tool_map: Dict[str, Callable]):
+        """
+        初始化 ToolService。
+
+        Args:
+            bot: Discord 客户端实例，将注入到需要它的工具中。
+            tool_map: 一个字典，将工具名称映射到其对应的异步函数实现。
+        """
+        self.bot = bot
+        self.tool_map = tool_map
+        log.info(
+            f"ToolService 已使用 {len(tool_map)} 个工具进行初始化: {list(tool_map.keys())}"
+        )
+
+    async def execute_tool_call(
+        self,
+        tool_call: types.FunctionCall,
+        author_id: Optional[int] = None,
+    ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
-        这个版本支持向工具传递上下文（如 bot 实例、author_id）并处理多模态输出。
+        这个版本通过依赖注入来提供上下文（如 bot 实例），并处理备用参数（如 author_id）。
 
         Args:
             tool_call: 来自 Gemini API 响应的函数调用对象。
-            bot: 可选的 discord.Client 实例，用于需要与 Discord API 交互的工具。
-            author_id: 可选的当前消息作者的 Discord ID。
+            author_id: 可选的当前消息作者的 Discord ID，用作某些参数的备用值。
 
         Returns:
             一个格式化为 FunctionResponse 的 Part 对象，其中包含工具的输出。
         """
         tool_name = tool_call.name
-        try:
-            # 从注册中心检索工具的实现
-            tool_info = tool_registry.get_tool(tool_name)
-            tool_function = tool_info["function"]
+        log.info(f"--- [工具执行流程]: 准备执行 '{tool_name}' ---")
 
-            # 提取工具调用的参数
-            tool_args = dict(tool_call.args)
+        tool_function = self.tool_map.get(tool_name)
 
-            # 检查工具函数签名，并根据需要注入上下文依赖
-            sig = inspect.signature(tool_function)
-            if 'bot' in sig.parameters:
-                tool_args['bot'] = bot
-            if 'author_id' in sig.parameters and author_id is not None:
-                tool_args['author_id'] = author_id
-
-            # 执行工具函数
-            result = await tool_function(**tool_args)
-            log.info(f"工具 '{tool_name}' 已执行，参数: {tool_args}, 返回结果: {result}")
-            
-            part = types.Part.from_function_response(
-                name=tool_name,
-                response={"result": result} # 根据文档，response 需要一个包含 "result" 键的字典
-            )
-            log.info(f"正在将构造好的 Part 返回给 gemini_service: {part}")
-            return part
-
-        except ValueError as e:
-            # 处理找不到工具的情况
-            log.error(f"找不到工具 '{tool_name}'。", exc_info=True)
+        if not tool_function:
+            log.error(f"找不到工具 '{tool_name}' 的实现。")
             return types.Part.from_function_response(
-                name=tool_name,
-                response={"error": f"找不到工具: {str(e)}"}
+                name=tool_name, response={"error": f"Tool '{tool_name}' not found."}
             )
+
+        try:
+            # 步骤 1: 从模型响应中提取参数
+            tool_args = dict(tool_call.args)
+            log.info(f"模型提供的参数: {tool_args}")
+
+            # 步骤 2: 注入应用程序级别的依赖项 (依赖注入)
+            # 这些是模型不知道也不需要知道的运行时对象。
+            tool_args["bot"] = self.bot
+            log.info("已注入 'bot' 实例。")
+
+            # 步骤 3: 注入上下文信息
+            # 如果工具需要 user_id 但模型没有提供，则使用 author_id 作为备用
+            if author_id is not None:
+                # 使用 setdefault 避免覆盖模型已经提供的 user_id
+                tool_args.setdefault("user_id", str(author_id))
+                log.info(
+                    f"确保 'user_id' 存在 (备用值为 author_id): {tool_args['user_id']}"
+                )
+
+            # 步骤 4: 执行工具函数
+            result = await tool_function(**tool_args)
+            log.info(f"工具 '{tool_name}' 执行完毕。")
+
+            # 步骤 5: 根据工具返回的结果，构造相应的 Part
+            if "image_data" in result and isinstance(result["image_data"], dict):
+                # 这是一个多模态（图片）结果
+                image_info = result["image_data"]
+                log.info(f"检测到图片结果，MIME 类型: {image_info.get('mime_type')}")
+                part = types.Part(
+                    inline_data=types.Blob(
+                        mime_type=image_info.get("mime_type", "image/png"),
+                        data=image_info.get("data", b""),
+                    )
+                )
+                log.info(f"已为 '{tool_name}' 构造包含图片的 Part。")
+                return part
+            else:
+                # 这是一个标准的文本/JSON结果（包括错误信息）
+                part = types.Part.from_function_response(
+                    name=tool_name, response={"result": result}
+                )
+                log.info(f"已为 '{tool_name}' 构造标准的 FunctionResponse Part。")
+                return part
+
         except Exception as e:
-            # 处理工具执行期间的任何其他异常
-            print(f"执行工具 '{tool_name}' 期间发生意外错误: {e}")
             log.error(f"执行工具 '{tool_name}' 时发生意外错误。", exc_info=True)
             return types.Part.from_function_response(
                 name=tool_name,
-                response={"error": f"执行工具时发生意外错误: {str(e)}"}
+                response={
+                    "error": f"An unexpected error occurred during execution: {str(e)}"
+                },
             )

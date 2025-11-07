@@ -31,8 +31,9 @@ from src.chat.services.key_rotation_service import (
     KeyRotationService,
     NoAvailableKeyError,
 )
-from src.chat.features.tools.tool_registry import tool_registry
 from src.chat.features.tools.services.tool_service import ToolService
+from src.chat.features.tools.tool_loader import load_tools_from_directory
+
 
 log = logging.getLogger(__name__)
 
@@ -103,21 +104,28 @@ class GeminiService:
             ),
         ]
 
-        # --- 工具配置 ---
-        self.tool_service = ToolService()  # 实例化工具服务
-        # 通过导入工具模块（例如 get_user_avatar），工具会自动注册。
-        self.tools = tool_registry.get_all_tools_schema()
-        if self.tools:
-            log.info(
-                f"已加载 {len(self.tools)} 个工具: {[tool['name'] for tool in self.tools]}"
-            )
-        else:
-            log.info("未从工具注册中心加载任何工具。")
+        # --- 工具配置 (模块化标准) ---
+        # 1. 使用加载器动态发现所有工具
+        self.available_tools, self.tool_map = load_tools_from_directory(
+            "src/chat/features/tools/functions"
+        )
+
+        # 2. 实例化工具服务，并传入工具映射
+        self.tool_service = ToolService(bot=None, tool_map=self.tool_map)
+
+        log.info("--- 工具加载完成 (模块化) ---")
+        log.info(
+            f"已加载 {len(self.available_tools)} 个工具: {list(self.tool_map.keys())}"
+        )
+        log.info("------------------------------------")
 
     def set_bot(self, bot):
         """注入 Discord Bot 实例。"""
         self.bot = bot
         log.info("Discord Bot 实例已成功注入 GeminiService。")
+        # 关键：同时将 bot 实例注入到 ToolService 中
+        self.tool_service.bot = bot
+        log.info("Discord Bot 实例已成功注入 ToolService。")
 
     def _create_client_with_key(self, api_key: str):
         """使用给定的 API 密钥动态创建一个 Gemini 客户端实例。"""
@@ -558,45 +566,38 @@ class GeminiService:
         chat_config = app_config.GEMINI_CHAT_CONFIG.copy()
         thinking_budget = chat_config.pop("thinking_budget", None)
 
-        # 3.1. 严格按照文档，预先准备好 tools 参数
-        tools_for_api = None
-        if self.tools:
-            tools_for_api = [types.Tool(function_declarations=self.tools)]
-
-            log.info(
-                f"--- 发送给 Gemini 的工具定义 ---\n{json.dumps(self.tools, indent=2, ensure_ascii=False)}"
-            )
-
-        # 3.2. 构建 GenerateContentConfig 的构造函数参数字典
+        # 3.1. 准备 API 调用参数
         gen_config_params = {**chat_config, "safety_settings": self.safety_settings}
-        if tools_for_api:
-            gen_config_params["tools"] = tools_for_api
-            # --- 诊断性修改：强制模型调用工具 ---
-            gen_config_params["tool_config"] = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode=types.FunctionCallingConfig.Mode.ANY
-                )
-            )
-            log.info("--- 诊断模式：已强制开启 ANY 模式进行工具调用测试 ---")
 
-        # 3.3. 在初始化时一次性传入所有参数，包括 tools
+        # 3.2. 根据文档，直接传递 Python callable 列表给 tools 参数
+        # SDK 会自动推断 Schema
+        if self.available_tools:
+            gen_config_params["tools"] = self.available_tools
+            # 关键：显式禁用自动调用，进入手动模式
+            gen_config_params["automatic_function_calling"] = (
+                types.AutomaticFunctionCallingConfig(disable=True)
+            )
+            log.info("已启用手动工具调用模式。")
+
         gen_config = types.GenerateContentConfig(**gen_config_params)
 
         if thinking_budget is not None:
             gen_config.thinking_config = types.ThinkingConfig(
                 thinking_budget=thinking_budget
             )
+            log.info(f"已为模型启用思考功能，预算: {thinking_budget}。")
 
-        processed_contents = self._prepare_api_contents(final_conversation)
+        # 4. 准备初始对话历史
+        conversation_history = self._prepare_api_contents(final_conversation)
 
-        # 如果开启了 AI 完整上下文日志，则打印到终端
+        # 如果开启了 AI 完整上下文日志，则打印初始上下文
         if app_config.DEBUG_CONFIG["LOG_AI_FULL_CONTEXT"]:
-            log.info(f"--- AI 完整上下文日志 (用户 {user_id}) ---")
+            log.info(f"--- 初始 AI 上下文 (用户 {user_id}) ---")
             log.info(
                 json.dumps(
                     [
-                        self._serialize_parts_for_logging_full(content)
-                        for content in processed_contents
+                        self._serialize_parts_for_logging_full(c)
+                        for c in conversation_history
                     ],
                     ensure_ascii=False,
                     indent=2,
@@ -604,76 +605,80 @@ class GeminiService:
             )
             log.info("------------------------------------")
 
-        # 4. 执行 API 调用 (严格遵循文档的异步方式)
-        log.info(f"--- 正在为用户 {user_id} 调用 Gemini API (异步修正版) ---")
-        log.debug(f"Contents for API: {processed_contents}")
-        log.debug(f"Config for API: {gen_config}")
+        # 5. 实现手动、顺序工具调用循环 (文档代码示例 2.1)
+        max_calls = 5  # 设置最大工具调用循环次数，防止无限循环
+        for i in range(max_calls):
+            log.info(f"--- [工具调用循环: 第 {i + 1}/{max_calls} 次] ---")
 
-        # 根据文档第690行，异步函数应使用 client.aio.models
-        response = await client.aio.models.generate_content(
-            model=(model_name or self.default_model_name),
-            contents=processed_contents,
-            config=gen_config,  # 遵循文档示例，使用 config=
-        )
-
-        # log.info(f"--- 从 Gemini 收到的原始响应 ---\n{response}")
-
-        # --- 函数调用集成逻辑 ---
-        # 检查模型的回复是否包含函数调用请求
-        # 检查模型的回复是否包含函数调用请求
-        # 根据文档，candidates 和 parts 都是列表，需要通过索引 [0] 访问
-        if (
-            response.candidates
-            and len(response.candidates) > 0
-            and response.candidates[0].content
-            and response.candidates[0].content.parts
-            and len(response.candidates[0].content.parts) > 0
-            and response.candidates[0].content.parts[0].function_call
-        ):
-            candidate = response.candidates[0]
-            function_call = candidate.content.parts[0].function_call
-            log.info(
-                f"模型请求调用工具: {function_call.name}，参数: {dict(function_call.args)}"
-            )
-
-            # 使用实例化的工具服务执行调用，并传入 bot 实例
-            if not self.bot:
-                log.error("GeminiService 中缺少 Bot 实例，无法执行需要 Bot 的工具！")
-                # 返回一个错误信息给模型，让它知道工具调用失败了
-                tool_result_part = types.Part.from_function_response(
-                    name=function_call.name,
-                    response={
-                        "content": {"error": "Internal error: Bot is not available."}
-                    },
-                )
-            else:
-                tool_result_part = await self.tool_service.execute_tool_call(
-                    tool_call=function_call, bot=self.bot, author_id=message.author.id
-                )
-            log.info(f"已从 tool_service 收到 Part: {tool_result_part}")
-
-            # 将模型的原始回复（即函数调用本身）和工具执行的结果都追加到对话历史中
-            # 这是让模型理解它发起了什么调用以及调用结果是什么的关键步骤
-            processed_contents.append(candidate.content)  # 使用正确的 candidate.content
-            processed_contents.append(
-                types.Content(role="user", parts=[tool_result_part])
-            )
-
-            # 将带有工具结果的新对话历史再次发送给模型，以生成最终的自然语言回复
-            log.info("已将工具执行结果返回给模型，以进行最终的文本合成。")
-
-            # 第二次调用同样遵循文档的异步方式
+            # 步骤 2: 调用模型并接收建议
             response = await client.aio.models.generate_content(
                 model=(model_name or self.default_model_name),
-                contents=processed_contents,
-                config=gen_config,  # 遵循文档示例，使用 config=
+                contents=conversation_history,  # 传入完整的历史记录
+                config=gen_config,
             )
-            log.info("已收到模型在工具执行后的最终回复。")
-        # --- 函数调用集成结束 ---
+
+            # 检查是否有函数调用建议
+            # 新版 SDK (0.7.2) 将 function_calls 直接放在 response 对象上
+            function_calls = response.function_calls
+
+            if not function_calls:
+                log.info("模型返回了最终文本响应，工具调用流程结束。")
+                # 步骤 4 (结束): 模型返回最终文本，流程结束
+                break  # 退出循环
+
+            # 将包含 FunctionCall 建议的模型响应添加到历史记录中
+            # 这是保持上下文和思维签名的关键
+            conversation_history.append(response.candidates[0].content)
+
+            # 步骤 3: 提取并执行函数
+            log.info(f"模型建议调用 {len(function_calls)} 个工具。")
+
+            # 用于收集本次所有工具执行结果的 Part 列表
+            tool_result_parts = []
+
+            # 并行执行所有建议的工具调用
+            # 使用 asyncio.gather 来并发执行，提高效率
+            tasks = [
+                self.tool_service.execute_tool_call(tool_call=call, author_id=user_id)
+                for call in function_calls
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in results:
+                if isinstance(result, Exception):
+                    log.error(f"执行工具时发生异常: {result}", exc_info=result)
+                    # 即使工具执行失败，也要将错误信息返回给模型
+                    # 注意：这里我们无法知道是哪个工具失败了，这是一个简化的处理
+                    # 在生产环境中可能需要更复杂的错误追踪
+                    tool_result_parts.append(
+                        types.Part.from_function_response(
+                            name="unknown_tool",
+                            response={
+                                "error": f"An exception occurred during tool execution: {str(result)}"
+                            },
+                        )
+                    )
+                else:
+                    tool_result_parts.append(result)
+
+            log.info(f"已收集 {len(tool_result_parts)} 个工具执行结果。")
+
+            # 步骤 4: 将所有工具结果作为单个用户回合添加到历史记录，准备下一次 API 调用
+            conversation_history.append(
+                types.Content(role="user", parts=tool_result_parts)
+            )
+
+            # 如果循环达到最大次数，则强制退出
+            if i == max_calls - 1:
+                log.warning("已达到最大工具调用限制，流程终止。")
+                return "哎呀，我好像陷入了一个复杂的思考循环里，我们换个话题聊聊吧！"
 
         # 3. 处理响应
         if response.parts:
-            raw_ai_response = response.text.strip()
+            # 严谨地从 parts 中提取文本，避免 'thought_signature' 警告
+            raw_ai_response = "".join(
+                part.text for part in response.parts if hasattr(part, "text")
+            ).strip()
             from src.chat.services.context_service import context_service
 
             await context_service.update_user_conversation_history(

@@ -22,6 +22,12 @@ from src.chat.features.world_book.database.world_book_db_manager import (
     world_book_db_manager,
 )
 
+# 3.6. 导入并注册所有 AI 工具
+# 这是一个关键步骤。通过在这里导入工具模块，我们可以确保
+# @register_tool 装饰器被执行，从而将工具函数及其 Schema
+# 添加到全局的 tool_registry 中。
+from src.chat.features.tools.functions import get_user_avatar
+
 # 导入全局 gemini_service 实例
 from src.chat.services.gemini_service import gemini_service
 from src.chat.utils.command_sync import sync_commands
@@ -362,12 +368,6 @@ async def main():
 
     await _setup_initial_items()
     log.info("已初始化商店商品。")
-
-    # 3.6. 导入并注册所有 AI 工具
-    # 这是一个关键步骤。通过在这里导入工具模块，我们可以确保
-    # @register_tool 装饰器被执行，从而将工具函数及其 Schema
-    # 添加到全局的 tool_registry 中。
-    from src.chat.features.tools.functions import get_user_avatar
 
     log.info("已加载并注册 AI 工具。")
 

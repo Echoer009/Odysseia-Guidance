@@ -525,6 +525,75 @@ class PromptService:
 """
         return prompt
 
+    def create_image_context_turn(
+        self, image_data: bytes, mime_type: str, description: str = ""
+    ) -> Dict[str, Any]:
+        """
+        创建包含图像数据的对话轮，用于工具调用后的多模态处理
+
+        Args:
+            image_data: 图像的二进制数据
+            mime_type: 图像的MIME类型
+            description: 图像的描述文本
+
+        Returns:
+            包含图像数据的对话轮字典
+        """
+        # 创建文本部分
+        text_part = f"这是工具获取的图像内容，MIME类型: {mime_type}"
+        if description:
+            text_part += f"\n描述: {description}"
+
+        # 创建图像部分 - 使用PIL Image对象格式
+        from PIL import Image
+        import io
+
+        try:
+            pil_image = Image.open(io.BytesIO(image_data))
+            return {"role": "user", "parts": [text_part, pil_image]}
+        except Exception as e:
+            log.error(f"无法将图像数据转换为PIL Image: {e}")
+            return {"role": "user", "parts": [text_part + "\n错误: 无法处理图像数据"]}
+
+    def process_tool_result_with_image(self, tool_result: Any) -> List[Dict[str, Any]]:
+        """
+        处理包含图像的工具结果，将其转换为适合API的对话轮格式
+
+        Args:
+            tool_result: 工具执行的结果
+
+        Returns:
+            包含处理后的对话轮的列表
+        """
+        context_turns = []
+
+        # 检查是否是包含图像的工具结果
+        if (
+            hasattr(tool_result, "function_response")
+            and tool_result.function_response
+            and "result" in tool_result.function_response.response
+            and isinstance(tool_result.function_response.response["result"], dict)
+            and "image_data" in tool_result.function_response.response["result"]
+        ):
+            result_data = tool_result.function_response.response["result"]
+            mime_type = result_data.get("mime_type", "image/png")
+            image_data = result_data.get("image_data")
+            description = result_data.get("message", "")
+
+            if image_data:
+                # 创建包含图像的对话轮
+                image_turn = self.create_image_context_turn(
+                    image_data=image_data, mime_type=mime_type, description=description
+                )
+                context_turns.append(image_turn)
+                log.info(
+                    f"已创建包含图像的对话轮，MIME类型: {mime_type}, 数据大小: {len(image_data)} 字节"
+                )
+            else:
+                log.warning("工具结果包含图像信息但缺少实际图像数据")
+
+        return context_turns
+
 
 # 创建一个单例
 prompt_service = PromptService()
