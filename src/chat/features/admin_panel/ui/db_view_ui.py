@@ -635,13 +635,6 @@ class DBView(discord.ui.View):
         """根据当前视图模式，动态构建UI组件"""
         self.clear_items()
 
-        # --- 新增：永久显示的特殊功能按钮 ---
-        self.coin_management_button = discord.ui.Button(
-            label="类脑币管理", emoji="🪙", style=discord.ButtonStyle.success, row=0
-        )
-        self.coin_management_button.callback = self.go_to_coin_management
-        self.add_item(self.coin_management_button)
-
         self.add_item(self._create_table_select())
 
         if self.view_mode == "list" and self.current_table:
@@ -738,8 +731,15 @@ class DBView(discord.ui.View):
     def _create_table_select(self) -> discord.ui.Select:
         """创建表格选择下拉菜单"""
         options = [
-            discord.SelectOption(label="社区成员档案", value="community_members"),
-            discord.SelectOption(label="通用知识", value="general_knowledge"),
+            discord.SelectOption(
+                label="社区成员档案", value="community_members", emoji="👥"
+            ),
+            discord.SelectOption(
+                label="通用知识", value="general_knowledge", emoji="📚"
+            ),
+            discord.SelectOption(
+                label="类脑币管理", value="coin_management", emoji="🪙"
+            ),
         ]
         for option in options:
             if option.value == self.current_table:
@@ -769,21 +769,20 @@ class DBView(discord.ui.View):
 
     # --- 交互处理 ---
 
-    async def go_to_coin_management(self, interaction: discord.Interaction):
-        """切换到类脑币管理视图"""
-        await interaction.response.defer()
-        view = CoinManagementView(interaction, self.message)
-        await view.update_view()
-
     async def on_table_select(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        self.current_table = interaction.data["values"][0]
-        self.current_page = 0
-        self.view_mode = "list"
-        # 切换表时退出搜索模式
-        self.search_mode = False
-        self.search_keyword = None
-        await self.update_view()
+        selected_value = interaction.data["values"][0]
+
+        if selected_value == "coin_management":
+            coin_view = CoinManagementView(interaction, self.message)
+            await coin_view.update_view()
+        else:
+            self.current_table = selected_value
+            self.current_page = 0
+            self.view_mode = "list"
+            self.search_mode = False
+            self.search_keyword = None
+            await self.update_view()
 
     async def on_item_select(self, interaction: discord.Interaction):
         await interaction.response.defer()
