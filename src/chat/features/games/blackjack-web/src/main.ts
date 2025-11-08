@@ -280,21 +280,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handlePayout(gameResult: 'win' | 'loss' | 'push' | 'blackjack') {
+        // This local calculation is only for non-embedded mode now.
+        // The backend will calculate the final payout.
         let payoutAmount = 0;
-
         switch (gameResult) {
-            case 'win':
-                payoutAmount = currentBet * 2;
-                break;
-            case 'blackjack':
-                payoutAmount = Math.floor(currentBet * 2.5);
-                break;
-            case 'push':
-                payoutAmount = currentBet;
-                break;
-            case 'loss':
-                payoutAmount = 0;
-                break;
+            case 'win': payoutAmount = currentBet * 2; break;
+            case 'blackjack': payoutAmount = Math.floor(currentBet * 2.5); break;
+            case 'push': payoutAmount = currentBet; break;
+            case 'loss': payoutAmount = 0; break;
         }
 
         if (!isEmbedded) {
@@ -303,18 +296,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 balanceEl.textContent = currentBalance.toString();
             }
         } else {
-            if (payoutAmount > 0) {
-                try {
-                    const response = await apiCall('/api/game/payout', 'POST', { amount: payoutAmount });
-                    if (response.success) {
-                        currentBalance = response.new_balance;
-                        balanceEl.textContent = currentBalance.toString();
-                    } else {
-                        uiManager.updateMessages('派奖失败了，杂鱼~❤');
-                    }
-                } catch (error) {
-                    uiManager.updateMessages('派奖API调用失败了，真是个笨蛋~❤');
+            try {
+                // Always call the payout endpoint to conclude the game on the server.
+                // Send the `result`, not the `amount`. The server calculates the payout.
+                const response = await apiCall('/api/game/payout', 'POST', { result: gameResult });
+                if (response.success) {
+                    currentBalance = response.new_balance;
+                    balanceEl.textContent = currentBalance.toString();
+                } else {
+                    // This case might not be hit if apiCall throws, but it's good practice.
+                    uiManager.updateMessages('结算失败了，杂鱼~❤');
                 }
+            } catch (error) {
+                console.error("Payout API call failed:", error);
+                uiManager.updateMessages('结算API调用失败了，真是个笨蛋~❤');
             }
         }
 

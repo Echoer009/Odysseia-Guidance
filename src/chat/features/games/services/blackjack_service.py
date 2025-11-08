@@ -30,42 +30,48 @@ class BlackjackService:
         await self.cleanup_stale_games()
 
     async def cleanup_stale_games(self):
-        """Finds and refunds games that have been active for too long."""
+        """在服务启动时清理所有未完成的游戏并退还赌注。"""
         # 延迟导入以避免循环依赖问题
         coin_service = __import__(
             "src.chat.features.odysseia_coin.service.coin_service",
             fromlist=["coin_service"],
         ).coin_service
 
-        log.info("正在检查过期的21点游戏...")
-        # 查找24小时前的游戏
+        log.info("正在清理所有未完成的21点游戏...")
+        # 查找所有存在的游戏
         rows = await self._db_manager._execute(
             self._db_manager._db_transaction,
-            "SELECT user_id, bet_amount FROM blackjack_games WHERE created_at <= datetime('now', '-24 hours')",
+            "SELECT user_id, bet_amount FROM blackjack_games",
             (),
             fetch="all",
         )
         if not rows:
-            log.info("未发现过期的21点游戏。")
+            log.info("未发现需要清理的21点游戏。")
             return
 
         cleaned_count = 0
         for user_id, bet_amount in rows:
             try:
-                log.warning(f"正在为用户 {user_id} 清理过期游戏，赌注为 {bet_amount}。")
+                log.warning(
+                    f"正在为用户 {user_id} 清理未完成的游戏，赌注为 {bet_amount}。"
+                )
                 # 退还赌注
-                await coin_service.add_coins(user_id, bet_amount, "21点过期游戏退款")
+                await coin_service.add_coins(
+                    user_id, bet_amount, "21点游戏因服务重启退款"
+                )
                 # 删除游戏记录
                 await self.delete_game(user_id)
-                log.info(f"已成功为用户 {user_id} 退款 {bet_amount} 并删除过期游戏。")
+                log.info(
+                    f"已成功为用户 {user_id} 退款 {bet_amount} 并删除未完成的游戏。"
+                )
                 cleaned_count += 1
             except Exception as e:
                 log.error(
-                    f"为用户 {user_id} 清理过期游戏失败。错误: {e}",
+                    f"为用户 {user_id} 清理未完成的游戏失败。错误: {e}",
                     exc_info=True,
                 )
         if cleaned_count > 0:
-            log.info(f"已完成对 {cleaned_count} 个过期21点游戏的清理。")
+            log.info(f"已完成对 {cleaned_count} 个未完成的21点游戏的清理。")
 
     async def create_game(
         self, user_id: int, bet_amount: int

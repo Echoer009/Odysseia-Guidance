@@ -1,6 +1,8 @@
 import os
 import requests
 import logging
+import asyncio
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +20,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI()
 log = logging.getLogger(__name__)
+
+# --- 用户操作锁，防止竞态条件 ---
+user_locks = defaultdict(asyncio.Lock)
 
 
 # --- 应用生命周期事件 ---
@@ -163,34 +168,35 @@ async def place_bet(
         raise HTTPException(status_code=400, detail="Bet amount must be positive")
 
     log.info(f"用户 {user_id} 正在下注 {bet_amount}")
-    try:
-        new_balance = await coin_service.remove_coins(
-            user_id, bet_amount, "21点游戏下注"
-        )
-        if new_balance is None:
-            log.warning(f"用户 {user_id} 下注失败，原因：余额不足。")
-            raise HTTPException(status_code=402, detail="Insufficient funds")
-
-        # --- 数据库持久化：创建游戏记录 ---
-        game = await blackjack_service.create_game(user_id, bet_amount)
-        if not game:
-            log.warning(f"用户 {user_id} 下注失败，原因：已存在活跃游戏。")
-            # 返还刚刚扣除的赌注
-            await coin_service.add_coins(user_id, bet_amount, "21点重复下注退款")
-            raise HTTPException(
-                status_code=409, detail="An active game already exists."
+    async with user_locks[user_id]:
+        try:
+            new_balance = await coin_service.remove_coins(
+                user_id, bet_amount, "21点游戏下注"
             )
+            if new_balance is None:
+                log.warning(f"用户 {user_id} 下注失败，原因：余额不足。")
+                raise HTTPException(status_code=402, detail="Insufficient funds")
 
-        log.info(f"用户 {user_id} 下注成功。新余额: {new_balance}")
-        return JSONResponse(
-            content={"success": True, "new_balance": new_balance}, status_code=200
-        )
-    except Exception as e:
-        log.error(f"为用户 {user_id} 处理下注时出错: {e}", exc_info=True)
-        # 避免暴露内部错误细节
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail="Error placing bet")
+            # --- 数据库持久化：创建游戏记录 ---
+            game = await blackjack_service.create_game(user_id, bet_amount)
+            if not game:
+                log.warning(f"用户 {user_id} 下注失败，原因：已存在活跃游戏。")
+                # 返还刚刚扣除的赌注
+                await coin_service.add_coins(user_id, bet_amount, "21点重复下注退款")
+                raise HTTPException(
+                    status_code=409, detail="An active game already exists."
+                )
+
+            log.info(f"用户 {user_id} 下注成功。新余额: {new_balance}")
+            return JSONResponse(
+                content={"success": True, "new_balance": new_balance}, status_code=200
+            )
+        except Exception as e:
+            log.error(f"为用户 {user_id} 处理下注时出错: {e}", exc_info=True)
+            # 避免暴露内部错误细节
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=500, detail="Error placing bet")
 
 
 @app.post("/api/game/double")
@@ -200,42 +206,47 @@ async def double_down(user_id: int = Depends(get_current_user_id)):
     """
     log.info(f"用户 {user_id} 正在双倍下注。")
 
-    # --- 数据库持久化：获取游戏状态 ---
-    game = await blackjack_service.get_active_game(user_id)
-    if not game:
-        log.warning(f"用户 {user_id} 试图在没有活跃赌注时双倍下注。")
-        raise HTTPException(status_code=400, detail="No active bet to double down on.")
-
-    if game.game_state != "active":
-        log.warning(f"用户 {user_id} 试图在游戏状态为 '{game.game_state}' 时双倍下注。")
-        raise HTTPException(
-            status_code=409, detail="You can only double down on the initial bet."
-        )
-
-    double_amount = game.bet_amount
-    try:
-        new_balance = await coin_service.remove_coins(
-            user_id, double_amount, "21点游戏双倍下注"
-        )
-        if new_balance is None:
-            log.warning(f"用户 {user_id} 双倍下注失败，原因：余额不足。")
+    async with user_locks[user_id]:
+        # --- 数据库持久化：获取游戏状态 ---
+        game = await blackjack_service.get_active_game(user_id)
+        if not game:
+            log.warning(f"用户 {user_id} 试图在没有活跃赌注时双倍下注。")
             raise HTTPException(
-                status_code=402, detail="Insufficient funds to double down"
+                status_code=400, detail="No active bet to double down on."
             )
 
-        # --- 更新数据库中的游戏状态 ---
-        updated_game = await blackjack_service.double_down(user_id, double_amount)
-        log.info(
-            f"用户 {user_id} 双倍下注成功。新总赌注: {updated_game.bet_amount}。新余额: {new_balance}"
-        )
-        return JSONResponse(
-            content={"success": True, "new_balance": new_balance}, status_code=200
-        )
-    except Exception as e:
-        log.error(f"为用户 {user_id} 处理双倍下注时出错: {e}", exc_info=True)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail="Error processing double down")
+        if game.game_state != "active":
+            log.warning(
+                f"用户 {user_id} 试图在游戏状态为 '{game.game_state}' 时双倍下注。"
+            )
+            raise HTTPException(
+                status_code=409, detail="You can only double down on the initial bet."
+            )
+
+        double_amount = game.bet_amount
+        try:
+            new_balance = await coin_service.remove_coins(
+                user_id, double_amount, "21点游戏双倍下注"
+            )
+            if new_balance is None:
+                log.warning(f"用户 {user_id} 双倍下注失败，原因：余额不足。")
+                raise HTTPException(
+                    status_code=402, detail="Insufficient funds to double down"
+                )
+
+            # --- 更新数据库中的游戏状态 ---
+            updated_game = await blackjack_service.double_down(user_id, double_amount)
+            log.info(
+                f"用户 {user_id} 双倍下注成功。新总赌注: {updated_game.bet_amount}。新余额: {new_balance}"
+            )
+            return JSONResponse(
+                content={"success": True, "new_balance": new_balance}, status_code=200
+            )
+        except Exception as e:
+            log.error(f"为用户 {user_id} 处理双倍下注时出错: {e}", exc_info=True)
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=500, detail="Error processing double down")
 
 
 @app.post("/api/game/payout")
@@ -248,75 +259,77 @@ async def give_payout(
     game_result = payout_request.result
     log.info(f"Processing payout for user {user_id} with result: {game_result}")
 
-    # --- 安全支付流程 ---
-    # 1. 获取当前游戏状态，但不删除它
-    active_game = await blackjack_service.get_active_game(user_id)
+    async with user_locks[user_id]:
+        # --- 安全支付流程 ---
+        # 1. 获取当前游戏状态，但不删除它
+        active_game = await blackjack_service.get_active_game(user_id)
 
-    if active_game is None:
-        log.warning(f"User {user_id} requested payout without an active game.")
-        raise HTTPException(
-            status_code=400, detail="No active bet found for this user."
-        )
-
-    final_bet = active_game.bet_amount
-
-    # 2. 根据游戏结果计算派彩
-    payout_amount = 0
-    reason = "21点游戏结算"
-    if game_result == "win":
-        payout_amount = final_bet * 2  # 1:1 赔率
-        reason = "21点游戏获胜"
-    elif game_result == "blackjack":
-        payout_amount = int(final_bet * 2.5)  # 3:2 赔率
-        reason = "21点游戏Blackjack获胜"
-    elif game_result == "push":
-        payout_amount = final_bet  # 退还本金
-        reason = "21点游戏平局"
-    else:
-        # 如果是 'lose' 或其他情况，不派彩，payout_amount 保持为 0
-        log.info(f"User {user_id} lost their bet of {final_bet}. No payout.")
-        payout_amount = 0
-        reason = "21点游戏落败"
-
-    if payout_amount < 0:
-        # 这是一个理论上不应该发生的情况
-        # 这是一个理论上不应该发生的情况
-        raise HTTPException(
-            status_code=400, detail="Calculated payout cannot be negative"
-        )
-
-    # 3. 统一执行结算流程
-    try:
-        new_balance = active_game.bet_amount  # 默认为初始赌注
-
-        if payout_amount > 0:
-            log.info(
-                f"Paying out {payout_amount} to user {user_id} for a bet of {final_bet}"
+        if active_game is None:
+            log.warning(f"User {user_id} requested payout without an active game.")
+            raise HTTPException(
+                status_code=400, detail="No active bet found for this user."
             )
-            new_balance = await coin_service.add_coins(user_id, payout_amount, reason)
+
+        final_bet = active_game.bet_amount
+
+        # 2. 根据游戏结果计算派彩
+        payout_amount = 0
+        reason = "21点游戏结算"
+        if game_result == "win":
+            payout_amount = final_bet * 2  # 1:1 赔率
+            reason = "21点游戏获胜"
+        elif game_result == "blackjack":
+            payout_amount = int(final_bet * 2.5)  # 3:2 赔率
+            reason = "21点游戏Blackjack获胜"
+        elif game_result == "push":
+            payout_amount = final_bet  # 退还本金
+            reason = "21点游戏平局"
         else:
-            # 如果是输了，不需要操作余额，直接获取当前余额
-            new_balance = await coin_service.get_balance(user_id)
+            # 如果是 'lose' 或其他情况，不派彩，payout_amount 保持为 0
+            log.info(f"User {user_id} lost their bet of {final_bet}. No payout.")
+            payout_amount = 0
+            reason = "21点游戏落败"
 
-        # 4. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
-        await blackjack_service.delete_game(user_id)
+        if payout_amount < 0:
+            # 这是一个理论上不应该发生的情况
+            raise HTTPException(
+                status_code=400, detail="Calculated payout cannot be negative"
+            )
 
-        log.info(
-            f"User {user_id} game concluded. Result: {game_result}. New balance: {new_balance}"
-        )
-        return JSONResponse(
-            content={"success": True, "new_balance": new_balance}, status_code=200
-        )
-    except Exception as e:
-        log.error(f"CRITICAL: Payout failed for user {user_id}: {e}", exc_info=True)
-        # 关键：此时游戏记录仍然存在于数据库中，不会造成资金损失
-        log.warning(
-            f"The active game for user {user_id} has been preserved for manual intervention."
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred during payout. Your bet is safe. Please contact an administrator.",
-        )
+        # 3. 统一执行结算流程
+        try:
+            new_balance = active_game.bet_amount  # 默认为初始赌注
+
+            if payout_amount > 0:
+                log.info(
+                    f"Paying out {payout_amount} to user {user_id} for a bet of {final_bet}"
+                )
+                new_balance = await coin_service.add_coins(
+                    user_id, payout_amount, reason
+                )
+            else:
+                # 如果是输了，不需要操作余额，直接获取当前余额
+                new_balance = await coin_service.get_balance(user_id)
+
+            # 4. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
+            await blackjack_service.delete_game(user_id)
+
+            log.info(
+                f"User {user_id} game concluded. Result: {game_result}. New balance: {new_balance}"
+            )
+            return JSONResponse(
+                content={"success": True, "new_balance": new_balance}, status_code=200
+            )
+        except Exception as e:
+            log.error(f"CRITICAL: Payout failed for user {user_id}: {e}", exc_info=True)
+            # 关键：此时游戏记录仍然存在于数据库中，不会造成资金损失
+            log.warning(
+                f"The active game for user {user_id} has been preserved for manual intervention."
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="An error occurred during payout. Your bet is safe. Please contact an administrator.",
+            )
 
 
 # --- 静态文件服务 (仅在生产构建后生效) ---

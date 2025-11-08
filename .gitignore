@@ -292,3 +292,6 @@ $RECYCLE.BIN/
 *.lnk
 # Data files
 /data/
+
+# Ignore local Vite config with SSL for development
+src/chat/features/games/blackjack-web/vite.config.ts
