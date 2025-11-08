@@ -86,6 +86,16 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 21点游戏表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS blackjack_games (
+                    user_id INTEGER PRIMARY KEY,
+                    bet_amount INTEGER NOT NULL,
+                    game_state TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
             # --- AI提示词配置表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ai_prompts (

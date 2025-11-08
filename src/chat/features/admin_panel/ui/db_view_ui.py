@@ -14,6 +14,7 @@ from src.chat.features.world_book.services.incremental_rag_service import (
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.admin_panel.ui.coin_management_view import CoinManagementView
 
 log = logging.getLogger(__name__)
 
@@ -634,6 +635,13 @@ class DBView(discord.ui.View):
         """根据当前视图模式，动态构建UI组件"""
         self.clear_items()
 
+        # --- 新增：永久显示的特殊功能按钮 ---
+        self.coin_management_button = discord.ui.Button(
+            label="类脑币管理", emoji="🪙", style=discord.ButtonStyle.success, row=0
+        )
+        self.coin_management_button.callback = self.go_to_coin_management
+        self.add_item(self.coin_management_button)
+
         self.add_item(self._create_table_select())
 
         if self.view_mode == "list" and self.current_table:
@@ -760,6 +768,13 @@ class DBView(discord.ui.View):
         return select
 
     # --- 交互处理 ---
+
+    async def go_to_coin_management(self, interaction: discord.Interaction):
+        """切换到类脑币管理视图"""
+        await interaction.response.defer()
+        view = CoinManagementView(interaction, self.message)
+        await view.update_view()
+
     async def on_table_select(self, interaction: discord.Interaction):
         await interaction.response.defer()
         self.current_table = interaction.data["values"][0]
