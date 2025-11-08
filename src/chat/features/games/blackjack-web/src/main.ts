@@ -366,14 +366,14 @@ document.addEventListener('DOMContentLoaded', () => {
             performDoubleDown();
         } else {
             try {
-                // The 'bet' endpoint handles deduction, so we just send the additional amount
-                const response = await apiCall('/api/game/bet', 'POST', { amount: additionalBet });
+                // Use the correct 'double' endpoint for doubling down
+                const response = await apiCall('/api/game/double', 'POST', {});
                 if (response.success) {
                     currentBalance = response.new_balance;
                     balanceEl.textContent = currentBalance.toString();
                     performDoubleDown();
                 } else {
-                    // Re-enable controls if bet fails
+                    // Re-enable controls if double down fails
                     hitButton.disabled = false;
                     standButton.disabled = false;
                     doubleButton.disabled = false;
