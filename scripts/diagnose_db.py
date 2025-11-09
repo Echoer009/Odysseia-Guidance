@@ -1,82 +1,68 @@
-import sqlite3
-import json
 import os
+import sqlite3
+from datetime import datetime
 
-def diagnose_database():
+# --- 常量定义 ---
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DB_PATH = os.path.join(_PROJECT_ROOT, "data", "chat.db")
+
+
+def diagnose_and_fix_database():
     """
-    Connects to the database and runs a few queries to diagnose the data integrity.
+    诊断并修复数据库 'file is not a database' 的问题。
+    如果文件损坏或为空，则将其重命名备份。
     """
-    db_path = os.path.join('data', 'world_book.sqlite3')
-    if not os.path.exists(db_path):
-        print(f"Database file not found at '{db_path}'.")
+    print(f"正在诊断数据库文件: {DB_PATH}")
+
+    if not os.path.exists(DB_PATH):
+        print("数据库文件不存在。程序将在下次启动时自动创建。")
         return
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    # 检查文件大小是否为0
+    if os.path.getsize(DB_PATH) == 0:
+        print("错误: 数据库文件大小为 0KB，这是一个空文件。")
+        rename_corrupt_db()
+        return
 
-    print("--- Diagnosing Database ---")
+    # 尝试连接数据库并检查完整性
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA integrity_check;")
+        result = cursor.fetchone()
+        conn.close()
 
-    # 1. Check a community member
-    print("\n[1] Checking a community member (ID: huangdoufen_1)...")
-    cursor.execute("SELECT * FROM community_members WHERE id = ?", ('huangdoufen_1',))
-    member = cursor.fetchone()
-    if member:
-        print("  - Member found:")
-        print(f"    ID: {member[0]}, Title: {member[1]}, Discord ID: {member[2]}")
-        content = json.loads(member[5])
-        print(f"    Content: {content}")
-        
-        cursor.execute("SELECT nickname FROM member_discord_nicknames WHERE member_id = ?", ('huangdoufen_1',))
-        nicknames = cursor.fetchall()
-        print(f"  - Nicknames: {[n[0] for n in nicknames]}")
-    else:
-        print("  - Member 'huangdoufen_1' not found!")
+        if result[0] == "ok":
+            print("数据库文件状态正常。")
+        else:
+            print(f"数据库完整性检查失败: {result}")
+            print("错误: 数据库文件已损坏。")
+            rename_corrupt_db()
 
-    # 2. Check a general knowledge entry
-    print("\n[2] Checking a general knowledge entry (ID: reverse_proxy)...")
-    cursor.execute("""
-        SELECT gk.id, gk.title, gk.name, c.name 
-        FROM general_knowledge gk
-        JOIN categories c ON gk.category_id = c.id
-        WHERE gk.id = ?
-    """, ('reverse_proxy',))
-    entry = cursor.fetchone()
-    if entry:
-        print("  - Entry found:")
-        print(f"    ID: {entry[0]}, Title: {entry[1]}, Name: {entry[2]}, Category: {entry[3]}")
-        
-        cursor.execute("SELECT alias FROM aliases WHERE entry_id = ?", ('reverse_proxy',))
-        aliases = cursor.fetchall()
-        print(f"  - Aliases: {[a[0] for a in aliases]}")
-    else:
-        print("  - Entry 'reverse_proxy' not found!")
-        
-    # 3. Check a slang entry with refers_to
-    print("\n[3] Checking a slang entry (ID: hachimi)...")
-    cursor.execute("SELECT id, name FROM general_knowledge WHERE id = ?", ('hachimi',))
-    slang = cursor.fetchone()
-    if slang:
-        print("  - Slang found:")
-        print(f"    ID: {slang[0]}, Name: {slang[1]}")
-        
-        cursor.execute("SELECT reference FROM knowledge_refers_to WHERE entry_id = ?", ('hachimi',))
-        refs = cursor.fetchall()
-        print(f"  - Refers to: {[r[0] for r in refs]}")
-    else:
-        print("  - Slang 'hachimi' not found!")
-
-    # 4. Count total entries in key tables
-    print("\n[4] Counting total entries...")
-    cursor.execute("SELECT COUNT(*) FROM community_members")
-    print(f"  - Total community members: {cursor.fetchone()[0]}")
-    cursor.execute("SELECT COUNT(*) FROM general_knowledge")
-    print(f"  - Total general knowledge entries: {cursor.fetchone()[0]}")
-    cursor.execute("SELECT COUNT(*) FROM categories")
-    print(f"  - Total categories: {cursor.fetchone()[0]}")
+    except sqlite3.DatabaseError as e:
+        if "file is not a database" in str(e):
+            print("错误: 确认数据库文件已损坏或格式不正确。")
+            rename_corrupt_db()
+        else:
+            print(f"发生未知的数据库错误: {e}")
+    except Exception as e:
+        print(f"发生意外错误: {e}")
 
 
-    print("\n--- Diagnosis Complete ---")
-    conn.close()
+def rename_corrupt_db():
+    """
+    重命名损坏的数据库文件作为备份。
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = f"{DB_PATH}.corrupt.{timestamp}"
 
-if __name__ == '__main__':
-    diagnose_database()
+    try:
+        os.rename(DB_PATH, backup_path)
+        print(f"已将损坏的数据库文件备份到: {backup_path}")
+        print("下次启动应用程序时，将自动创建一个新的数据库。")
+    except OSError as e:
+        print(f"重命名文件失败: {e}")
+
+
+if __name__ == "__main__":
+    diagnose_and_fix_database()
