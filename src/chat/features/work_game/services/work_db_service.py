@@ -116,8 +116,16 @@ class WorkDBService:
         返回 (is_on_cooldown, remaining_time_str)。
         """
         status = await self.get_user_work_status(user_id)
-        if status.get("last_work_timestamp"):
-            last_work_time = status["last_work_timestamp"].replace(tzinfo=timezone.utc)
+        last_timestamp = status.get("last_work_timestamp")
+        if last_timestamp:
+            # 确保时间戳是带时区的 datetime 对象
+            if isinstance(last_timestamp, str):
+                last_work_time = datetime.fromisoformat(last_timestamp).replace(
+                    tzinfo=timezone.utc
+                )
+            else:
+                last_work_time = last_timestamp.replace(tzinfo=timezone.utc)
+
             cooldown = timedelta(hours=WorkConfig.COOLDOWN_HOURS)
             if datetime.now(timezone.utc) - last_work_time < cooldown:
                 remaining = cooldown - (datetime.now(timezone.utc) - last_work_time)
@@ -130,8 +138,16 @@ class WorkDBService:
         返回 (is_on_cooldown, remaining_time_str)。
         """
         status = await self.get_user_work_status(user_id)
-        if status.get("last_sell_body_timestamp"):
-            last_time = status["last_sell_body_timestamp"].replace(tzinfo=timezone.utc)
+        last_timestamp = status.get("last_sell_body_timestamp")
+        if last_timestamp:
+            # 确保时间戳是带时区的 datetime 对象
+            if isinstance(last_timestamp, str):
+                last_time = datetime.fromisoformat(last_timestamp).replace(
+                    tzinfo=timezone.utc
+                )
+            else:
+                last_time = last_timestamp.replace(tzinfo=timezone.utc)
+
             cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
             if datetime.now(timezone.utc) - last_time < cooldown:
                 remaining = cooldown - (datetime.now(timezone.utc) - last_time)
