@@ -17,6 +17,14 @@ class RegexService:
         if not isinstance(text, str):
             return ""
 
+        # 新增：移除模型输出中可能包含的各种思考过程标签和内容
+        # 使用 re.DOTALL 匹配换行符, re.IGNORECASE 忽略大小写
+        think_pattern = re.compile(
+            r"<(思考|think|thinking|thought|scratchpad|reasoning|rationale)>.*?</\1>\s*",
+            re.DOTALL | re.IGNORECASE,
+        )
+        text = think_pattern.sub("", text)
+
         # 匹配 (), （）
         text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
         # 匹配 [], 【】
