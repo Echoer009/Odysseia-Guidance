@@ -386,6 +386,45 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 打工游戏状态表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_work_status (
+                    user_id INTEGER PRIMARY KEY,
+                    last_work_timestamp TIMESTAMP,
+                    consecutive_work_days INTEGER NOT NULL DEFAULT 0,
+                    last_streak_date TEXT,
+                    last_sell_body_timestamp TIMESTAMP
+                );
+            """)
+
+            # 检查并添加 last_sell_body_timestamp 列
+            cursor.execute("PRAGMA table_info(user_work_status);")
+            columns_work = [info[1] for info in cursor.fetchall()]
+            if "last_sell_body_timestamp" not in columns_work:
+                cursor.execute("""
+                    ALTER TABLE user_work_status
+                    ADD COLUMN last_sell_body_timestamp TIMESTAMP;
+                """)
+                log.info("已向 user_work_status 表添加 last_sell_body_timestamp 列。")
+
+            if "work_count_today" not in columns_work:
+                cursor.execute(
+                    "ALTER TABLE user_work_status ADD COLUMN work_count_today INTEGER NOT NULL DEFAULT 0;"
+                )
+                log.info("已向 user_work_status 表添加 work_count_today 列。")
+
+            if "sell_body_count_today" not in columns_work:
+                cursor.execute(
+                    "ALTER TABLE user_work_status ADD COLUMN sell_body_count_today INTEGER NOT NULL DEFAULT 0;"
+                )
+                log.info("已向 user_work_status 表添加 sell_body_count_today 列。")
+
+            if "last_count_date" not in columns_work:
+                cursor.execute(
+                    "ALTER TABLE user_work_status ADD COLUMN last_count_date TEXT;"
+                )
+                log.info("已向 user_work_status 表添加 last_count_date 列。")
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -1075,6 +1114,50 @@ class ChatDatabaseManager:
             self._db_transaction, query, (guild_id, channel_id), fetch="one"
         )
         return row is not None
+
+    # --- 打工游戏状态管理 ---
+    async def get_user_work_status(self, user_id: int) -> Optional[sqlite3.Row]:
+        """获取用户的打工状态。"""
+        query = "SELECT * FROM user_work_status WHERE user_id = ?"
+        return await self._execute(self._db_transaction, query, (user_id,), fetch="one")
+
+    async def update_user_work_status(
+        self,
+        user_id: int,
+        last_work_timestamp: datetime,
+        consecutive_work_days: int,
+        last_streak_date: str,
+    ) -> None:
+        """更新或创建用户的打工状态。"""
+        query = """
+            INSERT INTO user_work_status (user_id, last_work_timestamp, consecutive_work_days, last_streak_date)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                last_work_timestamp = excluded.last_work_timestamp,
+                consecutive_work_days = excluded.consecutive_work_days,
+                last_streak_date = excluded.last_streak_date;
+        """
+        params = (
+            user_id,
+            last_work_timestamp,
+            consecutive_work_days,
+            last_streak_date,
+        )
+        await self._execute(self._db_transaction, query, params, commit=True)
+
+    async def update_user_sell_body_timestamp(
+        self, user_id: int, timestamp: datetime
+    ) -> None:
+        """更新用户的卖屁股时间戳。"""
+        query = """
+            INSERT INTO user_work_status (user_id, last_sell_body_timestamp)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                last_sell_body_timestamp = excluded.last_sell_body_timestamp;
+        """
+        await self._execute(
+            self._db_transaction, query, (user_id, timestamp), commit=True
+        )
 
 
 # --- 单例实例 ---

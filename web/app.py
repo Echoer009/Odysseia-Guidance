@@ -1,5 +1,5 @@
 import os
-import requests
+import httpx
 import logging
 import asyncio
 from collections import defaultdict
@@ -65,19 +65,27 @@ async def get_current_user_id(
     """
     headers = {"Authorization": f"Bearer {token.credentials}"}
     log.info("正在从Discord API获取用户信息...")
-    try:
-        response = requests.get("https://discord.com/api/users/@me", headers=headers)
-        response.raise_for_status()
-        user_data = response.json()
-        user_id = int(user_data["id"])
-        log.info(f"成功识别用户: {user_data['username']} ({user_id})")
-        return user_id
-    except requests.exceptions.RequestException as e:
-        log.error("从Discord API获取用户信息失败。", exc_info=True)
-        if e.response is not None:
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                "https://discord.com/api/users/@me", headers=headers
+            )
+            response.raise_for_status()
+            user_data = response.json()
+            user_id = int(user_data["id"])
+            log.info(f"成功识别用户: {user_data['username']} ({user_id})")
+            return user_id
+        except httpx.HTTPStatusError as e:
+            log.error("从Discord API获取用户信息失败。", exc_info=True)
             log.error(f"Discord API响应状态: {e.response.status_code}")
             log.error(f"Discord API响应内容: {e.response.text}")
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        except httpx.RequestError as e:
+            log.error(f"请求Discord API时发生网络错误: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Service Unavailable: Cannot connect to Discord API",
+            )
 
 
 class TokenRequest(BaseModel):
@@ -114,21 +122,27 @@ async def exchange_code_for_token(request: TokenRequest):
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     log.info("正在向Discord API发送令牌交换请求...")
-    try:
-        response = requests.post(
-            "https://discord.com/api/oauth2/token", data=data, headers=headers
-        )
-        response.raise_for_status()
-        log.info("成功交换代码获取令牌。")
-        return JSONResponse(content=response.json())
-    except requests.exceptions.RequestException as e:
-        log.error("与Discord API交换代码失败。", exc_info=True)
-        if e.response is not None:
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                "https://discord.com/api/oauth2/token", data=data, headers=headers
+            )
+            response.raise_for_status()
+            log.info("成功交换代码获取令牌。")
+            return JSONResponse(content=response.json())
+        except httpx.HTTPStatusError as e:
+            log.error("与Discord API交换代码失败。", exc_info=True)
             log.error(f"Discord API响应状态: {e.response.status_code}")
             log.error(f"Discord API响应内容: {e.response.text}")
-        raise HTTPException(
-            status_code=500, detail="Failed to exchange code with Discord"
-        )
+            raise HTTPException(
+                status_code=500, detail="Failed to exchange code with Discord"
+            )
+        except httpx.RequestError as e:
+            log.error(f"请求Discord API时发生网络错误: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Service Unavailable: Cannot connect to Discord API",
+            )
 
 
 @app.get("/api/user")

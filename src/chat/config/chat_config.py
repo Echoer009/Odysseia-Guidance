@@ -26,6 +26,36 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # 用于个人记忆摘要的模型。
 SUMMARY_MODEL = "gemini-2.5-flash-lite"
 
+# --- ComfyUI 图像生成配置 ---
+COMFYUI_CONFIG = {
+    "ENABLED": os.getenv("COMFYUI_ENABLED", "True").lower() == "true",
+    "SERVER_ADDRESS": os.getenv(
+        "COMFYUI_SERVER_ADDRESS", "https://wp08.unicorn.org.cn:14727/"
+    ),
+    "WORKFLOW_PATH": "src/chat/features/image_generation/workflows/Aaalice_simple_v9.8.1.json",
+    "IMAGE_GENERATION_COST": 20,  # 生成一张图片的成本
+    # --- 节点 ID 和路径配置 ---
+    # 用于修改工作流中的特定参数。
+    # 格式: "PARAMETER_NAME": ["NODE_ID", "INPUT_FIELD_NAME"]
+    "NODE_MAPPING": {
+        "positive_prompt": ["1832", "positive"],
+        "negative_prompt": [
+            "1834",
+            "positive",
+        ],  # 该自定义节点的负面输入框也叫 'positive'
+        "model_name": ["1409", "ckpt_name"],
+        "vae_name": ["1409", "vae_name"],
+        "width": ["1409", "empty_latent_width"],
+        "height": ["1409", "empty_latent_height"],
+        "steps": ["474", "steps_total"],
+        "cfg": ["474", "cfg"],
+        "sampler_name": ["474", "sampler_name"],
+        "scheduler": ["474", "scheduler"],
+    },
+    # 最终图像输出节点的ID
+    "IMAGE_OUTPUT_NODE_ID": "2341",
+}
+
 # --- RAG (Retrieval-Augmented Generation) 配置 ---
 # 用于查询重写的模型。通常可以使用一个更小、更快的模型来降低成本和延迟。
 QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"

@@ -9,6 +9,8 @@ import requests
 from discord.ext import commands
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from src.backup.backup_manager import backup_databases
 
 # 在所有其他导入之前，尽早加载环境变量
 # 这样可以确保所有模块在加载时都能访问到 .env 文件中定义的配置
@@ -278,6 +280,11 @@ class GuidanceBot(commands.Bot):
                     log.warning(f"已跳过加载有问题的模块: {file.name}")
                     continue
 
+                # --- 临时禁用图像生成 ---
+                if file.name == "image_generation_cog.py":
+                    log.warning(f"已根据指令临时跳过加载: {file.name}")
+                    continue
+
                 # 从文件系统路径构建 Python 模块路径
                 # 例如: E:\...\src\chat\...\feeding_cog.py -> src.chat....feeding_cog
                 relative_path = file.relative_to(src_root.parent)
@@ -370,6 +377,12 @@ async def main():
     log.info("已初始化商店商品。")
 
     log.info("已加载并注册 AI 工具。")
+
+    # 启动定时备份任务
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(backup_databases, "cron", hour=0, minute=0)
+    scheduler.start()
+    log.info("已启动每日数据库备份任务。")
 
     # 4. 创建并运行机器人实例
     bot = GuidanceBot()

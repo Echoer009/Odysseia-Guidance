@@ -22,6 +22,8 @@ from src.chat.features.affection.service.affection_service import affection_serv
 from src.chat.services.gemini_service import gemini_service
 from src.chat.services.event_service import event_service
 from src.chat.features.events.ui.event_panel_view import EventPanelView
+from src.chat.features.work_game.services.work_service import WorkService
+from src.chat.features.work_game.services.sell_body_service import SellBodyService
 
 log = logging.getLogger(__name__)
 
@@ -286,6 +288,8 @@ class SimpleShopView(discord.ui.View):
         self.add_item(RefreshBalanceButton())
         self.add_item(TransferButton())
         self.add_item(LoanButton())
+        self.add_item(WorkButton())
+        self.add_item(SellBodyButton())
         # --- 动态添加入口 ---
         if event_service.get_active_event():
             self.add_item(EventButton())
@@ -450,6 +454,42 @@ class LoanButton(discord.ui.Button):
         await loan_view.initialize()
         embed = loan_view.create_loan_embed()
         await interaction.response.edit_message(embed=embed, view=loan_view)
+
+
+class WorkButton(discord.ui.Button):
+    """打工按钮"""
+
+    def __init__(self):
+        super().__init__(label="打工", style=discord.ButtonStyle.success, emoji="🛠️")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        # 初始化 WorkService
+        work_service = WorkService(coin_service)
+
+        # 执行工作
+        result_message = await work_service.perform_work(interaction.user.id)
+
+        # 发送结果
+        # 发送临时的结果消息，不刷新商店
+        await interaction.followup.send(result_message, ephemeral=True)
+
+
+class SellBodyButton(discord.ui.Button):
+    """卖屁股按钮"""
+
+    def __init__(self):
+        super().__init__(label="卖屁股", style=discord.ButtonStyle.danger, emoji="🥵")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        sell_body_service = SellBodyService(coin_service)
+        result_message = await sell_body_service.perform_sell_body(interaction.user.id)
+
+        # 发送临时的结果消息，不刷新商店
+        await interaction.followup.send(result_message, ephemeral=True)
 
 
 class PurchaseButton(discord.ui.Button):

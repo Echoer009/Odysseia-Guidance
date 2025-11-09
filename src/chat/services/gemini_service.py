@@ -7,7 +7,7 @@ import asyncio
 from functools import wraps
 from concurrent.futures import ThreadPoolExecutor
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import re
 import random
 
@@ -24,7 +24,6 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config as app_config
 from src.chat.config.emoji_config import EMOJI_MAPPINGS, FACTION_EMOJI_MAPPINGS
 from src.chat.services.event_service import event_service
-from src.chat.features.affection.service.affection_service import affection_service
 from src.chat.services.regex_service import regex_service
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.key_rotation_service import (
@@ -305,36 +304,38 @@ class GeminiService:
             elif isinstance(emojis, str):
                 formatted = pattern.sub(emojis, formatted)
 
-        # 4. Handle warning marker
-        warning_marker = "<warn>"
-        if formatted.endswith(warning_marker):
-            formatted = formatted[: -len(warning_marker)].strip()
-            try:
-                min_d, max_d = app_config.BLACKLIST_BAN_DURATION_MINUTES
-                ban_duration = random.randint(min_d, max_d)
-                expires_at = datetime.now(timezone.utc) + timedelta(
-                    minutes=ban_duration
-                )
-
-                log.info(f"用户 {user_id} 在服务器 {guild_id} 收到一次警告。")
-
-                was_blacklisted = (
-                    await chat_db_manager.record_warning_and_check_blacklist(
-                        user_id, guild_id, expires_at
-                    )
-                )
-
-                if was_blacklisted:
-                    log.info(
-                        f"用户 {user_id} 因累计3次警告被自动拉黑 {ban_duration} 分钟，过期时间: {expires_at}。"
-                    )
-                    await affection_service.decrease_affection_on_blacklist(
-                        user_id, guild_id
-                    )
-                # 如果只是警告而未拉黑，也可以考虑在这里进行轻微的好感度惩罚，但根据当前需求，我们只在拉黑时操作。
-
-            except Exception as e:
-                log.error(f"处理用户 {user_id} 的警告时出错: {e}")
+        # 4. Handle warning marker (DEPRECATED)
+        # This logic is now handled by the 'issue_user_warning' tool.
+        # The code is kept here for reference but is disabled.
+        # warning_marker = "<warn>"
+        # if formatted.endswith(warning_marker):
+        #     formatted = formatted[: -len(warning_marker)].strip()
+        #     try:
+        #         min_d, max_d = app_config.BLACKLIST_BAN_DURATION_MINUTES
+        #         ban_duration = random.randint(min_d, max_d)
+        #         expires_at = datetime.now(timezone.utc) + timedelta(
+        #             minutes=ban_duration
+        #         )
+        #
+        #         log.info(f"用户 {user_id} 在服务器 {guild_id} 收到一次警告。")
+        #
+        #         was_blacklisted = (
+        #             await chat_db_manager.record_warning_and_check_blacklist(
+        #                 user_id, guild_id, expires_at
+        #             )
+        #         )
+        #
+        #         if was_blacklisted:
+        #             log.info(
+        #                 f"用户 {user_id} 因累计3次警告被自动拉黑 {ban_duration} 分钟，过期时间: {expires_at}。"
+        #             )
+        #             await affection_service.decrease_affection_on_blacklist(
+        #                 user_id, guild_id
+        #             )
+        #         # 如果只是警告而未拉黑，也可以考虑在这里进行轻微的好感度惩罚，但根据当前需求，我们只在拉黑时操作。
+        #
+        #     except Exception as e:
+        #         log.error(f"处理用户 {user_id} 的警告时出错: {e}")
 
         return formatted
 
