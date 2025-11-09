@@ -48,6 +48,14 @@
             "cooldown_seconds": 1200,
             "cooldown_duration": null,
             "cooldown_limit": null
+        },
+        {
+            "entity_id": 1130082745268314122,
+            "entity_type": "channel",
+            "is_chat_enabled": true,
+            "cooldown_seconds": null,
+            "cooldown_duration": 60,
+            "cooldown_limit": 2
         }
     ]
 }
