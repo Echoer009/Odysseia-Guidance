@@ -24,6 +24,7 @@ from src.chat.services.event_service import event_service
 from src.chat.features.events.ui.event_panel_view import EventPanelView
 from src.chat.features.work_game.services.work_service import WorkService
 from src.chat.features.work_game.services.sell_body_service import SellBodyService
+from src.chat.features.work_game.services.work_db_service import WorkDBService
 
 log = logging.getLogger(__name__)
 
@@ -463,16 +464,35 @@ class WorkButton(discord.ui.Button):
         super().__init__(label="打工", style=discord.ButtonStyle.success, emoji="🛠️")
 
     async def callback(self, interaction: discord.Interaction):
+        work_db_service = WorkDBService()
+        user_id = interaction.user.id
+
+        # 1. 检查冷却时间
+        is_on_cooldown, remaining_time = await work_db_service.check_work_cooldown(
+            user_id
+        )
+        if is_on_cooldown:
+            await interaction.response.send_message(
+                f"你刚打完一份工，正在休息呢。请在 **{remaining_time}** 后再来吧！",
+                ephemeral=True,
+            )
+            return
+
+        # 2. 检查每日次数限制
+        is_limit_reached, count = await work_db_service.check_daily_limit(
+            user_id, "work"
+        )
+        if is_limit_reached:
+            await interaction.response.send_message(
+                f"你今天已经工作了 **{count}** 次，够辛苦了，明天再来吧！",
+                ephemeral=True,
+            )
+            return
+
+        # 3. 执行工作
         await interaction.response.defer(ephemeral=True, thinking=True)
-
-        # 初始化 WorkService
         work_service = WorkService(coin_service)
-
-        # 执行工作
-        result_message = await work_service.perform_work(interaction.user.id)
-
-        # 发送结果
-        # 发送临时的结果消息，不刷新商店
+        result_message = await work_service.perform_work(user_id)
         await interaction.followup.send(result_message, ephemeral=True)
 
 
@@ -483,12 +503,36 @@ class SellBodyButton(discord.ui.Button):
         super().__init__(label="卖屁股", style=discord.ButtonStyle.danger, emoji="🥵")
 
     async def callback(self, interaction: discord.Interaction):
+        work_db_service = WorkDBService()
+        user_id = interaction.user.id
+
+        # 1. 检查冷却时间
+        (
+            is_on_cooldown,
+            remaining_time,
+        ) = await work_db_service.check_sell_body_cooldown(user_id)
+        if is_on_cooldown:
+            await interaction.response.send_message(
+                f"卖这么多不好吧... 请在 **{remaining_time}** 后再来。🥵",
+                ephemeral=True,
+            )
+            return
+
+        # 2. 检查每日次数限制
+        is_limit_reached, count = await work_db_service.check_daily_limit(
+            user_id, "sell_body"
+        )
+        if is_limit_reached:
+            await interaction.response.send_message(
+                f"你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！",
+                ephemeral=True,
+            )
+            return
+
+        # 3. 执行动作
         await interaction.response.defer(ephemeral=True, thinking=True)
-
         sell_body_service = SellBodyService(coin_service)
-        result_message = await sell_body_service.perform_sell_body(interaction.user.id)
-
-        # 发送临时的结果消息，不刷新商店
+        result_message = await sell_body_service.perform_sell_body(user_id)
         await interaction.followup.send(result_message, ephemeral=True)
 
 

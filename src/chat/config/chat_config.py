@@ -56,6 +56,12 @@ COMFYUI_CONFIG = {
     "IMAGE_OUTPUT_NODE_ID": "2341",
 }
 
+# --- 塔罗牌占卜功能配置 ---
+TAROT_CONFIG = {
+    "CARDS_PATH": "src/chat/features/tarot/cards/",  # 存放78张塔罗牌图片的目录路径
+    "CARD_FILE_EXTENSION": ".jpg",  # 图片文件的扩展名
+}
+
 # --- RAG (Retrieval-Augmented Generation) 配置 ---
 # 用于查询重写的模型。通常可以使用一个更小、更快的模型来降低成本和延迟。
 QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"

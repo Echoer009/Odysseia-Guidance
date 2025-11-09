@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
 from src.chat.utils.database import chat_db_manager
+from src.chat.utils.time_utils import format_time_delta
 from ..config.work_config import WorkConfig
 
 
@@ -108,6 +109,34 @@ class WorkDBService:
         status["last_sell_body_timestamp"] = now
 
         await self._update_user_work_status_from_dict(user_id, status)
+
+    async def check_work_cooldown(self, user_id: int) -> Tuple[bool, str]:
+        """
+        检查用户的工作冷却时间。
+        返回 (is_on_cooldown, remaining_time_str)。
+        """
+        status = await self.get_user_work_status(user_id)
+        if status.get("last_work_timestamp"):
+            last_work_time = status["last_work_timestamp"].replace(tzinfo=timezone.utc)
+            cooldown = timedelta(hours=WorkConfig.COOLDOWN_HOURS)
+            if datetime.now(timezone.utc) - last_work_time < cooldown:
+                remaining = cooldown - (datetime.now(timezone.utc) - last_work_time)
+                return True, format_time_delta(remaining)
+        return False, ""
+
+    async def check_sell_body_cooldown(self, user_id: int) -> Tuple[bool, str]:
+        """
+        检查用户的卖屁股冷却时间。
+        返回 (is_on_cooldown, remaining_time_str)。
+        """
+        status = await self.get_user_work_status(user_id)
+        if status.get("last_sell_body_timestamp"):
+            last_time = status["last_sell_body_timestamp"].replace(tzinfo=timezone.utc)
+            cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
+            if datetime.now(timezone.utc) - last_time < cooldown:
+                remaining = cooldown - (datetime.now(timezone.utc) - last_time)
+                return True, format_time_delta(remaining)
+        return False, ""
 
     async def _update_user_work_status_from_dict(self, user_id: int, status: dict):
         """使用字典中的值来更新数据库。"""

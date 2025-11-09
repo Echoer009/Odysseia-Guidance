@@ -1,0 +1,782 @@
+[
+    {
+        "id": 0,
+        "name": "愚者",
+        "name_en": "The Fool",
+        "arcana": "Major",
+        "meaning_up": "开始, 天真, 自由, 自发性, 新的开始, 纯真, 信仰之跃",
+        "meaning_rev": "鲁莽, 粗心, 被利用, 天真过头, 风险, 愚蠢, 缺乏经验",
+        "description": "一个年轻人站在悬崖边，无畏地仰望天空，即将踏上未知的旅程。他象征着无限的可能性和对宇宙的信任。",
+        "image_file": "00_Fool.jpg"
+    },
+    {
+        "id": 1,
+        "name": "魔术师",
+        "name_en": "The Magician",
+        "arcana": "Major",
+        "meaning_up": "创造力, 意志力, 显化, 资源, 力量, 技巧, 专注",
+        "meaning_rev": "欺骗, 操纵, 才能滥用, 计划不周, 缺乏自信, 幻觉",
+        "description": "魔术师高举魔杖，连接天地，桌上摆放着四元素的象征物。他代表着将思想转化为现实的强大力量。",
+        "image_file": "01_Magician.jpg"
+    },
+    {
+        "id": 2,
+        "name": "女祭司",
+        "name_en": "The High Priestess",
+        "arcana": "Major",
+        "meaning_up": "直觉, 潜意识, 神秘, 智慧, 秘密, 内在知识",
+        "meaning_rev": "秘密被揭露, 直觉被压抑, 表面化, 困惑, 认知失调",
+        "description": "女祭司静坐在黑白两柱之间，手持智慧卷轴，脚踏新月。她守护着潜意识的大门，象征着深邃的直觉和智慧。",
+        "image_file": "02_High_Priestess.jpg"
+    },
+    {
+        "id": 3,
+        "name": "皇后",
+        "name_en": "The Empress",
+        "arcana": "Major",
+        "meaning_up": "丰饶, 母性, 美, 自然, 感性, 创造, 滋养",
+        "meaning_rev": "创造力受阻, 依赖, 停滞, 嫉妒, 忽视",
+        "description": "皇后舒适地坐在宝座上，被大自然的富饶所环绕。她象征着创造、丰收和无条件的爱。",
+        "image_file": "03_Empress.jpg"
+    },
+    {
+        "id": 4,
+        "name": "皇帝",
+        "name_en": "The Emperor",
+        "arcana": "Major",
+        "meaning_up": "权威, 结构, 秩序, 父亲形象, 领导力, 稳定, 控制",
+        "meaning_rev": "专制, 僵化, 控制欲, 缺乏纪律, 滥用权力",
+        "description": "皇帝威严地坐在石制宝座上，手持权杖和宝球。他代表着结构、秩序和世俗的权力。",
+        "image_file": "04_Emperor.jpg"
+    },
+    {
+        "id": 5,
+        "name": "教皇",
+        "name_en": "The Hierophant",
+        "arcana": "Major",
+        "meaning_up": "传统, 信仰, 精神导师, 制度, 教育, 灵性指导",
+        "meaning_rev": "挑战传统, 非传统, 束缚, 虚伪, 精神上的反叛",
+        "description": "教皇为两位追随者祝福，象征着传统、制度化的信仰和知识的传承。",
+        "image_file": "05_Hierophant.jpg"
+    },
+    {
+        "id": 6,
+        "name": "恋人",
+        "name_en": "The Lovers",
+        "arcana": "Major",
+        "meaning_up": "爱, 和谐, 关系, 选择, 结合, 价值观的对齐",
+        "meaning_rev": "冲突, 失衡, 错误的选择, 关系不和, 分离",
+        "description": "亚当和夏娃站在天使之下，象征着重要的选择、关系的结合以及身心灵的和谐。",
+        "image_file": "06_Lovers.jpg"
+    },
+    {
+        "id": 7,
+        "name": "战车",
+        "name_en": "The Chariot",
+        "arcana": "Major",
+        "meaning_up": "胜利, 意志力, 控制, 自信, 决心, 克服障碍",
+        "meaning_rev": "失控, 缺乏方向, 侵略性, 障碍, 意志力薄弱",
+        "description": "一位战士驾驭着由黑白斯芬克斯拉动的战车，他通过坚定的意志力掌控着对立的力量，勇往直前。",
+        "image_file": "07_Chariot.jpg"
+    },
+    {
+        "id": 8,
+        "name": "力量",
+        "name_en": "Strength",
+        "arcana": "Major",
+        "meaning_up": "内在力量, 勇气, 慈悲, 专注, 耐心, 自我控制",
+        "meaning_rev": "软弱, 恐惧, 缺乏自信, 失去控制, 怀疑自我",
+        "description": "一位女子温柔地驯服一头狮子，象征着以柔克刚的内在力量、勇气和慈悲。",
+        "image_file": "08_Strength.jpg"
+    },
+    {
+        "id": 9,
+        "name": "隐士",
+        "name_en": "The Hermit",
+        "arcana": "Major",
+        "meaning_up": "内省, 灵魂探索, 独处, 指引, 智慧, 寻求真理",
+        "meaning_rev": "孤立, 孤独, 退缩, 迷失方向, 拒绝指导",
+        "description": "隐士独自站在山顶，手提明灯，照亮前行的道路。他代表着向内心寻求智慧和真理的旅程。",
+        "image_file": "09_Hermit.jpg"
+    },
+    {
+        "id": 10,
+        "name": "命运之轮",
+        "name_en": "Wheel of Fortune",
+        "arcana": "Major",
+        "meaning_up": "命运, 变化, 转折点, 运气, 周期, 机会",
+        "meaning_rev": "厄运, 停滞, 抵制变化, 不受欢迎的改变, 失去控制",
+        "description": "命运之轮不断转动，轮上的生物随之沉浮，象征着生命中不可避免的周期性变化和命运的转折。",
+        "image_file": "10_Wheel_of_Fortune.jpg"
+    },
+    {
+        "id": 11,
+        "name": "正义",
+        "name_en": "Justice",
+        "arcana": "Major",
+        "meaning_up": "公平, 真相, 法律, 因果报应, 平衡, 责任",
+        "meaning_rev": "不公, 偏见, 逃避责任, 不诚实, 法律纠纷",
+        "description": "正义女神一手持剑，一手持天平，象征着绝对的公平、真相和因果法则。",
+        "image_file": "11_Justice.jpg"
+    },
+    {
+        "id": 12,
+        "name": "倒吊人",
+        "name_en": "The Hanged Man",
+        "arcana": "Major",
+        "meaning_up": "牺牲, 顺从, 新的视角, 暂停, 智慧, 放手",
+        "meaning_rev": "停滞不前, 徒劳的牺牲, 拖延, 避免, 物质主义",
+        "description": "一个人被倒吊在树上，但表情平静。他代表着通过牺牲和暂停来获得新的视角和智慧。",
+        "image_file": "12_Hanged_Man.jpg"
+    },
+    {
+        "id": 13,
+        "name": "死神",
+        "name_en": "Death",
+        "arcana": "Major",
+        "meaning_up": "结束, 转变, 重生, 放下, 过渡, 必然的改变",
+        "meaning_rev": "抵制改变, 停滞, 恐惧结束, 痛苦的转变",
+        "description": "死神骑着白马，象征着一个周期的结束和另一个周期的开始。它代表着不可避免的转变和重生。",
+        "image_file": "13_Death.jpg"
+    },
+    {
+        "id": 14,
+        "name": "节制",
+        "name_en": "Temperance",
+        "arcana": "Major",
+        "meaning_up": "平衡, 调和, 耐心, 中庸之道, 合作, 整合",
+        "meaning_rev": "失衡, 极端, 冲突, 缺乏耐心, 不和谐",
+        "description": "一位天使在两个杯子之间倒水，象征着对立力量的调和与平衡，以及内心的平静。",
+        "image_file": "14_Temperance.jpg"
+    },
+    {
+        "id": 15,
+        "name": "恶魔",
+        "name_en": "The Devil",
+        "arcana": "Major",
+        "meaning_up": "束缚, 瘾, 物质主义, 诱惑, 负面模式, 欲望",
+        "meaning_rev": "挣脱束缚, 自由, 觉醒, 克服瘾症, 释放",
+        "description": "恶魔束缚着两个人，但锁链是松的。它代表着自我施加的束缚、沉溺和物质世界的诱惑。",
+        "image_file": "15_Devil.jpg"
+    },
+    {
+        "id": 16,
+        "name": "塔",
+        "name_en": "The Tower",
+        "arcana": "Major",
+        "meaning_up": "突变, 灾难, 颠覆, 启示, 觉醒, 释放",
+        "meaning_rev": "避免灾难, 恐惧改变, 延缓不可避免之事, 困境",
+        "description": "一道闪电击中高塔，人们从塔顶坠落。它象征着由虚假信念构建的结构被摧毁，带来突如其来的觉醒。",
+        "image_file": "16_Tower.jpg"
+    },
+    {
+        "id": 17,
+        "name": "星星",
+        "name_en": "The Star",
+        "arcana": "Major",
+        "meaning_up": "希望, 灵感, 治愈, 平静, 信念, 更新",
+        "meaning_rev": "绝望, 失去信念, 悲观, 缺乏灵感, 迷失",
+        "description": "一位女子在星空下将生命之水倒入池塘和大地，象征着在黑暗之后重燃的希望、治愈和灵感。",
+        "image_file": "17_Star.jpg"
+    },
+    {
+        "id": 18,
+        "name": "月亮",
+        "name_en": "The Moon",
+        "arcana": "Major",
+        "meaning_up": "幻觉, 恐惧, 潜意识, 直觉, 焦虑, 秘密",
+        "meaning_rev": "恐惧被克服, 真相大白, 困惑解除, 清晰",
+        "description": "月亮照亮了一条通往未知的道路，两侧是狼和狗。它代表着潜意识深处的恐惧、幻觉和强大的直觉。",
+        "image_file": "18_Moon.jpg"
+    },
+    {
+        "id": 19,
+        "name": "太阳",
+        "name_en": "The Sun",
+        "arcana": "Major",
+        "meaning_up": "成功, 喜悦, 活力, 清晰, 乐观, 真相",
+        "meaning_rev": "暂时的不快, 缺乏成功, 悲观, 虚假的乐观",
+        "description": "一个快乐的孩子骑在白马上，背后是灿烂的太阳。它象征着纯粹的喜悦、成功和生命的活力。",
+        "image_file": "19_Sun.jpg"
+    },
+    {
+        "id": 20,
+        "name": "审判",
+        "name_en": "Judgement",
+        "arcana": "Major",
+        "meaning_up": "审判, 重生, 内在召唤, 宽恕, 觉醒, 评估",
+        "meaning_rev": "自我怀疑, 逃避, 批评, 拒绝改变, 罪恶感",
+        "description": "天使吹响号角，死者从坟墓中复活，响应召唤。它代表着内在的觉醒、评估和重生。",
+        "image_file": "20_Judgement.jpg"
+    },
+    {
+        "id": 21,
+        "name": "世界",
+        "name_en": "The World",
+        "arcana": "Major",
+        "meaning_up": "完成, 整合, 成就, 满足, 旅程的终点, 和谐",
+        "meaning_rev": "未完成, 缺乏封闭感, 停滞, 走捷径",
+        "description": "一个舞者在花环中庆祝，象征着一个重要周期的圆满完成、成就和与宇宙的和谐统一。",
+        "image_file": "21_World.jpg"
+    },
+    {
+        "id": 22,
+        "name": "权杖首牌",
+        "name_en": "Ace of Wands",
+        "arcana": "Minor",
+        "meaning_up": "灵感, 新机会, 创造力, 潜力, 成长, 热情",
+        "meaning_rev": "缺乏动力, 延迟, 犹豫, 创造力受阻",
+        "suit": "Wands",
+        "image_file": "Wands01.jpg"
+    },
+    {
+        "id": 23,
+        "name": "权杖二",
+        "name_en": "Two of Wands",
+        "arcana": "Minor",
+        "meaning_up": "未来规划, 决策, 进步, 发现, 离开舒适区",
+        "meaning_rev": "恐惧未知, 缺乏规划, 停滞, 坏选择",
+        "suit": "Wands",
+        "image_file": "Wands02.jpg"
+    },
+    {
+        "id": 24,
+        "name": "权杖三",
+        "name_en": "Three of Wands",
+        "arcana": "Minor",
+        "meaning_up": "扩张, 远见, 领导力, 等待结果, 进步",
+        "meaning_rev": "延迟, 挫折, 缺乏远见, 意外的障碍",
+        "suit": "Wands",
+        "image_file": "Wands03.jpg"
+    },
+    {
+        "id": 25,
+        "name": "权杖四",
+        "name_en": "Four of Wands",
+        "arcana": "Minor",
+        "meaning_up": "庆祝, 和谐, 稳定, 家庭, 社区, 回家",
+        "meaning_rev": "不稳定, 家庭冲突, 不和谐, 过渡",
+        "suit": "Wands",
+        "image_file": "Wands04.jpg"
+    },
+    {
+        "id": 26,
+        "name": "权杖五",
+        "name_en": "Five of Wands",
+        "arcana": "Minor",
+        "meaning_up": "冲突, 竞争, 分歧, 紧张, 挑战",
+        "meaning_rev": "避免冲突, 解决, 和谐, 达成一致",
+        "suit": "Wands",
+        "image_file": "Wands05.jpg"
+    },
+    {
+        "id": 27,
+        "name": "权杖六",
+        "name_en": "Six of Wands",
+        "arcana": "Minor",
+        "meaning_up": "胜利, 成功, 公众认可, 自信, 进步",
+        "meaning_rev": "失败, 缺乏认可, 骄傲, 坏消息",
+        "suit": "Wands",
+        "image_file": "Wands06.jpg"
+    },
+    {
+        "id": 28,
+        "name": "权杖七",
+        "name_en": "Seven of Wands",
+        "arcana": "Minor",
+        "meaning_up": "挑战, 坚持, 防御, 保护, 保持立场",
+        "meaning_rev": "放弃, 疲惫, 被压倒, 承认失败",
+        "suit": "Wands",
+        "image_file": "Wands07.jpg"
+    },
+    {
+        "id": 29,
+        "name": "权杖八",
+        "name_en": "Eight of Wands",
+        "arcana": "Minor",
+        "meaning_up": "快速行动, 消息, 旅行, 变化, 进展",
+        "meaning_rev": "延迟, 挫折, 停滞, 抵制变化",
+        "suit": "Wands",
+        "image_file": "Wands08.jpg"
+    },
+    {
+        "id": 30,
+        "name": "权杖九",
+        "name_en": "Nine of Wands",
+        "arcana": "Minor",
+        "meaning_up": "坚韧, 勇气, 最后的挑战, 毅力, 防御",
+        "meaning_rev": "疲惫, 放弃, 偏执, 防御过度",
+        "suit": "Wands",
+        "image_file": "Wands09.jpg"
+    },
+    {
+        "id": 31,
+        "name": "权杖十",
+        "name_en": "Ten of Wands",
+        "arcana": "Minor",
+        "meaning_up": "负担, 责任, 压力, 辛劳, 完成",
+        "meaning_rev": "放下负担, 委派, 崩溃, 压力过大",
+        "suit": "Wands",
+        "image_file": "Wands10.jpg"
+    },
+    {
+        "id": 32,
+        "name": "权杖侍从",
+        "name_en": "Page of Wands",
+        "arcana": "Minor",
+        "meaning_up": "热情, 探索, 新想法, 自由精神, 好奇心",
+        "meaning_rev": "犹豫, 缺乏方向, 创造力受阻, 坏消息",
+        "suit": "Wands",
+        "image_file": "Wands11.jpg"
+    },
+    {
+        "id": 33,
+        "name": "权杖骑士",
+        "name_en": "Knight of Wands",
+        "arcana": "Minor",
+        "meaning_up": "能量, 激情, 行动, 冒险, 冲动",
+        "meaning_rev": "鲁莽, 延迟, 挫折, 精力分散",
+        "suit": "Wands",
+        "image_file": "Wands12.jpg"
+    },
+    {
+        "id": 34,
+        "name": "权杖王后",
+        "name_en": "Queen of Wands",
+        "arcana": "Minor",
+        "meaning_up": "自信, 热情, 独立, 魅力, 创造力",
+        "meaning_rev": "嫉妒, 不安全感, 霸道, 情绪化",
+        "suit": "Wands",
+        "image_file": "Wands13.jpg"
+    },
+    {
+        "id": 35,
+        "name": "权杖国王",
+        "name_en": "King of Wands",
+        "arcana": "Minor",
+        "meaning_up": "领导力, 远见, 热情, 荣誉, 控制",
+        "meaning_rev": "专制, 冲动, 缺乏远见, 高傲",
+        "suit": "Wands",
+        "image_file": "Wands14.jpg"
+    },
+    {
+        "id": 36,
+        "name": "圣杯首牌",
+        "name_en": "Ace of Cups",
+        "arcana": "Minor",
+        "meaning_up": "爱, 新关系, 情感, 创造力, 直觉",
+        "meaning_rev": "情感压抑, 创造力受阻, 空虚, 失去机会",
+        "suit": "Cups",
+        "image_file": "Cups01.jpg"
+    },
+    {
+        "id": 37,
+        "name": "圣杯二",
+        "name_en": "Two of Cups",
+        "arcana": "Minor",
+        "meaning_up": "结合, 伙伴关系, 吸引力, 和谐, 爱",
+        "meaning_rev": "分手, 不和谐, 误解, 关系破裂",
+        "suit": "Cups",
+        "image_file": "Cups02.jpg"
+    },
+    {
+        "id": 38,
+        "name": "圣杯三",
+        "name_en": "Three of Cups",
+        "arcana": "Minor",
+        "meaning_up": "庆祝, 友谊, 社区, 合作, 欢乐",
+        "meaning_rev": "八卦, 孤立, 过度放纵, 丑闻",
+        "suit": "Cups",
+        "image_file": "Cups03.jpg"
+    },
+    {
+        "id": 39,
+        "name": "圣杯四",
+        "name_en": "Four of Cups",
+        "arcana": "Minor",
+        "meaning_up": "冷漠, 沉思, 错失机会, 不满, 重新评估",
+        "meaning_rev": "接受, 新机会, 走出低谷, 积极性",
+        "suit": "Cups",
+        "image_file": "Cups04.jpg"
+    },
+    {
+        "id": 40,
+        "name": "圣杯五",
+        "name_en": "Five of Cups",
+        "arcana": "Minor",
+        "meaning_up": "失落, 悲伤, 失望, 遗憾, 关注负面",
+        "meaning_rev": "接受, 继续前进, 宽恕, 看到希望",
+        "suit": "Cups",
+        "image_file": "Cups05.jpg"
+    },
+    {
+        "id": 41,
+        "name": "圣杯六",
+        "name_en": "Six of Cups",
+        "arcana": "Minor",
+        "meaning_up": "怀旧, 童年, 回忆, 纯真, 喜悦",
+        "meaning_rev": "活在过去, 不切实际, 摆脱过去",
+        "suit": "Cups",
+        "image_file": "Cups06.jpg"
+    },
+    {
+        "id": 42,
+        "name": "圣杯七",
+        "name_en": "Seven of Cups",
+        "arcana": "Minor",
+        "meaning_up": "选择, 幻想, 机会, 白日梦, 诱惑",
+        "meaning_rev": "清晰, 现实, 做出选择, 避免诱惑",
+        "suit": "Cups",
+        "image_file": "Cups07.jpg"
+    },
+    {
+        "id": 43,
+        "name": "圣杯八",
+        "name_en": "Eight of Cups",
+        "arcana": "Minor",
+        "meaning_up": "离开, 放弃, 灵魂探索, 寻求更高目标",
+        "meaning_rev": "恐惧改变, 停滞, 回归, 满足于现状",
+        "suit": "Cups",
+        "image_file": "Cups08.jpg"
+    },
+    {
+        "id": 44,
+        "name": "圣杯九",
+        "name_en": "Nine of Cups",
+        "arcana": "Minor",
+        "meaning_up": "愿望成真, 满足, 幸福, 舒适, 成功",
+        "meaning_rev": "不满足, 失望, 贪婪, 物质主义",
+        "suit": "Cups",
+        "image_file": "Cups09.jpg"
+    },
+    {
+        "id": 45,
+        "name": "圣杯十",
+        "name_en": "Ten of Cups",
+        "arcana": "Minor",
+        "meaning_up": "家庭幸福, 和谐, 情感满足, 团聚",
+        "meaning_rev": "家庭冲突, 关系破裂, 不和谐, 期望落空",
+        "suit": "Cups",
+        "image_file": "Cups10.jpg"
+    },
+    {
+        "id": 46,
+        "name": "圣杯侍从",
+        "name_en": "Page of Cups",
+        "arcana": "Minor",
+        "meaning_up": "创造力, 直觉信息, 好奇心, 情感开放",
+        "meaning_rev": "情感不成熟, 创造力受阻, 逃避现实",
+        "suit": "Cups",
+        "image_file": "Cups11.jpg"
+    },
+    {
+        "id": 47,
+        "name": "圣杯骑士",
+        "name_en": "Knight of Cups",
+        "arcana": "Minor",
+        "meaning_up": "浪漫, 魅力, 理想主义, 情感, 提议",
+        "meaning_rev": "情绪化, 失望, 善变, 不切实际",
+        "suit": "Cups",
+        "image_file": "Cups12.jpg"
+    },
+    {
+        "id": 48,
+        "name": "圣杯王后",
+        "name_en": "Queen of Cups",
+        "arcana": "Minor",
+        "meaning_up": "慈悲, 直觉, 情感成熟, 关怀, 平静",
+        "meaning_rev": "情绪不稳定, 依赖, 压抑情感,  martyr",
+        "suit": "Cups",
+        "image_file": "Cups13.jpg"
+    },
+    {
+        "id": 49,
+        "name": "圣杯国王",
+        "name_en": "King of Cups",
+        "arcana": "Minor",
+        "meaning_up": "情感平衡, 控制, 慈悲, 外交, 成熟",
+        "meaning_rev": "情绪操纵, 冷漠, 压抑, 情绪爆发",
+        "suit": "Cups",
+        "image_file": "Cups14.jpg"
+    },
+    {
+        "id": 50,
+        "name": "宝剑首牌",
+        "name_en": "Ace of Swords",
+        "arcana": "Minor",
+        "meaning_up": "清晰, 真相, 突破, 新想法, 智力",
+        "meaning_rev": "困惑, 误解, 坏决策, 缺乏清晰",
+        "suit": "Swords",
+        "image_file": "Swords01.jpg"
+    },
+    {
+        "id": 51,
+        "name": "宝剑二",
+        "name_en": "Two of Swords",
+        "arcana": "Minor",
+        "meaning_up": "僵局, 艰难的决定, 逃避, 平衡, 停战",
+        "meaning_rev": "困惑, 做出选择, 信息过载, 焦虑",
+        "suit": "Swords",
+        "image_file": "Swords02.jpg"
+    },
+    {
+        "id": 52,
+        "name": "宝剑三",
+        "name_en": "Three of Swords",
+        "arcana": "Minor",
+        "meaning_up": "心碎, 悲伤, 痛苦的真相, 分离, 拒绝",
+        "meaning_rev": "恢复, 宽恕, 接受, 释放痛苦",
+        "suit": "Swords",
+        "image_file": "Swords03.jpg"
+    },
+    {
+        "id": 53,
+        "name": "宝剑四",
+        "name_en": "Four of Swords",
+        "arcana": "Minor",
+        "meaning_up": "休息, 恢复, 沉思, 暂停, 喘息",
+        "meaning_rev": "倦怠, 停滞, 压力, 重新开始",
+        "suit": "Swords",
+        "image_file": "Swords04.jpg"
+    },
+    {
+        "id": 54,
+        "name": "宝剑五",
+        "name_en": "Five of Swords",
+        "arcana": "Minor",
+        "meaning_up": "冲突, 失败, 不光彩的胜利, 紧张, 损失",
+        "meaning_rev": "和解, 谈判, 结束冲突, 宽恕",
+        "suit": "Swords",
+        "image_file": "Swords05.jpg"
+    },
+    {
+        "id": 55,
+        "name": "宝剑六",
+        "name_en": "Six of Swords",
+        "arcana": "Minor",
+        "meaning_up": "过渡, 离开困境, 精神上的旅行, 恢复",
+        "meaning_rev": "停滞, 无法前进, 情感包袱, 延迟",
+        "suit": "Swords",
+        "image_file": "Swords06.jpg"
+    },
+    {
+        "id": 56,
+        "name": "宝剑七",
+        "name_en": "Seven of Swords",
+        "arcana": "Minor",
+        "meaning_up": "欺骗, 策略, 偷偷摸摸, 背叛, 走捷径",
+        "meaning_rev": "坦白, 面对后果, 诚实, 新计划",
+        "suit": "Swords",
+        "image_file": "Swords07.jpg"
+    },
+    {
+        "id": 57,
+        "name": "宝剑八",
+        "name_en": "Eight of Swords",
+        "arcana": "Minor",
+        "meaning_up": "受限, 自我束缚, 孤立, 困境, 无力感",
+        "meaning_rev": "自由, 释放, 找到解决方案, 新视角",
+        "suit": "Swords",
+        "image_file": "Swords08.jpg"
+    },
+    {
+        "id": 58,
+        "name": "宝剑九",
+        "name_en": "Nine of Swords",
+        "arcana": "Minor",
+        "meaning_up": "焦虑, 恐惧, 噩梦, 担忧, 绝望",
+        "meaning_rev": "释放恐惧, 寻求帮助, 面对现实, 恢复",
+        "suit": "Swords",
+        "image_file": "Swords09.jpg"
+    },
+    {
+        "id": 59,
+        "name": "宝剑十",
+        "name_en": "Ten of Swords",
+        "arcana": "Minor",
+        "meaning_up": "失败, 结束, 背叛, 崩溃, 痛苦的结局",
+        "meaning_rev": "恢复, 重生, 接受, 走出困境",
+        "suit": "Swords",
+        "image_file": "Swords10.jpg"
+    },
+    {
+        "id": 60,
+        "name": "宝剑侍从",
+        "name_en": "Page of Swords",
+        "arcana": "Minor",
+        "meaning_up": "好奇心, 新想法, 真相, 警惕, 沟通",
+        "meaning_rev": "八卦, 欺骗, 防御性, 缺乏计划",
+        "suit": "Swords",
+        "image_file": "Swords11.jpg"
+    },
+    {
+        "id": 61,
+        "name": "宝剑骑士",
+        "name_en": "Knight of Swords",
+        "arcana": "Minor",
+        "meaning_up": "雄心, 行动, 速度, 决心, 沟通",
+        "meaning_rev": "鲁莽, 冲动, 误解, 缺乏远见",
+        "suit": "Swords",
+        "image_file": "Swords12.jpg"
+    },
+    {
+        "id": 62,
+        "name": "宝剑王后",
+        "name_en": "Queen of Swords",
+        "arcana": "Minor",
+        "meaning_up": "独立, 清晰的思维, 智慧, 公正, 界限",
+        "meaning_rev": "冷酷, 刻薄, 孤立, 情绪化",
+        "suit": "Swords",
+        "image_file": "Swords13.jpg"
+    },
+    {
+        "id": 63,
+        "name": "宝剑国王",
+        "name_en": "King of Swords",
+        "arcana": "Minor",
+        "meaning_up": "智力, 权威, 真相, 公正, 道德",
+        "meaning_rev": "专制, 操纵, 冷酷, 滥用权力",
+        "suit": "Swords",
+        "image_file": "Swords14.jpg"
+    },
+    {
+        "id": 64,
+        "name": "星币首牌",
+        "name_en": "Ace of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "机会, 繁荣, 新的开始, 显化, 稳定",
+        "meaning_rev": "错失机会, 财务问题, 缺乏规划",
+        "suit": "Pentacles",
+        "image_file": "Pents01.jpg"
+    },
+    {
+        "id": 65,
+        "name": "星币二",
+        "name_en": "Two of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "平衡, 适应性, 优先排序, 时间管理",
+        "meaning_rev": "失衡, 组织混乱, 财务压力",
+        "suit": "Pentacles",
+        "image_file": "Pents02.jpg"
+    },
+    {
+        "id": 66,
+        "name": "星币三",
+        "name_en": "Three of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "团队合作, 协作, 学习, 技能, 实施",
+        "meaning_rev": "缺乏团队合作, 技能不足, 冲突",
+        "suit": "Pentacles",
+        "image_file": "Pents03.jpg"
+    },
+    {
+        "id": 67,
+        "name": "星币四",
+        "name_en": "Four of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "节约, 安全, 控制, 保守, 占有",
+        "meaning_rev": "贪婪, 物质主义, 害怕失去, 放手",
+        "suit": "Pentacles",
+        "image_file": "Pents04.jpg"
+    },
+    {
+        "id": 68,
+        "name": "星币五",
+        "name_en": "Five of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "贫困, 财务损失, 逆境, 孤立, 担忧",
+        "meaning_rev": "恢复, 找到帮助, 积极的改变",
+        "suit": "Pentacles",
+        "image_file": "Pents05.jpg"
+    },
+    {
+        "id": 69,
+        "name": "星币六",
+        "name_en": "Six of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "慷慨, 慈善, 分享, 给予和接受, 财富",
+        "meaning_rev": "债务, 自私, 滥用慷慨, 财务依赖",
+        "suit": "Pentacles",
+        "image_file": "Pents06.jpg"
+    },
+    {
+        "id": 70,
+        "name": "星币七",
+        "name_en": "Seven of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "耐心, 投资, 长期规划, 收获, 毅力",
+        "meaning_rev": "不耐烦, 投资失败, 缺乏远见, 懒惰",
+        "suit": "Pentacles",
+        "image_file": "Pents07.jpg"
+    },
+    {
+        "id": 71,
+        "name": "星币八",
+        "name_en": "Eight of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "技能, 勤奋, 精通, 学徒, 专注",
+        "meaning_rev": "完美主义, 缺乏野心, 重复性工作",
+        "suit": "Pentacles",
+        "image_file": "Pents08.jpg"
+    },
+    {
+        "id": 72,
+        "name": "星币九",
+        "name_en": "Nine of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "富足, 独立, 自给自足, 奢华, 成功",
+        "meaning_rev": "财务依赖, 鲁莽消费, 肤浅",
+        "suit": "Pentacles",
+        "image_file": "Pents09.jpg"
+    },
+    {
+        "id": 73,
+        "name": "星币十",
+        "name_en": "Ten of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "财富, 遗产, 家庭, 传统, 稳定",
+        "meaning_rev": "家庭纠纷, 财务损失, 传统束缚",
+        "suit": "Pentacles",
+        "image_file": "Pents10.jpg"
+    },
+    {
+        "id": 74,
+        "name": "星币侍从",
+        "name_en": "Page of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "学习, 新机会, 勤奋, 梦想, 显化",
+        "meaning_rev": "懒惰, 拖延, 错失机会, 缺乏承诺",
+        "suit": "Pentacles",
+        "image_file": "Pents11.jpg"
+    },
+    {
+        "id": 75,
+        "name": "星币骑士",
+        "name_en": "Knight of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "可靠, 勤奋, 耐心, 责任, 常规",
+        "meaning_rev": "懒惰, 停滞, 无聊, 缺乏常识",
+        "suit": "Pentacles",
+        "image_file": "Pents12.jpg"
+    },
+    {
+        "id": 76,
+        "name": "星币王后",
+        "name_en": "Queen of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "滋养, 务实, 慷慨, 脚踏实地, 母性",
+        "meaning_rev": "自我中心, 嫉妒, 窒息, 财务依赖",
+        "suit": "Pentacles",
+        "image_file": "Pents13.jpg"
+    },
+    {
+        "id": 77,
+        "name": "星币国王",
+        "name_en": "King of Pentacles",
+        "arcana": "Minor",
+        "meaning_up": "富裕, 成功, 安全, 纪律, 领导力",
+        "meaning_rev": "贪婪, 物质主义, 专制, 不择手段",
+        "suit": "Pentacles",
+        "image_file": "Pents14.jpg"
+    }
+]

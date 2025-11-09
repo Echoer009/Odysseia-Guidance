@@ -30,15 +30,17 @@ class ToolService:
     async def execute_tool_call(
         self,
         tool_call: types.FunctionCall,
+        channel: Optional[discord.TextChannel] = None,
         author_id: Optional[int] = None,
-        log_detailed: bool = False,  # 新增：接收详细日志开关
+        log_detailed: bool = False,
     ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
-        这个版本通过依赖注入来提供上下文（如 bot 实例），并处理备用参数（如 author_id）。
+        这个版本通过依赖注入来提供上下文（如 bot 实例、channel），并处理备用参数（如 author_id）。
 
         Args:
             tool_call: 来自 Gemini API 响应的函数调用对象。
+            channel: 可选的当前消息所在的 Discord 频道对象。
             author_id: 可选的当前消息作者的 Discord ID，用作某些参数的备用值。
 
         Returns:
@@ -74,6 +76,10 @@ class ToolService:
                     log.info(
                         f"确保 'user_id' 存在 (备用值为 author_id): {tool_args['user_id']}"
                     )
+            if channel:
+                tool_args["channel"] = channel
+                if log_detailed:
+                    log.info(f"已注入 'channel' (ID: {channel.id}) 实例。")
 
             # 步骤 4: 智能地传递 log_detailed 参数
             # 检查工具函数是否接受 'log_detailed' 关键字参数

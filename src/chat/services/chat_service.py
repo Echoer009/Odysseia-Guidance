@@ -230,6 +230,7 @@ class ChatService:
                 author.id,
                 guild_id,
                 message=user_content,
+                channel=message.channel,
                 replied_message=replied_content,
                 images=image_data_list if image_data_list else None,
                 user_name=author.display_name,

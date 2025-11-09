@@ -533,6 +533,7 @@ class GeminiService:
         user_id: int,
         guild_id: int,
         message: str,
+        channel: Optional[Any] = None,  # 新增: 接收 channel 对象
         replied_message: Optional[str] = None,
         images: Optional[List[Dict]] = None,
         user_name: str = "用户",
@@ -543,7 +544,7 @@ class GeminiService:
         user_profile_data: Optional[Dict[str, Any]] = None,
         guild_name: str = "未知服务器",
         location_name: str = "未知位置",
-        model_name: Optional[str] = None,  # 新增：允许覆盖模型
+        model_name: Optional[str] = None,
         client: Any = None,
     ) -> str:
         """生成AI回复（已重构）。"""
@@ -685,7 +686,10 @@ class GeminiService:
             # 并行执行所有建议的工具调用
             tasks = [
                 self.tool_service.execute_tool_call(
-                    tool_call=call, author_id=user_id, log_detailed=log_detailed
+                    tool_call=call,
+                    channel=channel,
+                    author_id=user_id,
+                    log_detailed=log_detailed,
                 )
                 for call in function_calls
             ]
