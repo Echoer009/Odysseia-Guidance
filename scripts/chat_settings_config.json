@@ -1,0 +1,53 @@
+{
+    "guild_id": 1134557553011998840,
+    "settings": [
+        {
+            "entity_id": 1234700138400976947,
+            "entity_type": "category",
+            "is_chat_enabled": true,
+            "cooldown_seconds": 1200,
+            "cooldown_duration": null,
+            "cooldown_limit": null
+        },
+        {
+            "entity_id": 1371154697897115668,
+            "entity_type": "channel",
+            "is_chat_enabled": true,
+            "cooldown_seconds": null,
+            "cooldown_duration": 60,
+            "cooldown_limit": 5
+        },
+        {
+            "entity_id": 1164574422171123772,
+            "entity_type": "category",
+            "is_chat_enabled": false,
+            "cooldown_seconds": null,
+            "cooldown_duration": null,
+            "cooldown_limit": null
+        },
+        {
+            "entity_id": 1376200857527390429,
+            "entity_type": "category",
+            "is_chat_enabled": false,
+            "cooldown_seconds": null,
+            "cooldown_duration": null,
+            "cooldown_limit": null
+        },
+        {
+            "entity_id": 1363496120432590878,
+            "entity_type": "category",
+            "is_chat_enabled": true,
+            "cooldown_seconds": 1200,
+            "cooldown_duration": null,
+            "cooldown_limit": null
+        },
+        {
+            "entity_id": 1134557553464987788,
+            "entity_type": "category",
+            "is_chat_enabled": true,
+            "cooldown_seconds": 1200,
+            "cooldown_duration": null,
+            "cooldown_limit": null
+        }
+    ]
+}
