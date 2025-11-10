@@ -27,9 +27,18 @@ class WorkService:
         if user_id not in DEVELOPER_USER_IDS:
             status = await self.work_db_service.get_user_work_status(user_id)
             if status.get("last_work_timestamp"):
-                last_work_time = status["last_work_timestamp"].replace(
-                    tzinfo=timezone.utc
-                )
+                last_work_timestamp_value = status["last_work_timestamp"]
+
+                # 兼容处理 str 和 datetime 类型
+                if isinstance(last_work_timestamp_value, str):
+                    last_work_time_naive = datetime.fromisoformat(
+                        last_work_timestamp_value
+                    )
+                else:
+                    last_work_time_naive = last_work_timestamp_value
+
+                last_work_time = last_work_time_naive.replace(tzinfo=timezone.utc)
+
                 cooldown = timedelta(hours=WorkConfig.COOLDOWN_HOURS)
                 if datetime.now(timezone.utc) - last_work_time < cooldown:
                     remaining = cooldown - (datetime.now(timezone.utc) - last_work_time)

@@ -22,7 +22,7 @@ class SellBodyService:
                 count,
             ) = await self.work_db_service.check_daily_limit(user_id, "sell_body")
             if is_limit_reached:
-                return f"你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！"
+                return f"<@{user_id}> 你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！"
 
         # 2. 检查冷却时间（开发者跳过）
         if user_id not in DEVELOPER_USER_IDS:
@@ -46,7 +46,7 @@ class SellBodyService:
                 cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
                 if datetime.now(timezone.utc) - last_time < cooldown:
                     remaining = cooldown - (datetime.now(timezone.utc) - last_time)
-                    return f"卖这么多不好吧... 请在 **{format_time_delta(remaining)}** 后再来。🥵"
+                    return f"<@{user_id}> 卖这么多不好吧... **{format_time_delta(remaining)}** 后再卖吧🥵"
 
         # 3. 执行行为并计算奖励
         action = WorkConfig.get_random_sell_body_action()
@@ -56,7 +56,7 @@ class SellBodyService:
         await self.work_db_service.increment_sell_body_count(user_id)
 
         # 5. 构建结果消息
-        message = f"你决定进行 **{action['name']}**... \n"
+        message = f"<@{user_id}> 决定进行 **{action['name']}**... \n"
         message += f"```{action['description']}```"
 
         if event_description:
