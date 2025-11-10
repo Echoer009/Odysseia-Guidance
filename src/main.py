@@ -3,6 +3,7 @@ import asyncio
 import logging
 import queue
 import sys
+import traceback
 import discord
 import time
 import requests
@@ -347,11 +348,63 @@ class GuidanceBot(commands.Bot):
         log.info("--- 启动成功 ---")
 
 
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """
+    全局异常处理器，用于捕获主线程中未处理的同步异常。
+    """
+    # 避免在 KeyboardInterrupt 时记录不必要的错误
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    # 获取一个 logger 实例来记录错误。
+    # 注意：如果日志系统本身初始化失败，这里可能无法工作，
+    # 但这是我们能做的最好的努力。
+    log = logging.getLogger("GlobalExceptionHandler")
+    log.critical(
+        "捕获到未处理的全局异常:", exc_info=(exc_type, exc_value, exc_traceback)
+    )
+
+
+def handle_async_exception(loop, context):
+    """
+    全局异常处理器，用于捕获 asyncio 事件循环中未处理的异步异常。
+    """
+    log = logging.getLogger("GlobalAsyncExceptionHandler")
+    exception = context.get("exception")
+
+    # 任务被取消是正常行为，无需记录为严重错误
+    if isinstance(exception, asyncio.CancelledError):
+        return
+
+    message = context.get("message")
+    if exception:
+        log.critical(
+            f"捕获到未处理的 asyncio 异常: {message}",
+            exc_info=exception,
+        )
+    else:
+        log.critical(f"捕获到未处理的 asyncio 异常: {message}")
+
+
 async def main():
     """主函数，用于设置和运行机器人"""
+    # 0. 设置同步代码的全局异常处理器
+    # 这必须在日志系统初始化之前设置，以确保即使日志配置失败也能捕获到异常
+    sys.excepthook = handle_exception
+
     # 1. 配置日志
     setup_logging()
     log = logging.getLogger(__name__)
+
+    # 2. 为 asyncio 事件循环设置异常处理器
+    # 这将捕获所有未被 await 的任务或回调中发生的异常
+    try:
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(handle_async_exception)
+        log.info("已成功设置全局同步和异步异常处理器。")
+    except Exception as e:
+        log.error(f"设置 asyncio 异常处理器失败: {e}", exc_info=True)
 
     # --- webui心跳启动进程 --
     # log.info("启用webui心跳包")

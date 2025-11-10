@@ -56,7 +56,10 @@ VIEW_TIMEOUT = 300  # 交互视图的超时时间（秒），例如按钮、下�
 
 # --- 日志相关 ---
 LOG_LEVEL = "INFO"
-LOG_FORMAT = "%(asctime)s - %(message)s"
+# 详细的日志格式，包含时间、级别、模块、函数和行号
+LOG_FORMAT = (
+    "%(asctime)s - %(levelname)-8s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s"
+)
 LOG_FILE_PATH = os.path.join(DATA_DIR, "bot_debug.log")  # DEBUG 日志文件路径
 
 # --- Embed 颜色 ---

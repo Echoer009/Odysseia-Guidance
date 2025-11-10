@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import Optional
 
@@ -19,7 +18,6 @@ class BlackjackGame:
 class BlackjackService:
     def __init__(self, db_manager):
         self._db_manager = db_manager
-        self._lock = asyncio.Lock()
 
     async def initialize(self):
         """Initializes database table for blackjack games and cleans up stale games."""
