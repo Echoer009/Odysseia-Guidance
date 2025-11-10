@@ -300,11 +300,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentBalance += payoutAmount;
                 balanceEl.textContent = currentBalance.toString();
             }
-            isSettling = false; // 在非嵌入模式下也要重置状态
 
             uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
                 // 台词输出完成后等待1.5秒再切换到游戏结束界面
                 setTimeout(() => showEndGameSequence(gameResult), 1500);
+                isSettling = false; // 在台词输出完成后重置状态，确保一致性
             });
         } else {
             try {
@@ -317,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
                         // 台词输出完成后等待1.5秒再切换到游戏结束界面
                         setTimeout(() => showEndGameSequence(gameResult), 1500);
+                        isSettling = false; // 修复：在台词输出完成后重置状态锁，与非嵌入模式保持一致
                     });
                 } else {
                     // This case might not be hit if apiCall throws, but it's good practice.
@@ -416,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(countdownInterval);
             countdownInterval = null;
         }
+        isSettling = false; // 重置结算状态锁，允许在新游戏中进行操作
         // Start new game with the same bet
         handleBet(true);
     }
