@@ -514,7 +514,7 @@ class SellBodyButton(discord.ui.Button):
         if is_on_cooldown:
             await interaction.response.send_message(
                 f"卖这么多不好吧... 请在 **{remaining_time}** 后再来。🥵",
-                ephemeral=True,
+                ephemeral=False,
             )
             return
 
@@ -525,15 +525,15 @@ class SellBodyButton(discord.ui.Button):
         if is_limit_reached:
             await interaction.response.send_message(
                 f"你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！",
-                ephemeral=True,
+                ephemeral=False,
             )
             return
 
         # 3. 执行动作
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=False, thinking=True)
         sell_body_service = SellBodyService(coin_service)
         result_message = await sell_body_service.perform_sell_body(user_id)
-        await interaction.followup.send(result_message, ephemeral=True)
+        await interaction.followup.send(result_message, ephemeral=False)
 
 
 class PurchaseButton(discord.ui.Button):

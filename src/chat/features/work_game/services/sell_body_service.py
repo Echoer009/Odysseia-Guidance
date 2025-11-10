@@ -28,9 +28,21 @@ class SellBodyService:
         if user_id not in DEVELOPER_USER_IDS:
             status = await self.work_db_service.get_user_work_status(user_id)
             if status.get("last_sell_body_timestamp"):
-                last_time = status["last_sell_body_timestamp"].replace(
-                    tzinfo=timezone.utc
-                )
+                last_time_value = status["last_sell_body_timestamp"]
+
+                # 检查存储的时间戳是字符串还是datetime对象，以兼容旧的错误数据格式
+                if isinstance(last_time_value, str):
+                    # 如果是字符串（旧的错误数据），则解析它
+                    last_time = datetime.fromisoformat(last_time_value)
+                else:
+                    # 如果已经是datetime对象（正常数据），则直接使用
+                    last_time = last_time_value
+
+                # 确保datetime对象是时区感知的UTC时间，以便进行正确的比较
+                if last_time.tzinfo is None:
+                    last_time = last_time.replace(tzinfo=timezone.utc)
+                else:
+                    last_time = last_time.astimezone(timezone.utc)
                 cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
                 if datetime.now(timezone.utc) - last_time < cooldown:
                     remaining = cooldown - (datetime.now(timezone.utc) - last_time)
@@ -45,19 +57,17 @@ class SellBodyService:
 
         # 5. 构建结果消息
         message = f"你决定进行 **{action['name']}**... \n"
-        message += f"```{action['description']}```\n"
+        message += f"```{action['description']}```"
 
         if event_description:
-            message += f"\n**突发事件！ {event_description}**\n"
-        else:
-            message += "\n"
+            message += f"\n**突发事件！ {event_description}**"
 
         if reward > 0:
-            message += f"-# 你获得了 **{reward}** 类脑币。"
+            message += f"\n-# 你获得了 **{reward}** 类脑币。"
         elif reward < 0:
-            message += f"-# 你损失了 **{-reward}** 类脑币！"
+            message += f"\n-# 你损失了 **{-reward}** 类脑币！"
         else:
-            message += "-# 你白忙活了一场，什么都没得到。"
+            message += "\n-# 你白忙活了一场，什么都没得到。"
 
         # 6. 更新用户余额
         if reward > 0:
