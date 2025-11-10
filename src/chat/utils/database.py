@@ -753,10 +753,10 @@ class ChatDatabaseManager:
     # --- 警告管理 ---
     async def record_warning_and_check_blacklist(
         self, user_id: int, guild_id: int, expires_at
-    ) -> bool:
+    ) -> Dict[str, Any]:
         """
         记录一次用户警告。如果警告达到3次，则将用户加入黑名单并重置警告计数。
-        返回 True 表示用户因此次警告被拉黑，否则返回 False。
+        返回一个字典，包含是否被拉黑以及更新后的警告次数。
         """
         # 增加警告计数
         query_update = """
@@ -773,14 +773,14 @@ class ChatDatabaseManager:
             fetch="one",
             commit=True,
         )
-        new_warning_count = result["warning_count"] if result else 0
+        current_warnings = result["warning_count"] if result else 0
 
         log.info(
-            f"用户 {user_id} 在服务器 {guild_id} 的警告次数增加到: {new_warning_count}"
+            f"用户 {user_id} 在服务器 {guild_id} 的警告次数更新为: {current_warnings}"
         )
 
         # 检查是否达到拉黑阈值
-        if new_warning_count >= 3:
+        if current_warnings >= 3:
             log.info(
                 f"用户 {user_id} 在服务器 {guild_id} 达到3次警告，将被加入黑名单。"
             )
@@ -793,9 +793,9 @@ class ChatDatabaseManager:
                 self._db_transaction, query_reset, (user_id, guild_id), commit=True
             )
             log.info(f"已重置用户 {user_id} 在服务器 {guild_id} 的警告计数。")
-            return True
+            return {"was_blacklisted": True, "new_warning_count": 0}
 
-        return False
+        return {"was_blacklisted": False, "new_warning_count": current_warnings}
 
     # --- 好感度管理 ---
     async def get_affection(self, user_id: int, guild_id: int) -> Optional[sqlite3.Row]:

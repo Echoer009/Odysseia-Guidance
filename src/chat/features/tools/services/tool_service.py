@@ -71,15 +71,21 @@ class ToolService:
 
             # 步骤 3: 注入上下文信息
             if author_id is not None:
-                tool_args.setdefault("user_id", str(author_id))
-                if log_detailed:
-                    log.info(
-                        f"确保 'user_id' 存在 (备用值为 author_id): {tool_args['user_id']}"
-                    )
+                if not tool_args.get("user_id"):
+                    tool_args["user_id"] = str(author_id)
+                    if log_detailed:
+                        log.info(
+                            f"模型未提供有效 'user_id'，已自动填充为消息作者 ID: {author_id}"
+                        )
             if channel:
                 tool_args["channel"] = channel
+                # 自动填充 guild_id
+                if channel.guild:
+                    tool_args.setdefault("guild_id", str(channel.guild.id))
                 if log_detailed:
-                    log.info(f"已注入 'channel' (ID: {channel.id}) 实例。")
+                    log.info(
+                        f"已注入 'channel' (ID: {channel.id}) 和 'guild_id' (ID: {channel.guild.id if channel.guild else 'N/A'})。"
+                    )
 
             # 步骤 4: 智能地传递 log_detailed 参数
             # 检查工具函数是否接受 'log_detailed' 关键字参数

@@ -46,27 +46,21 @@ async def issue_user_warning(
         ban_duration = random.randint(min_d, max_d)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)
 
-        was_blacklisted = await chat_db_manager.record_warning_and_check_blacklist(
+        result = await chat_db_manager.record_warning_and_check_blacklist(
             target_id, guild_id, expires_at
         )
-
-        # 获取更新后的警告次数
-        query = (
-            "SELECT warning_count FROM user_warnings WHERE user_id = ? AND guild_id = ?"
-        )
-        result = await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (target_id, guild_id), fetch="one"
-        )
-        current_warnings = result["warning_count"] if result else 0
+        was_blacklisted = result["was_blacklisted"]
+        current_warnings = result["new_warning_count"]
 
         if was_blacklisted:
-            message = f"User {target_id} has been blacklisted for {ban_duration} minutes due to accumulating 3 warnings. Their warning count has been reset."
+            message = f"User {target_id} has been blacklisted for {ban_duration} minutes due to accumulating 3 warnings. Their warning count has been reset to {current_warnings}."
             log.info(message)
             return {
                 "status": "blacklisted",
                 "user_id": str(target_id),
                 "reason": reason,
                 "duration_minutes": ban_duration,
+                "current_warnings": current_warnings,
             }
         else:
             message = f"User {target_id} has received a warning. They now have {current_warnings} warning(s)."

@@ -4,6 +4,7 @@ import io
 import discord
 
 from src.chat.features.tarot.services import tarot_service
+from src.chat.features.tarot.config.tarot_config import TarotConfig
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,20 @@ async def tarot_reading(
         return {
             "error": "Cannot perform tarot reading without a valid channel to send the image to."
         }
+
+    # 检查是否在特定服务器的特定频道中使用
+    if (
+        TarotConfig.RESTRICTED_GUILD_ID
+        and channel.guild
+        and channel.guild.id == TarotConfig.RESTRICTED_GUILD_ID
+    ):
+        if channel.id != TarotConfig.ALLOWED_CHANNEL_ID:
+            log.warning(
+                f"塔罗牌工具在受限服务器 {TarotConfig.RESTRICTED_GUILD_ID} 的不允许的频道 {channel.id} 中被调用。"
+            )
+            return {
+                "error": f"在这里占卜会刷屏啦，星辰与命运的指引只在特定的圣地展现。请移步至https://discord.com/channels/{TarotConfig.RESTRICTED_GUILD_ID}/{TarotConfig.ALLOWED_CHANNEL_ID}，再次寻求塔罗的启示吧。"
+            }
 
     try:
         image_data, cards = await tarot_service.perform_reading(question, spread_type)
@@ -69,6 +84,6 @@ async def tarot_reading(
             return {"error": "Failed to generate tarot image or draw cards."}
 
     except Exception as e:
-        log.error(f"执行塔罗牌占卜时发生未知错误。", exc_info=True)
+        log.error("执行塔罗牌占卜时发生未知错误。", exc_info=True)
         await channel.send("抱歉，塔罗牌占卜时遇到了一个意想不到的错误。")
         return {"error": f"An unexpected error occurred: {str(e)}"}
