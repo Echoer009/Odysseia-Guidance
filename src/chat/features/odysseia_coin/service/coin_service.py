@@ -688,6 +688,33 @@ class CoinService:
             log.error(f"用户 {user_id} 还款失败: {e}")
             return False, f"❌ 还款时发生未知错误: {e}"
 
+    async def get_transaction_history(
+        self, user_id: int, limit: int = 10, offset: int = 0
+    ) -> list[dict]:
+        """获取用户最近的类脑币交易记录"""
+        query = """
+            SELECT timestamp, amount, reason
+            FROM coin_transactions
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?;
+        """
+        transactions = await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            query,
+            (user_id, limit, offset),
+            fetch="all",
+        )
+        return [dict(row) for row in transactions] if transactions else []
+
+    async def get_transaction_count(self, user_id: int) -> int:
+        """获取用户的总交易记录数"""
+        query = "SELECT COUNT(*) as count FROM coin_transactions WHERE user_id = ?;"
+        result = await chat_db_manager._execute(
+            chat_db_manager._db_transaction, query, (user_id,), fetch="one"
+        )
+        return result["count"] if result else 0
+
 
 async def _setup_initial_items():
     """设置商店的初始商品（覆盖逻辑）"""

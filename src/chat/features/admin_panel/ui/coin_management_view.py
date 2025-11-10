@@ -8,6 +8,9 @@ from src.chat.features.admin_panel.ui.coin_management_modal import (
     UserSearchModal,
     CoinBalanceModal,
 )
+from src.chat.features.odysseia_coin.ui.transaction_history_ui import (
+    TransactionHistoryView,
+)
 
 
 class CoinManagementView(View):
@@ -84,6 +87,26 @@ class CoinManagementView(View):
 
             set_balance_button.callback = set_balance_callback
             self.add_item(set_balance_button)
+
+            view_transactions_button = Button(
+                label="查看流水", style=discord.ButtonStyle.secondary, emoji="📜", row=1
+            )
+
+            async def view_transactions_callback(interaction: discord.Interaction):
+                if not self.target_user:
+                    await interaction.response.send_message(
+                        "无法获取用户信息以查看流水。", ephemeral=True
+                    )
+                    return
+
+                await interaction.response.defer()
+                transaction_view = TransactionHistoryView(
+                    interaction, self.target_user, self.message
+                )
+                await transaction_view.start()
+
+            view_transactions_button.callback = view_transactions_callback
+            self.add_item(view_transactions_button)
 
     async def get_embed(self) -> discord.Embed:
         """生成类脑币管理的 Embed"""

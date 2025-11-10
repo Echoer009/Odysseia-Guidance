@@ -77,35 +77,27 @@ class BlackjackService:
         self, user_id: int, bet_amount: int
     ) -> Optional[BlackjackGame]:
         """
-        Creates a new game record for a user.
-        Returns new game if creation is successful, None otherwise.
+        为用户创建新的游戏记录。如果游戏已存在，则替换它。
+        如果创建成功，则返回新游戏，否则返回None。
         """
         async with self._lock:
-            # Check if a game already exists
-            # 检查是否存在遗留游戏
+            # 检查是否存在游戏，以便记录被没收的赌注
             existing_game = await self.get_active_game(user_id)
             if existing_game:
-                # 如果玩家有遗留游戏，该赌注将被视为放弃并被没收。
                 log.warning(
                     f"用户 {user_id} 有一个赌注为 {existing_game.bet_amount} 的遗留游戏。该赌注已被没收。"
                     f"正在创建新游戏..."
                 )
-                # 直接删除旧游戏记录，不退款，为新游戏做准备
-                await self._db_manager._execute(
-                    self._db_manager._db_transaction,
-                    "DELETE FROM blackjack_games WHERE user_id = ?",
-                    (user_id,),
-                    commit=False,  # 在同一事务中执行
-                )
 
-            # 创建新游戏
+            # 使用 "REPLACE INTO" 原子地处理游戏的创建/替换
+            # 这可以防止在删除旧游戏和创建新游戏之间出现竞态条件
             await self._db_manager._execute(
                 self._db_manager._db_transaction,
-                "INSERT INTO blackjack_games (user_id, bet_amount, game_state) VALUES (?, ?, ?)",
+                "REPLACE INTO blackjack_games (user_id, bet_amount, game_state) VALUES (?, ?, ?)",
                 (user_id, bet_amount, "active"),
-                commit=True,  # 提交事务
+                commit=True,
             )
-            log.info(f"为用户 {user_id} 创建了新的21点游戏，赌注为 {bet_amount}。")
+            log.info(f"为用户 {user_id} 创建/替换了21点游戏，新赌注为 {bet_amount}。")
             return BlackjackGame(user_id, bet_amount, "active")
 
     async def get_active_game(self, user_id: int) -> Optional[BlackjackGame]:
