@@ -171,6 +171,19 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
     log.info(f"正在获取用户 {user_id} 的余额")
     try:
         balance = await coin_service.get_balance(user_id)
+
+        # --- 安全检查和日志记录 ---
+        # 如果用户的余额记录因某种原因（例如数据异常）为空，这是一个严重问题
+        if balance is None:
+            log.critical(
+                f"CRITICAL: 用户 {user_id} 的余额查询结果为 None，这表示数据库中可能存在数据损坏或异常。请立即检查 user_coins 表。"
+            )
+            # 返回一个明确的错误，而不是一个可能引起误解的 0
+            raise HTTPException(
+                status_code=500,
+                detail="无法加载您的余额，您的账户数据可能存在异常。请联系管理员进行检查。",
+            )
+
         log.info(f"用户 {user_id} 的余额为 {balance}")
 
         # --- 从配置文件获取荷官阈值 ---
