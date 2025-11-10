@@ -286,46 +286,54 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isSettling) return; // 防止重复调用
         isSettling = true; // 设置状态锁
 
-        // This local calculation is only for non-embedded mode now.
-        // The backend will calculate the final payout.
-        let payoutAmount = 0;
-        switch (gameResult) {
-            case 'win': payoutAmount = currentBet * 2; break;
-            case 'blackjack': payoutAmount = Math.floor(currentBet * 2.5); break;
-            case 'push': payoutAmount = currentBet; break;
-            case 'loss': payoutAmount = 0; break;
-        }
-
         if (!isEmbedded) {
+            // 非嵌入模式下，前端计算派彩金额
+            let payoutAmount = 0;
+            switch (gameResult) {
+                case 'win': payoutAmount = currentBet * 2; break;
+                case 'blackjack': payoutAmount = Math.floor(currentBet * 2.5); break;
+                case 'push': payoutAmount = currentBet; break;
+                case 'loss': payoutAmount = 0; break;
+            }
+
             if (payoutAmount > 0) {
                 currentBalance += payoutAmount;
                 balanceEl.textContent = currentBalance.toString();
             }
             isSettling = false; // 在非嵌入模式下也要重置状态
+
+            uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
+                // 台词输出完成后等待1.5秒再切换到游戏结束界面
+                setTimeout(() => showEndGameSequence(gameResult), 1500);
+            });
         } else {
             try {
-                // Always call the payout endpoint to conclude the game on the server.
-                // Send the `result`, not the `amount`. The server calculates the payout.
+                // 嵌入模式下，后端计算派彩金额，前端只负责展示
                 const response = await apiCall('/api/game/payout', 'POST', { result: gameResult });
                 if (response.success) {
                     currentBalance = response.new_balance;
                     balanceEl.textContent = currentBalance.toString();
+
+                    uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
+                        // 台词输出完成后等待1.5秒再切换到游戏结束界面
+                        setTimeout(() => showEndGameSequence(gameResult), 1500);
+                    });
                 } else {
                     // This case might not be hit if apiCall throws, but it's good practice.
                     uiManager.updateMessages('结算失败了，杂鱼~❤');
+                    // 即使失败也要重置状态，让用户可以继续游戏
+                    isSettling = false;
+                    setTimeout(() => showEndGameSequence(gameResult), 1500);
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Payout API call failed:", error);
-                uiManager.updateMessages('结算API调用失败了，真是个笨蛋~❤');
-            } finally {
-                isSettling = false; // 无论成功或失败，最终都要重置状态锁
+                // 显示更友好的错误信息
+                uiManager.updateMessages(error.message || '结算API调用失败了，真是个笨蛋~❤');
+                // 即使失败也要重置状态，让用户可以继续游戏
+                isSettling = false;
+                setTimeout(() => showEndGameSequence(gameResult), 1500);
             }
         }
-
-        uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
-            // 台词输出完成后等待1.5秒再切换到游戏结束界面
-            setTimeout(() => showEndGameSequence(gameResult), 1500);
-        });
     }
 
     function determineWinner(): void {
@@ -388,11 +396,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     doubleButton.disabled = false;
                     uiManager.updateMessages('双倍下注失败了，你个小笨蛋~❤');
                 }
-            } catch (error) {
+            } catch (error: any) {
                 hitButton.disabled = false;
                 standButton.disabled = false;
                 doubleButton.disabled = false;
-                uiManager.updateMessages('双倍下注API调用失败了，真是个笨蛋~❤');
+                // 显示更友好的错误信息
+                uiManager.updateMessages(error.message || '双倍下注API调用失败了，真是个笨蛋~❤');
             }
         }
     }
@@ -423,40 +432,75 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- API & State Management ---
-    async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object) {
-        console.log(`[API Call] aaaaaa ${method} ${endpoint}`, body || '');
+    async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, retries = 2) {
+        console.log(`[API Call] ${method} ${endpoint}`, body || '');
         if (!accessToken) {
-            console.error("[API Call] bbbbbb Access Token is not available.");
+            console.error("[API Call] Access Token is not available.");
             throw new Error("Access Token is not available.");
         }
-        try {
-            const response = await fetch(endpoint, {
-                method,
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-                body: body ? JSON.stringify(body) : undefined,
-            });
 
-            if (!response.ok) {
-                // 当API返回非2xx状态码时，响应体可能不是JSON（例如FastAPI的HTML错误页）
-                // 因此我们应该读取为文本以避免解析错误。
-                const errorText = await response.text();
-                console.error(`[API Call] cccccc Failed with status ${response.status}. Response:`, errorText);
-                // 尝试将文本解析为JSON，如果可以，就用其中的detail字段
-                try {
-                    const errorData = JSON.parse(errorText);
-                    throw new Error(errorData.detail || 'API请求失败');
-                } catch (e) {
-                    // 如果解析失败，说明它不是JSON，直接抛出文本内容
-                    throw new Error('API请求失败，服务器返回了非预期的响应。');
+        for (let i = 0; i <= retries; i++) {
+            try {
+                const response = await fetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+                    body: body ? JSON.stringify(body) : undefined,
+                });
+
+                if (!response.ok) {
+                    // 当API返回非2xx状态码时，响应体可能不是JSON（例如FastAPI的HTML错误页）
+                    // 因此我们应该读取为文本以避免解析错误。
+                    const errorText = await response.text();
+                    console.error(`[API Call] Failed with status ${response.status}. Response:`, errorText);
+
+                    // 尝试将文本解析为JSON，如果可以，就用其中的detail字段
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        // 根据不同的错误状态码提供更友好的错误信息
+                        let friendlyMessage = 'API请求失败';
+                        if (response.status === 401) {
+                            friendlyMessage = '身份验证失败，请重新登录';
+                        } else if (response.status === 402) {
+                            friendlyMessage = '余额不足，请检查您的账户';
+                        } else if (response.status === 403) {
+                            friendlyMessage = '没有权限执行此操作';
+                        } else if (response.status === 404) {
+                            friendlyMessage = '请求的资源不存在';
+                        } else if (response.status >= 500) {
+                            friendlyMessage = '服务器内部错误，请稍后再试';
+                        } else if (errorData.detail) {
+                            friendlyMessage = errorData.detail;
+                        }
+                        throw new Error(friendlyMessage);
+                    } catch (e) {
+                        // 如果解析失败，说明它不是JSON，直接抛出文本内容
+                        if (e instanceof Error) throw e;
+                        throw new Error('API请求失败，服务器返回了非预期的响应。');
+                    }
                 }
+
+                console.log(`[API Call] ${method} ${endpoint} successful.`);
+                return response.json();
+
+            } catch (error) {
+                console.error(`[API Call] Network error or other exception for ${method} ${endpoint} (attempt ${i + 1}/${retries + 1}):`, error);
+
+                // 如果是最后一次尝试，直接抛出错误
+                if (i === retries) {
+                    // 对于网络错误，提供更友好的错误信息
+                    if (error instanceof Error) {
+                        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                            throw new Error('网络连接不稳定，请检查您的网络连接后重试');
+                        }
+                        throw error;
+                    }
+                    throw new Error('未知错误，请稍后再试');
+                }
+
+                // 指数退避重试
+                const delay = Math.min(1000 * Math.pow(2, i), 3000); // 最大延迟3秒
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
-
-            console.log(`[API Call] dddddd ${method} ${endpoint} successful.`);
-            return response.json();
-
-        } catch (error) {
-            console.error(`[API Call] eeeeee Network error or other exception for ${method} ${endpoint}:`, error);
-            throw error; // Re-throw the error to be caught by the caller
         }
     }
 
@@ -470,7 +514,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         } catch (error: any) {
             console.error("Failed to fetch user info:", error);
-            throw new Error("获取玩家信息失败。");
+            // 显示更友好的错误信息
+            uiManager.updateMessages(error.message || '获取玩家信息失败，请稍后重试');
+            return false;
         }
     }
 
@@ -512,7 +558,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     startAfterBet();
                 }
             } catch (error: any) {
-                uiManager.updateMessages('下注失败了，你真是个笨蛋~❤');
+                // 显示更友好的错误信息
+                uiManager.updateMessages(error.message || '下注失败了，你真是个笨蛋~❤');
                 resetGame();
             }
         }
