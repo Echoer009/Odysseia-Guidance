@@ -90,9 +90,11 @@ async def get_current_user_id(
             log.info(f"成功识别用户: {user_data['username']} ({user_id})")
             return user_id
         except httpx.HTTPStatusError as e:
-            log.error("从Discord API获取用户信息失败。", exc_info=True)
-            log.error(f"Discord API响应状态: {e.response.status_code}")
-            log.error(f"Discord API响应内容: {e.response.text}")
+            log.error(
+                f"从Discord API获取用户信息失败。状态码: {e.response.status_code}，"
+                f"响应: {e.response.text}",
+                exc_info=True,
+            )
             raise HTTPException(status_code=401, detail="Invalid or expired token")
         except httpx.RequestError as e:
             log.error(f"请求Discord API时发生网络错误: {e}", exc_info=True)
@@ -145,9 +147,11 @@ async def exchange_code_for_token(request: TokenRequest):
             log.info("成功交换代码获取令牌。")
             return JSONResponse(content=response.json())
         except httpx.HTTPStatusError as e:
-            log.error("与Discord API交换代码失败。", exc_info=True)
-            log.error(f"Discord API响应状态: {e.response.status_code}")
-            log.error(f"Discord API响应内容: {e.response.text}")
+            log.error(
+                f"与Discord API交换代码失败。状态码: {e.response.status_code}，"
+                f"响应: {e.response.text}",
+                exc_info=True,
+            )
             raise HTTPException(
                 status_code=500, detail="Failed to exchange code with Discord"
             )
@@ -297,7 +301,9 @@ async def give_payout(
         active_game = await blackjack_service.get_active_game(user_id)
 
         if active_game is None:
-            log.warning(f"User {user_id} requested payout without an active game.")
+            log.warning(
+                f"用户 {user_id} 请求派彩，但未找到活跃游戏。这可能是重复的结算请求。"
+            )
             raise HTTPException(
                 status_code=400, detail="No active bet found for this user."
             )

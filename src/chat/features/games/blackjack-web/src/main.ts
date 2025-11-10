@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let playerScore = 0;
     let dealerScore = 0;
     let gameInProgress = false;
+    let isSettling = false; // 防止重复结算的状态锁
     let accessToken: string | null = null;
     let currentBalance = 0;
     let currentBet = 0;
@@ -250,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function stand(): void {
-        if (!gameInProgress) return;
+        if (!gameInProgress || isSettling) return; // 如果正在进行或正在结算，则不允许操作
         hitButton.disabled = true;
         standButton.disabled = true;
         doubleButton.disabled = true;
@@ -272,6 +273,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function endGame(gameResult: 'win' | 'loss' | 'push' | 'blackjack'): void {
+        if (isSettling) return; // 如果已经在结算中，则直接返回
+
         gameInProgress = false;
         hitButton.disabled = true;
         standButton.disabled = true;
@@ -280,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handlePayout(gameResult: 'win' | 'loss' | 'push' | 'blackjack') {
+        if (isSettling) return; // 防止重复调用
+        isSettling = true; // 设置状态锁
+
         // This local calculation is only for non-embedded mode now.
         // The backend will calculate the final payout.
         let payoutAmount = 0;
@@ -295,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentBalance += payoutAmount;
                 balanceEl.textContent = currentBalance.toString();
             }
+            isSettling = false; // 在非嵌入模式下也要重置状态
         } else {
             try {
                 // Always call the payout endpoint to conclude the game on the server.
@@ -310,6 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 console.error("Payout API call failed:", error);
                 uiManager.updateMessages('结算API调用失败了，真是个笨蛋~❤');
+            } finally {
+                isSettling = false; // 无论成功或失败，最终都要重置状态锁
             }
         }
 
@@ -415,17 +424,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- API & State Management ---
     async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object) {
-        if (!accessToken) throw new Error("Access Token is not available.");
-        const response = await fetch(endpoint, {
-            method,
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-            body: body ? JSON.stringify(body) : undefined,
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'API request failed');
+        console.log(`[API Call] aaaaaa ${method} ${endpoint}`, body || '');
+        if (!accessToken) {
+            console.error("[API Call] bbbbbb Access Token is not available.");
+            throw new Error("Access Token is not available.");
         }
-        return response.json();
+        try {
+            const response = await fetch(endpoint, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+
+            if (!response.ok) {
+                // 当API返回非2xx状态码时，响应体可能不是JSON（例如FastAPI的HTML错误页）
+                // 因此我们应该读取为文本以避免解析错误。
+                const errorText = await response.text();
+                console.error(`[API Call] cccccc Failed with status ${response.status}. Response:`, errorText);
+                // 尝试将文本解析为JSON，如果可以，就用其中的detail字段
+                try {
+                    const errorData = JSON.parse(errorText);
+                    throw new Error(errorData.detail || 'API请求失败');
+                } catch (e) {
+                    // 如果解析失败，说明它不是JSON，直接抛出文本内容
+                    throw new Error('API请求失败，服务器返回了非预期的响应。');
+                }
+            }
+
+            console.log(`[API Call] dddddd ${method} ${endpoint} successful.`);
+            return response.json();
+
+        } catch (error) {
+            console.error(`[API Call] eeeeee Network error or other exception for ${method} ${endpoint}:`, error);
+            throw error; // Re-throw the error to be caught by the caller
+        }
     }
 
     async function fetchUserInfo(): Promise<boolean> {
@@ -487,6 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetGame() {
+        isSettling = false; // 重置游戏时确保结算锁也被重置
         currentBet = 0;
         betAmountInput.value = '';
         betAmountInput.disabled = false;
@@ -620,7 +653,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e: any) {
             clearInterval(loadingInterval);
-            loadingMessageEl.textContent = `加载失败: ${e.message}`;
+            const errorMessage = `加载失败: ${e.message}`;
+            loadingMessageEl.textContent = errorMessage;
+            console.error("ffffff Application failed to initialize:", e); // Log the full error object
         }
     }
 
