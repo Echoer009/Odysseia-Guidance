@@ -82,16 +82,28 @@ class BlackjackService:
         """
         async with self._lock:
             # Check if a game already exists
+            # 检查是否存在遗留游戏
             existing_game = await self.get_active_game(user_id)
             if existing_game:
-                log.warning(f"用户 {user_id} 试图在已有活跃游戏时开始新游戏。")
-                return None
+                # 如果玩家有遗留游戏，该赌注将被视为放弃并被没收。
+                log.warning(
+                    f"用户 {user_id} 有一个赌注为 {existing_game.bet_amount} 的遗留游戏。该赌注已被没收。"
+                    f"正在创建新游戏..."
+                )
+                # 直接删除旧游戏记录，不退款，为新游戏做准备
+                await self._db_manager._execute(
+                    self._db_manager._db_transaction,
+                    "DELETE FROM blackjack_games WHERE user_id = ?",
+                    (user_id,),
+                    commit=False,  # 在同一事务中执行
+                )
 
+            # 创建新游戏
             await self._db_manager._execute(
                 self._db_manager._db_transaction,
                 "INSERT INTO blackjack_games (user_id, bet_amount, game_state) VALUES (?, ?, ?)",
                 (user_id, bet_amount, "active"),
-                commit=True,
+                commit=True,  # 提交事务
             )
             log.info(f"为用户 {user_id} 创建了新的21点游戏，赌注为 {bet_amount}。")
             return BlackjackGame(user_id, bet_amount, "active")

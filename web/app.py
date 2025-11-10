@@ -208,11 +208,15 @@ async def place_bet(
             # --- 数据库持久化：创建游戏记录 ---
             game = await blackjack_service.create_game(user_id, bet_amount)
             if not game:
-                log.warning(f"用户 {user_id} 下注失败，原因：已存在活跃游戏。")
-                # 返还刚刚扣除的赌注
-                await coin_service.add_coins(user_id, bet_amount, "21点重复下注退款")
+                # 新逻辑：create_game 现在会处理遗留游戏，所以如果它返回None，
+                # 这意味着一个无法自动解决的内部错误。
+                log.error(f"为用户 {user_id} 创建游戏失败，可能是一个数据库问题。")
+                # 返还赌注，因为游戏创建失败
+                await coin_service.add_coins(
+                    user_id, bet_amount, "21点游戏创建失败退款"
+                )
                 raise HTTPException(
-                    status_code=409, detail="An active game already exists."
+                    status_code=500, detail="Failed to create a new game."
                 )
 
             log.info(f"用户 {user_id} 下注成功。新余额: {new_balance}")

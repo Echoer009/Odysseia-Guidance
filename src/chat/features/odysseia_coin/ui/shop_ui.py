@@ -503,36 +503,18 @@ class SellBodyButton(discord.ui.Button):
         super().__init__(label="卖屁股", style=discord.ButtonStyle.danger, emoji="🥵")
 
     async def callback(self, interaction: discord.Interaction):
-        work_db_service = WorkDBService()
+        """
+        统一处理卖屁股逻辑。
+        将所有检查（冷却、次数）委托给 SellBodyService。
+        """
         user_id = interaction.user.id
 
-        # 1. 检查冷却时间
-        (
-            is_on_cooldown,
-            remaining_time,
-        ) = await work_db_service.check_sell_body_cooldown(user_id)
-        if is_on_cooldown:
-            await interaction.response.send_message(
-                f"卖这么多不好吧... 请在 **{remaining_time}** 后再来。🥵",
-                ephemeral=False,
-            )
-            return
-
-        # 2. 检查每日次数限制
-        is_limit_reached, count = await work_db_service.check_daily_limit(
-            user_id, "sell_body"
-        )
-        if is_limit_reached:
-            await interaction.response.send_message(
-                f"你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！",
-                ephemeral=False,
-            )
-            return
-
-        # 3. 执行动作
+        # 直接调用服务，由服务处理所有逻辑并返回最终消息
         await interaction.response.defer(ephemeral=False, thinking=True)
         sell_body_service = SellBodyService(coin_service)
         result_message = await sell_body_service.perform_sell_body(user_id)
+
+        # 发送由服务层构建的统一消息
         await interaction.followup.send(result_message, ephemeral=False)
 
 
