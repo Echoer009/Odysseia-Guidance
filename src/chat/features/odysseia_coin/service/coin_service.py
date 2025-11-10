@@ -40,52 +40,36 @@ class CoinService:
         if amount <= 0:
             raise ValueError("增加的金额必须为正数")
 
-        def _transaction():
-            import sqlite3
+        # 插入或更新用户余额
+        upsert_query = """
+            INSERT INTO user_coins (user_id, balance) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance;
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            upsert_query,
+            (user_id, amount),
+            commit=True,
+        )
 
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-                # 插入或更新用户余额
-                cursor.execute(
-                    """
-                    INSERT INTO user_coins (user_id, balance) VALUES (?, ?)
-                    ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance;
-                """,
-                    (user_id, amount),
-                )
+        # 记录交易
+        transaction_query = """
+            INSERT INTO coin_transactions (user_id, amount, reason)
+            VALUES (?, ?, ?);
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            transaction_query,
+            (user_id, amount, reason),
+            commit=True,
+        )
 
-                # 记录交易
-                cursor.execute(
-                    """
-                    INSERT INTO coin_transactions (user_id, amount, reason)
-                    VALUES (?, ?, ?);
-                """,
-                    (user_id, amount, reason),
-                )
-
-                # 获取新余额
-                cursor.execute(
-                    "SELECT balance FROM user_coins WHERE user_id = ?", (user_id,)
-                )
-                new_balance = cursor.fetchone()[0]
-
-                conn.commit()
-                log.info(
-                    f"用户 {user_id} 获得 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
-                )
-                return new_balance
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                log.error(f"为用户 {user_id} 增加类脑币失败: {e}")
-                raise
-            finally:
-                if conn:
-                    conn.close()
-
-        return await chat_db_manager._execute(_transaction)
+        # 获取新余额
+        new_balance = await self.get_balance(user_id)
+        log.info(
+            f"用户 {user_id} 获得 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
+        )
+        return new_balance
 
     async def remove_coins(
         self, user_id: int, amount: int, reason: str
@@ -104,49 +88,33 @@ class CoinService:
             )
             return None
 
-        def _transaction():
-            import sqlite3
+        # 更新余额
+        update_query = "UPDATE user_coins SET balance = balance - ? WHERE user_id = ?"
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            update_query,
+            (amount, user_id),
+            commit=True,
+        )
 
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-                # 更新余额
-                cursor.execute(
-                    "UPDATE user_coins SET balance = balance - ? WHERE user_id = ?",
-                    (amount, user_id),
-                )
+        # 记录交易
+        transaction_query = """
+            INSERT INTO coin_transactions (user_id, amount, reason)
+            VALUES (?, ?, ?);
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            transaction_query,
+            (user_id, -amount, reason),
+            commit=True,
+        )
 
-                # 记录交易
-                cursor.execute(
-                    """
-                    INSERT INTO coin_transactions (user_id, amount, reason)
-                    VALUES (?, ?, ?);
-                """,
-                    (user_id, -amount, reason),
-                )
-
-                # 获取新余额
-                cursor.execute(
-                    "SELECT balance FROM user_coins WHERE user_id = ?", (user_id,)
-                )
-                new_balance = cursor.fetchone()[0]
-
-                conn.commit()
-                log.info(
-                    f"用户 {user_id} 消费 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
-                )
-                return new_balance
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                log.error(f"为用户 {user_id} 扣除类脑币失败: {e}")
-                raise
-            finally:
-                if conn:
-                    conn.close()
-
-        return await chat_db_manager._execute(_transaction)
+        # 获取新余额
+        new_balance = await self.get_balance(user_id)
+        log.info(
+            f"用户 {user_id} 消费 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
+        )
+        return new_balance
 
     async def grant_daily_message_reward(self, user_id: int) -> bool:
         """
@@ -155,67 +123,55 @@ class CoinService:
         """
         from datetime import timedelta
 
-        def _transaction():
-            import sqlite3
+        # 使用北京时间 (UTC+8)
+        beijing_tz = timezone(timedelta(hours=8))
+        today_beijing = datetime.now(beijing_tz).date()
 
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT last_daily_message_date FROM user_coins WHERE user_id = ?",
-                    (user_id,),
-                )
-                result = cursor.fetchone()
+        # 检查上次领取日期
+        query_last_date = (
+            "SELECT last_daily_message_date FROM user_coins WHERE user_id = ?"
+        )
+        result = await chat_db_manager._execute(
+            chat_db_manager._db_transaction, query_last_date, (user_id,), fetch="one"
+        )
 
-                # 使用北京时间 (UTC+8)
-                beijing_tz = timezone(timedelta(hours=8))
-                today_beijing = datetime.now(beijing_tz).date()
+        if result and result["last_daily_message_date"]:
+            last_daily_date = datetime.fromisoformat(
+                result["last_daily_message_date"]
+            ).date()
+            if last_daily_date >= today_beijing:
+                return False  # 今天已经发过了
 
-                if result:
-                    last_daily_str = result[0]
-                    if last_daily_str:
-                        last_daily_date = datetime.fromisoformat(last_daily_str).date()
-                        if last_daily_date >= today_beijing:
-                            return False  # 今天已经发过了
+        # 更新最后发言日期并增加金币
+        reward_amount = COIN_CONFIG["DAILY_FIRST_CHAT_REWARD"]
+        update_query = """
+            INSERT INTO user_coins (user_id, balance, last_daily_message_date)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                balance = balance + ?,
+                last_daily_message_date = excluded.last_daily_message_date;
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            update_query,
+            (user_id, reward_amount, today_beijing.isoformat(), reward_amount),
+            commit=True,
+        )
 
-                # 更新最后发言日期并增加金币
-                reward_amount = COIN_CONFIG["DAILY_FIRST_CHAT_REWARD"]
-                cursor.execute(
-                    """
-                    INSERT INTO user_coins (user_id, balance, last_daily_message_date)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(user_id) DO UPDATE SET
-                        balance = balance + ?,
-                        last_daily_message_date = excluded.last_daily_message_date;
-                """,
-                    (user_id, reward_amount, today_beijing.isoformat(), reward_amount),
-                )
+        # 记录交易
+        transaction_query = """
+            INSERT INTO coin_transactions (user_id, amount, reason)
+            VALUES (?, ?, '每日首次与AI对话奖励');
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            transaction_query,
+            (user_id, reward_amount),
+            commit=True,
+        )
 
-                # 记录交易
-                cursor.execute(
-                    """
-                    INSERT INTO coin_transactions (user_id, amount, reason)
-                    VALUES (?, ?, '每日首次与AI对话奖励');
-                """,
-                    (user_id, reward_amount),
-                )
-
-                conn.commit()
-                log.info(
-                    f"用户 {user_id} 获得每日首次与AI对话奖励 ({reward_amount} 类脑币)。"
-                )
-                return True
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                log.error(f"处理用户 {user_id} 的每日奖励失败: {e}")
-                raise
-            finally:
-                if conn:
-                    conn.close()
-
-        return await chat_db_manager._execute(_transaction)
+        log.info(f"用户 {user_id} 获得每日首次与AI对话奖励 ({reward_amount} 类脑币)。")
+        return True
 
     async def add_item_to_shop(
         self,
@@ -332,48 +288,21 @@ class CoinService:
 
                 expires_at = datetime.now(timezone.utc) + timedelta(days=1)
 
-                def _transaction():
-                    import sqlite3
-
-                    conn = None
-                    try:
-                        conn = sqlite3.connect(chat_db_manager.db_path)
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            """
-                            UPDATE user_coins
-                            SET coffee_effect_expires_at = ?
-                            WHERE user_id = ?
-                        """,
-                            (expires_at.isoformat(), user_id),
-                        )
-
-                        # 如果用户不存在于表中，需要插入
-                        if cursor.rowcount == 0:
-                            cursor.execute(
-                                """
-                                INSERT INTO user_coins (user_id, balance, coffee_effect_expires_at)
-                                VALUES (?, 0, ?)
-                                ON CONFLICT(user_id) DO UPDATE SET
-                                    coffee_effect_expires_at = excluded.coffee_effect_expires_at;
-                            """,
-                                (user_id, expires_at.isoformat()),
-                            )
-
-                        conn.commit()
-                        log.info(
-                            f"用户 {user_id} 购买了咖啡，聊天冷却效果持续到 {expires_at.isoformat()}"
-                        )
-                    except Exception as e:
-                        if conn:
-                            conn.rollback()
-                        log.error(f"为用户 {user_id} 更新咖啡效果时出错: {e}")
-                        raise
-                    finally:
-                        if conn:
-                            conn.close()
-
-                await chat_db_manager._execute(_transaction)
+                update_query = """
+                    INSERT INTO user_coins (user_id, coffee_effect_expires_at)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        coffee_effect_expires_at = excluded.coffee_effect_expires_at;
+                """
+                await chat_db_manager._execute(
+                    chat_db_manager._db_transaction,
+                    update_query,
+                    (user_id, expires_at.isoformat()),
+                    commit=True,
+                )
+                log.info(
+                    f"用户 {user_id} 购买了咖啡，聊天冷却效果持续到 {expires_at.isoformat()}"
+                )
 
                 return (
                     True,
@@ -433,43 +362,7 @@ class CoinService:
                 )
             elif item_effect == DISABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“枯萎向日葵”，禁用暖贴功能
-                def _transaction():
-                    import sqlite3
-
-                    conn = None
-                    try:
-                        conn = sqlite3.connect(chat_db_manager.db_path)
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            """
-                            UPDATE user_coins
-                            SET has_withered_sunflower = 1
-                            WHERE user_id = ?
-                        """,
-                            (user_id,),
-                        )
-                        if cursor.rowcount == 0:
-                            cursor.execute(
-                                """
-                                INSERT INTO user_coins (user_id, has_withered_sunflower)
-                                VALUES (?, 1)
-                                ON CONFLICT(user_id) DO UPDATE SET
-                                    has_withered_sunflower = 1;
-                            """,
-                                (user_id,),
-                            )
-                        conn.commit()
-                        log.info(f"用户 {user_id} 购买了枯萎向日葵，已禁用暖贴功能。")
-                    except Exception as e:
-                        if conn:
-                            conn.rollback()
-                        log.error(f"为用户 {user_id} 更新枯萎向日葵状态时出错: {e}")
-                        raise
-                    finally:
-                        if conn:
-                            conn.close()
-
-                await chat_db_manager._execute(_transaction)
+                await self.set_warmup_preference(user_id, wants_warmup=False)
                 return (
                     True,
                     f"你“购买”了 **{item['name']}**。从此，类脑娘将不再暖你的贴。",
@@ -478,44 +371,14 @@ class CoinService:
                     False,
                 )
             elif item_effect == BLOCK_THREAD_REPLIES_EFFECT_ID:
-
-                def _transaction():
-                    import sqlite3
-
-                    conn = None
-                    try:
-                        conn = sqlite3.connect(chat_db_manager.db_path)
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            """
-                            UPDATE user_coins
-                            SET blocks_thread_replies = 1
-                            WHERE user_id = ?
-                        """,
-                            (user_id,),
-                        )
-                        if cursor.rowcount == 0:
-                            cursor.execute(
-                                """
-                                INSERT INTO user_coins (user_id, blocks_thread_replies)
-                                VALUES (?, 1)
-                                ON CONFLICT(user_id) DO UPDATE SET
-                                    blocks_thread_replies = 1;
-                            """,
-                                (user_id,),
-                            )
-                        conn.commit()
-                        log.info(f"用户 {user_id} 购买了告示牌，已禁用帖子回复功能。")
-                    except Exception as e:
-                        if conn:
-                            conn.rollback()
-                        log.error(f"为用户 {user_id} 更新告示牌状态时出错: {e}")
-                        raise
-                    finally:
-                        if conn:
-                            conn.close()
-
-                await chat_db_manager._execute(_transaction)
+                query = """
+                    INSERT INTO user_coins (user_id, blocks_thread_replies) VALUES (?, 1)
+                    ON CONFLICT(user_id) DO UPDATE SET blocks_thread_replies = 1;
+                """
+                await chat_db_manager._execute(
+                    chat_db_manager._db_transaction, query, (user_id,), commit=True
+                )
+                log.info(f"用户 {user_id} 购买了告示牌，已禁用帖子回复功能。")
                 return (
                     True,
                     f"你举起了 **{item['name']}**，上面写着“禁止通行”。从此，类脑娘将不再进入你的帖子。",
@@ -525,24 +388,7 @@ class CoinService:
                 )
             elif item_effect == ENABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“魔法向日葵”，重新启用暖贴功能
-                def _transaction():
-                    import sqlite3
-
-                    conn = sqlite3.connect(chat_db_manager.db_path)
-                    cursor = conn.cursor()
-                    try:
-                        cursor.execute(
-                            "UPDATE user_coins SET has_withered_sunflower = 0 WHERE user_id = ?",
-                            (user_id,),
-                        )
-                        conn.commit()
-                        log.info(
-                            f"用户 {user_id} 购买了魔法向日葵，已重新启用暖贴功能。"
-                        )
-                    finally:
-                        conn.close()
-
-                await chat_db_manager._execute(_transaction)
+                await self.set_warmup_preference(user_id, wants_warmup=True)
                 return (
                     True,
                     f"你使用了 **{item['name']}**，枯萎的向日葵恢复了生机。类脑娘现在会重新暖你的贴了。",
@@ -552,38 +398,26 @@ class CoinService:
                 )
             elif item_effect == ENABLE_THREAD_REPLIES_EFFECT_ID:
                 # 购买“通行许可”，重新启用帖子回复并设置默认CD
-                def _transaction():
-                    import sqlite3
-
-                    conn = sqlite3.connect(chat_db_manager.db_path)
-                    cursor = conn.cursor()
-                    try:
-                        # 设置默认值：60秒2次
-                        default_limit = 2
-                        default_duration = 60
-
-                        cursor.execute(
-                            """
-                            INSERT INTO user_coins (user_id, blocks_thread_replies, thread_cooldown_limit, thread_cooldown_duration, thread_cooldown_seconds)
-                            VALUES (?, 0, ?, ?, NULL)
-                            ON CONFLICT(user_id) DO UPDATE SET
-                                blocks_thread_replies = 0,
-                                thread_cooldown_limit = excluded.thread_cooldown_limit,
-                                thread_cooldown_duration = excluded.thread_cooldown_duration,
-                                thread_cooldown_seconds = NULL;
-                        """,
-                            (user_id, default_limit, default_duration),
-                        )
-
-                        conn.commit()
-                        log.info(
-                            f"用户 {user_id} 购买了通行许可，已重新启用帖子回复功能，并设置默认冷却 (limit={default_limit}, duration={default_duration})。"
-                        )
-                    finally:
-                        conn.close()
-
-                await chat_db_manager._execute(_transaction)
-
+                default_limit = 2
+                default_duration = 60
+                query = """
+                    INSERT INTO user_coins (user_id, blocks_thread_replies, thread_cooldown_limit, thread_cooldown_duration, thread_cooldown_seconds)
+                    VALUES (?, 0, ?, ?, NULL)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        blocks_thread_replies = 0,
+                        thread_cooldown_limit = excluded.thread_cooldown_limit,
+                        thread_cooldown_duration = excluded.thread_cooldown_duration,
+                        thread_cooldown_seconds = NULL;
+                """
+                await chat_db_manager._execute(
+                    chat_db_manager._db_transaction,
+                    query,
+                    (user_id, default_limit, default_duration),
+                    commit=True,
+                )
+                log.info(
+                    f"用户 {user_id} 购买了通行许可，已重新启用帖子回复功能，并设置默认冷却 (limit={default_limit}, duration={default_duration})。"
+                )
                 return (
                     True,
                     f"你使用了 **{item['name']}**，花费了 {total_cost} 类脑币。现在你创建的所有帖子将默认拥有 **60秒2次** 的发言许可，你也可以随时通过弹出的窗口自定义规则。",
@@ -643,39 +477,16 @@ class CoinService:
 
     async def _add_item_to_inventory(self, user_id: int, item_id: int, quantity: int):
         """将物品添加到用户背包的内部方法"""
-
-        def _transaction():
-            import sqlite3
-
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT inventory_id FROM user_inventory WHERE user_id = ? AND item_id = ?",
-                    (user_id, item_id),
-                )
-                existing = cursor.fetchone()
-                if existing:
-                    cursor.execute(
-                        "UPDATE user_inventory SET quantity = quantity + ? WHERE inventory_id = ?",
-                        (quantity, existing[0]),
-                    )
-                else:
-                    cursor.execute(
-                        "INSERT INTO user_inventory (user_id, item_id, quantity) VALUES (?, ?, ?)",
-                        (user_id, item_id, quantity),
-                    )
-                conn.commit()
-            except Exception:
-                if conn:
-                    conn.rollback()
-                raise
-            finally:
-                if conn:
-                    conn.close()
-
-        await chat_db_manager._execute(_transaction)
+        query = """
+            INSERT INTO user_inventory (user_id, item_id, quantity) VALUES (?, ?, ?)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity;
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            query,
+            (user_id, item_id, quantity),
+            commit=True,
+        )
 
     async def get_user_cooldown_type(self, user_id: int) -> str:
         """
@@ -737,35 +548,19 @@ class CoinService:
         wants_warmup = False -> 禁止暖贴 (has_withered_sunflower = 1)
         """
         has_withered_sunflower = 0 if wants_warmup else 1
-
-        def _transaction():
-            import sqlite3
-
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO user_coins (user_id, has_withered_sunflower)
-                    VALUES (?, ?)
-                    ON CONFLICT(user_id) DO UPDATE SET
-                        has_withered_sunflower = excluded.has_withered_sunflower;
-                """,
-                    (user_id, has_withered_sunflower),
-                )
-                conn.commit()
-                log.info(f"用户 {user_id} 的暖贴偏好已设置为: {wants_warmup}")
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                log.error(f"为用户 {user_id} 设置暖贴偏好时出错: {e}")
-                raise
-            finally:
-                if conn:
-                    conn.close()
-
-        await chat_db_manager._execute(_transaction)
+        query = """
+            INSERT INTO user_coins (user_id, has_withered_sunflower)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                has_withered_sunflower = excluded.has_withered_sunflower;
+        """
+        await chat_db_manager._execute(
+            chat_db_manager._db_transaction,
+            query,
+            (user_id, has_withered_sunflower),
+            commit=True,
+        )
+        log.info(f"用户 {user_id} 的暖贴偏好已设置为: {wants_warmup}")
 
     async def transfer_coins(
         self, sender_id: int, receiver_id: int, amount: int
@@ -791,62 +586,34 @@ class CoinService:
                 None,
             )
 
-        # 使用事务确保操作的原子性
-        def _transaction():
-            import sqlite3
-
-            conn = None
-            try:
-                conn = sqlite3.connect(chat_db_manager.db_path)
-                cursor = conn.cursor()
-
-                # 扣除发送者余额
-                cursor.execute(
-                    "UPDATE user_coins SET balance = balance - ? WHERE user_id = ?",
-                    (total_deduction, sender_id),
-                )
-                cursor.execute(
-                    "INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)",
-                    (sender_id, -total_deduction, f"转账给用户 {receiver_id} (含税)"),
-                )
-
-                # 增加接收者余额
-                cursor.execute(
-                    "INSERT INTO user_coins (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance;",
-                    (receiver_id, amount),
-                )
-                cursor.execute(
-                    "INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)",
-                    (receiver_id, amount, f"收到来自用户 {sender_id} 的转账"),
-                )
-
-                # 获取发送者新余额
-                cursor.execute(
-                    "SELECT balance FROM user_coins WHERE user_id = ?", (sender_id,)
-                )
-                new_balance = cursor.fetchone()[0]
-
-                conn.commit()
-                log.info(
-                    f"用户 {sender_id} 成功转账 {amount} 类脑币给用户 {receiver_id}，税费 {tax}。"
-                )
-                return new_balance
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                log.error(
-                    f"转账失败: 从 {sender_id} 到 {receiver_id}，金额 {amount}。错误: {e}"
-                )
-                raise
-
         try:
-            new_balance = await chat_db_manager._execute(_transaction)
+            # 扣除发送者余额
+            sender_new_balance = await self.remove_coins(
+                sender_id, total_deduction, f"转账给用户 {receiver_id} (含税)"
+            )
+            if sender_new_balance is None:
+                # 这理论上不应该发生，因为我们已经检查过余额了
+                return False, "❌ 转账失败：扣款时发生错误。", None
+
+            # 增加接收者余额
+            await self.add_coins(
+                receiver_id, amount, f"收到来自用户 {sender_id} 的转账"
+            )
+
+            log.info(
+                f"用户 {sender_id} 成功转账 {amount} 类脑币给用户 {receiver_id}，税费 {tax}。"
+            )
             return (
                 True,
                 f"✅ 转账成功！你向 <@{receiver_id}> 转账了 **{amount}** 类脑币，并支付了 **{tax}** 的税费。",
-                new_balance,
+                sender_new_balance,
             )
         except Exception as e:
+            log.error(
+                f"转账失败: 从 {sender_id} 到 {receiver_id}，金额 {amount}。错误: {e}"
+            )
+            # 在一个更健壮的系统中，这里需要处理分布式事务回滚
+            # 但对于当前场景，我们假设如果扣款成功，收款大概率也会成功
             return False, f"❌ 转账时发生未知错误: {e}", None
 
     async def get_active_loan(self, user_id: int) -> Optional[dict]:

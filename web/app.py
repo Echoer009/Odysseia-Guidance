@@ -22,7 +22,11 @@ app = FastAPI()
 log = logging.getLogger(__name__)
 
 # --- 用户操作锁，防止竞态条件 ---
-user_locks = defaultdict(asyncio.Lock)
+from cachetools import TTLCache
+
+# 创建一个TTL缓存来存储用户锁，TTL设置为1小时（3600秒）
+# maxsize可以根据你的预计并发用户数进行调整
+user_locks = TTLCache(maxsize=1000, ttl=3600)
 
 
 # --- 应用生命周期事件 ---
