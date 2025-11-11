@@ -16,7 +16,7 @@ class WorkConfig:
     pass
 
 
-WORK_EVENTS = [
+SELL_BODY_EVENTS = [
     {
         "event_type": "sell_body",
         "name": "担任足模",
