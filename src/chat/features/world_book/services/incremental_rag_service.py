@@ -64,10 +64,28 @@ def create_text_chunks(text: str, max_chars: int = 1000) -> list[str]:
 
 
 def _format_content_dict(content_dict: dict) -> str:
-    """将 content 字典格式化为多行的 ' - key: value' 字符串列表。"""
+    """将 content 字典格式化为多行的 ' - key: value' 字符串列表，并过滤掉不必要的字段。"""
     if not isinstance(content_dict, dict):
         return [f" - {content_dict}"]
-    return [f" - {key}: {value}" for key, value in content_dict.items()]
+
+    # 定义不应包含在向量化文档中的后端或敏感字段
+    EXCLUDED_FIELDS = [
+        "discord_id",
+        "uploaded_by",
+        "uploaded_by_name",  # 新增：过滤掉上传者姓名
+        "update_target_id",
+        "purchase_info",
+        "item_id",
+        "price",
+    ]
+
+    filtered_lines = []
+    for key, value in content_dict.items():
+        # 新增条件: 确保 value 不为空或 None，从而过滤掉 background: "" 这样的空字段
+        if key not in EXCLUDED_FIELDS and value:
+            filtered_lines.append(f" - {key}: {value}")
+
+    return filtered_lines
 
 
 def _build_text_community_member(entry: dict) -> str:

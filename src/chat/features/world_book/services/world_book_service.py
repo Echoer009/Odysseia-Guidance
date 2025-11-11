@@ -4,11 +4,16 @@ import sqlite3
 import json
 import os
 
+import asyncio
+
 # 导入新的服务依赖
 from src.chat.services.gemini_service import GeminiService, gemini_service
 from src.chat.services.vector_db_service import VectorDBService, vector_db_service
 from src import config
 from src.chat.config import chat_config
+from src.chat.features.world_book.services.incremental_rag_service import (
+    incremental_rag_service,
+)
 
 log = logging.getLogger(__name__)
 
@@ -302,6 +307,13 @@ class WorldBookService:
 
             conn.commit()
             log.info(f"成功添加知识条目: {entry_id} ({title}) 到类别 {category_name}")
+
+            # 异步调用增量RAG服务，将新条目添加到向量数据库
+            log.info(f"正在为新知识条目 {entry_id} 创建异步向量化任务...")
+            asyncio.create_task(
+                incremental_rag_service.process_general_knowledge(entry_id)
+            )
+
             return True
 
         except sqlite3.Error as e:

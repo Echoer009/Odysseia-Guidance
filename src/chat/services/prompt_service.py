@@ -436,10 +436,32 @@ class PromptService:
             elif isinstance(content_value, str):
                 content_str = content_value
 
-            # 过滤掉包含“未提供”的行
-            filtered_lines = [
-                line for line in content_str.split("\n") if "未提供" not in line
+            # 定义不应包含在上下文中的后端或敏感字段
+            EXCLUDED_FIELDS = [
+                "discord_id",
+                "uploaded_by",
+                "update_target_id",
+                "purchase_info",
+                "item_id",
+                "price",
             ]
+
+            # 过滤掉包含“未提供”的行以及在排除列表中的字段
+            filtered_lines = []
+            for line in content_str.split("\n"):
+                # 检查是否包含“未提供”
+                if "未提供" in line:
+                    continue
+                # 检查是否以任何一个被排除的字段开头
+                if any(line.strip().startswith(field) for field in EXCLUDED_FIELDS):
+                    continue
+                # 新增检查：过滤掉冒号后为空的行，例如 "background: "
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    if not value.strip():
+                        continue
+                filtered_lines.append(line)
+
             if not filtered_lines:
                 continue  # 如果过滤后内容为空，则跳过此条目
 

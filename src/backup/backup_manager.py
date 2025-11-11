@@ -60,7 +60,8 @@ def backup_databases():
     for filename in os.listdir(BACKUP_DIR):
         # 备份文件格式为 'chat.db.bak.20251109'
         # 我们要删除所有不包含昨天日期字符串的备份文件
-        if ".bak." in filename and keep_backup_date_format not in filename:
+        # 清理逻辑：只保留当天的备份。删除所有文件名不包含今天日期的备份文件。
+        if ".bak." in filename and backup_date_format not in filename:
             file_to_delete = os.path.join(BACKUP_DIR, filename)
             try:
                 os.remove(file_to_delete)

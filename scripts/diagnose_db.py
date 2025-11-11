@@ -1,68 +1,74 @@
+# -*- coding: utf-8 -*-
 import os
+import sys
 import sqlite3
-from datetime import datetime
+import json
 
-# --- 常量定义 ---
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DB_PATH = os.path.join(_PROJECT_ROOT, "data", "chat.db")
+# --- Project Root Configuration ---
+current_script_path = os.path.abspath(__file__)
+script_dir = os.path.dirname(current_script_path)
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+# --- Path Configuration End ---
+
+# Define the path to the World Book database
+WORLD_BOOK_DB_PATH = os.path.join(project_root, "data", "world_book.sqlite3")
 
 
-def diagnose_and_fix_database():
+def diagnose_community_members():
     """
-    诊断并修复数据库 'file is not a database' 的问题。
-    如果文件损坏或为空，则将其重命名备份。
+    Connects to the SQLite database and prints the raw data from the
+    community_members table to identify potentially corrupt or empty entries.
     """
-    print(f"正在诊断数据库文件: {DB_PATH}")
+    print(f"--- 开始诊断 community_members 表 ---")
+    print(f"数据库路径: {WORLD_BOOK_DB_PATH}")
 
-    if not os.path.exists(DB_PATH):
-        print("数据库文件不存在。程序将在下次启动时自动创建。")
+    if not os.path.exists(WORLD_BOOK_DB_PATH):
+        print(f"错误: 数据库文件未找到 at '{WORLD_BOOK_DB_PATH}'")
         return
 
-    # 检查文件大小是否为0
-    if os.path.getsize(DB_PATH) == 0:
-        print("错误: 数据库文件大小为 0KB，这是一个空文件。")
-        rename_corrupt_db()
-        return
-
-    # 尝试连接数据库并检查完整性
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA integrity_check;")
-        result = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(WORLD_BOOK_DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row  # Allows accessing columns by name
+            cursor = conn.cursor()
 
-        if result[0] == "ok":
-            print("数据库文件状态正常。")
-        else:
-            print(f"数据库完整性检查失败: {result}")
-            print("错误: 数据库文件已损坏。")
-            rename_corrupt_db()
+            print("\n正在查询 community_members 表中的所有记录...")
+            cursor.execute("SELECT id, title, content_json FROM community_members")
+            rows = cursor.fetchall()
 
-    except sqlite3.DatabaseError as e:
-        if "file is not a database" in str(e):
-            print("错误: 确认数据库文件已损坏或格式不正确。")
-            rename_corrupt_db()
-        else:
-            print(f"发生未知的数据库错误: {e}")
+            if not rows:
+                print("表中没有找到任何记录。")
+                return
+
+            print(f"共找到 {len(rows)} 条记录。正在逐条打印详细信息：")
+            print("-" * 40)
+
+            for i, row in enumerate(rows):
+                entry_id = row["id"]
+                title = row["title"]
+                content_json = row["content_json"]
+
+                print(f"记录 #{i + 1}:")
+                print(f"  - ID: {entry_id}")
+                print(f"  - Title: {title}")
+
+                # Try to parse and inspect content_json
+                if content_json:
+                    try:
+                        content = json.loads(content_json)
+                        print(f"  - Content JSON (解析成功): {content}")
+                    except json.JSONDecodeError:
+                        print(f"  - Content JSON (解析失败): {content_json}")
+                else:
+                    print(f"  - Content JSON: (空)")
+
+                print("-" * 40)
+
+    except sqlite3.Error as e:
+        print(f"\n访问数据库时发生 SQLite 错误: {e}")
     except Exception as e:
-        print(f"发生意外错误: {e}")
-
-
-def rename_corrupt_db():
-    """
-    重命名损坏的数据库文件作为备份。
-    """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = f"{DB_PATH}.corrupt.{timestamp}"
-
-    try:
-        os.rename(DB_PATH, backup_path)
-        print(f"已将损坏的数据库文件备份到: {backup_path}")
-        print("下次启动应用程序时，将自动创建一个新的数据库。")
-    except OSError as e:
-        print(f"重命名文件失败: {e}")
+        print(f"\n处理数据时发生未知错误: {e}")
 
 
 if __name__ == "__main__":
-    diagnose_and_fix_database()
+    diagnose_community_members()
