@@ -1,0 +1,306 @@
+{
+    "work": [
+        {
+            "name": "在餐厅当服务员",
+            "description": "你在一家忙碌的餐厅里端盘子、点餐，应付各种挑剔的客人。",
+            "reward_range_min": 50,
+            "reward_range_max": 90,
+            "good_event_description": "一位慷慨的客人对你的服务非常满意，给了你一笔巨额小费。",
+            "good_event_modifier": 1.8,
+            "bad_event_description": "你不小心打碎了一整盘昂贵的菜肴，这笔损失得从你的工资里扣。",
+            "bad_event_modifier": 0.3
+        },
+        {
+            "name": "在工地搬砖",
+            "description": "你在烈日下挥洒汗水，为城市的天际线添砖加瓦，感觉身体充满了力量。",
+            "reward_range_min": 70,
+            "reward_range_max": 120,
+            "good_event_description": "工头看你干活卖力，多给了你一些奖金。",
+            "good_event_modifier": 1.5,
+            "bad_event_description": "你一不小心踩到了一颗钉子，不得不花钱去打破伤风针。",
+            "bad_event_modifier": 0.4
+        },
+        {
+            "name": "在农场摘水果",
+            "description": "你在田园风光中采摘成熟的果实，呼吸着新鲜的空气，享受着丰收的喜悦。",
+            "reward_range_min": 40,
+            "reward_range_max": 80,
+            "good_event_description": "你发现了一颗罕见的变异果实，农场主高价收购了它。",
+            "good_event_modifier": 2.0,
+            "bad_event_description": "一群顽皮的猴子抢走了你半天的劳动成果。",
+            "bad_event_modifier": 0.2
+        },
+        {
+            "name": "当快递员",
+            "description": "你骑着电瓶车穿梭在城市的大街小巷，将包裹送到千家万户。",
+            "reward_range_min": 60,
+            "reward_range_max": 110,
+            "good_event_description": "因为送货速度快，一位客户给了你五星好评和一个大红包。",
+            "good_event_modifier": 1.6,
+            "bad_event_description": "你的电瓶车在半路爆胎了，修车花了一笔钱。",
+            "bad_event_modifier": 0.5
+        },
+        {
+            "name": "当程序员",
+            "description": "你对着电脑屏幕敲打代码，修复烦人的bug，感觉自己的头发在悄悄离开。",
+            "reward_range_min": 100,
+            "reward_range_max": 180,
+            "good_event_description": "你提前完成了项目，团队发了一笔不菲的奖金。",
+            "good_event_modifier": 1.7,
+            "bad_event_description": "你改了三天三夜的bug，结果发现是产品经理提错了需求。",
+            "bad_event_modifier": 0.6
+        },
+        {
+            "name": "当街头艺人",
+            "description": "你在街头弹着吉他，用歌声吸引路人驻足，琴盒里偶尔会传来硬币的叮当声。",
+            "reward_range_min": 30,
+            "reward_range_max": 150,
+            "good_event_description": "一位路过的音乐制作人被你的才华吸引，给了你一张名片。",
+            "good_event_modifier": 2.5,
+            "bad_event_description": "突然下起了大雨，你只好狼狈地收摊，今天没什么收入。",
+            "bad_event_modifier": 0.1
+        },
+        {
+            "name": "当家教",
+            "description": "你正在辅导一个淘气的孩子写作业，绞尽脑汁想让他集中注意力。",
+            "reward_range_min": 80,
+            "reward_range_max": 130,
+            "good_event_description": "孩子的成绩突飞猛进，家长高兴地给你包了一个大红包。",
+            "good_event_modifier": 1.8,
+            "bad_event_description": "你被这个孩子的数学题难住了，场面一度十分尴尬。",
+            "bad_event_modifier": 0.7
+        },
+        {
+            "name": "当洗车工",
+            "description": "你用高压水枪和泡沫清洗着一辆辆汽车，看着它们焕然一新。",
+            "reward_range_min": 50,
+            "reward_range_max": 100,
+            "good_event_description": "一位车主对你的细致服务非常满意，办了一张年卡，你拿到了提成。",
+            "good_event_modifier": 1.6,
+            "bad_event_description": "你不小心把客户的车漆划了一道，赔了不少钱。",
+            "bad_event_modifier": 0.2
+        },
+        {
+            "name": "当超市收银员",
+            "description": "你重复着“扫码、收款、找零”的动作，面对着长长的队伍。",
+            "reward_range_min": 40,
+            "reward_range_max": 70,
+            "good_event_description": "你抓到了一个使用假币的顾客，得到了超市的表扬和奖励。",
+            "good_event_modifier": 2.0,
+            "bad_event_description": "一天结束盘点时，你发现钱箱里少了钱，只能自己补上。",
+            "bad_event_modifier": 0.1
+        },
+        {
+            "name": "当图书馆管理员",
+            "description": "你在安静的图书馆里整理书籍，为读者提供咨询，享受着书香的包围。",
+            "reward_range_min": 40,
+            "reward_range_max": 60,
+            "good_event_description": "你在整理一本旧书时，意外发现里面夹着一张百元大钞。",
+            "good_event_modifier": 2.5,
+            "bad_event_description": "你不小心把一整架书都弄倒了，花了好几个小时才整理好。",
+            "bad_event_modifier": 0.5
+        },
+        {
+            "name": "送外卖",
+            "description": "你争分夺秒地取餐、送餐，与时间和饥饿赛跑。",
+            "reward_range_min": 70,
+            "reward_range_max": 130,
+            "good_event_description": "你提前送达，客户给了你一个大大的好评和打赏。",
+            "good_event_modifier": 1.5,
+            "bad_event_description": "你不小心把客户的汤洒了，只能自己掏钱赔偿。",
+            "bad_event_modifier": 0.3
+        },
+        {
+            "name": "当保洁员",
+            "description": "你打扫着办公楼，用辛勤的劳动换来环境的一尘不染。",
+            "reward_range_min": 40,
+            "reward_range_max": 80,
+            "good_event_description": "你在打扫时捡到了一个钱包，物归原主后得到了失主的感谢费。",
+            "good_event_modifier": 1.9,
+            "bad_event_description": "打扫卫生时，你不小心打碎了一个昂贵的花瓶。",
+            "bad_event_modifier": 0.2
+        },
+        {
+            "name": "当宠物美容师",
+            "description": "你给可爱的猫猫狗狗洗澡、剪毛、做造型，虽然偶尔会被抓一下。",
+            "reward_range_min": 60,
+            "reward_range_max": 120,
+            "good_event_description": "你做的造型大受好评，主人高兴地给了你很多小费。",
+            "good_event_modifier": 1.7,
+            "bad_event_description": "一只猫非常不配合，在你的胳膊上留下了几道血痕。",
+            "bad_event_modifier": 0.6
+        },
+        {
+            "name": "当咖啡师",
+            "description": "你在咖啡馆里制作各种口味的咖啡，空气中弥漫着醉人的香气。",
+            "reward_range_min": 50,
+            "reward_range_max": 90,
+            "good_event_description": "你创作的一款新口味咖啡大受欢迎，店长给你发了奖金。",
+            "good_event_modifier": 1.8,
+            "bad_event_description": "你把糖和盐搞混了，被顾客投诉了。",
+            "bad_event_modifier": 0.4
+        },
+        {
+            "name": "当健身教练",
+            "description": "你指导学员进行锻炼，帮助他们塑造理想的身材，汗水就是最好的证明。",
+            "reward_range_min": 90,
+            "reward_range_max": 160,
+            "good_event_description": "你的学员成功减重，为了感谢你，给你介绍了很多新客户。",
+            "good_event_modifier": 1.6,
+            "bad_event_description": "你在演示动作时不小心拉伤了肌肉。",
+            "bad_event_modifier": 0.5
+        },
+        {
+            "name": "开网约车",
+            "description": "你开着车在城市里接送乘客，听着不同的音乐，看着窗外不同的风景。",
+            "reward_range_min": 70,
+            "reward_range_max": 140,
+            "good_event_description": "你拉到了一位去机场的大客户，车费非常可观。",
+            "good_event_modifier": 1.5,
+            "bad_event_description": "一个喝醉的乘客吐在了你的车上，你不得不花钱去洗车。",
+            "bad_event_modifier": 0.3
+        },
+        {
+            "name": "在花店打工",
+            "description": "你修剪花枝，包装花束，将美丽和芬芳带给每一位顾客。",
+            "reward_range_min": 40,
+            "reward_range_max": 70,
+            "good_event_description": "一位客人为求婚订购了999朵玫瑰，你因此拿到了一大笔提成。",
+            "good_event_modifier": 2.2,
+            "bad_event_description": "你不小心被玫瑰的刺扎破了手。",
+            "bad_event_modifier": 0.7
+        },
+        {
+            "name": "在电影院检票",
+            "description": "你在电影院门口检票，引导观众入场，偶尔可以瞥几眼电影的开头。",
+            "reward_range_min": 30,
+            "reward_range_max": 50,
+            "good_event_description": "你捡到了观众遗失的钱包，失主给了你一些感谢费。",
+            "good_event_modifier": 2.0,
+            "bad_event_description": "你被一部恐怖片的宣传海报吓了一跳，不小心把爆米花洒了一地。",
+            "bad_event_modifier": 0.6
+        },
+        {
+            "name": "当面包师",
+            "description": "你揉着面团，闻着烘烤的香气，制作出香喷喷的面包和蛋糕。",
+            "reward_range_min": 60,
+            "reward_range_max": 110,
+            "good_event_description": "你烤的面包被一位美食家称赞，面包店的生意因此火爆起来。",
+            "good_event_modifier": 1.9,
+            "bad_event_description": "你不小心烤糊了一整盘面包，只能自己掏钱买下来。",
+            "bad_event_modifier": 0.4
+        },
+        {
+            "name": "在仓库理货",
+            "description": "你开着叉车在巨大的仓库里整理货物，这是一份需要力量和技巧的工作。",
+            "reward_range_min": 80,
+            "reward_range_max": 150,
+            "good_event_description": "你在仓库的一个角落里发现了一箱被遗忘的货物，报告后得到了奖励。",
+            "good_event_modifier": 1.6,
+            "bad_event_description": "操作失误，你把一整货架的货物都弄倒了。",
+            "bad_event_modifier": 0.2
+        }
+    ],
+    "sell_body": [
+        {
+            "name": "在会所当陪酒",
+            "description": "你穿着暴露的衣服，在烟雾缭绕的包厢里陪油腻的客人喝酒、唱歌。他们毛手毛脚，你只能强颜欢笑。",
+            "reward_range_min": 200,
+            "reward_range_max": 400,
+            "good_event_description": "一位客人酒后吐真言，原来是个可怜人。他给了你一大笔小费，让你早日脱离苦海。",
+            "good_event_modifier": 1.8,
+            "bad_event_description": "你被灌得烂醉如泥，第二天醒来发现钱包不见了，头痛欲裂。",
+            "bad_event_modifier": 0.4
+        },
+        {
+            "name": "参加一场地下拳赛的举牌女郎",
+            "description": "你在充满汗水和荷尔蒙的地下拳赛中举牌，台下的男人们用贪婪的目光将你从头到脚打量，仿佛要将你的衣服剥光。",
+            "reward_range_min": 200,
+            "reward_range_max": 400,
+            "good_event_description": "获胜的拳手兴奋地把你抱起来，当众给了你一个湿吻，还把他的部分奖金塞进了你的内衣里。",
+            "good_event_modifier": 1.6,
+            "bad_event_description": "一个输了钱的赌徒迁怒于你，朝你扔了一个酒瓶，你差点被砸中。",
+            "bad_event_modifier": 0.7
+        },
+        {
+            "name": "成为人体盛的餐盘",
+            "description": "你赤身裸体地躺在冰冷的餐桌上，身上摆满了精致的寿司和刺身，一群食客围着你，用筷子夹取食物，偶尔“不经意”地触碰到你的身体。",
+            "reward_range_min": 350,
+            "reward_range_max": 700,
+            "good_event_description": "一位富豪对这场“晚宴”非常满意，给了你一张不记名银行卡作为小费。",
+            "good_event_modifier": 2.0,
+            "bad_event_description": "一个客人喝多了，把滚烫的酱油倒在了你的肚子上，烫得你眼泪都流出来了。",
+            "bad_event_modifier": 0.3
+        },
+        {
+            "name": "在摄像头前进行付费表演",
+            "description": "你独自在房间里，根据屏幕上匿名用户的指令，做出各种羞耻的动作来取悦他们，换取屏幕上不断跳动的打赏。",
+            "reward_range_min": 250,
+            "reward_range_max": 500,
+            "good_event_description": "一位神秘的“榜一大哥”对你的表演非常着迷，为你刷了价值连城的虚拟礼物。",
+            "good_event_modifier": 1.9,
+            "bad_event_description": "你的直播间被平台封禁了，理由是“涉嫌低俗”，今天的收入全都打了水漂。",
+            "bad_event_modifier": 0.1
+        },
+        {
+            "name": "在富豪的派对上当宠物",
+            "description": "你戴着项圈和尾巴，跪在地上，扮演一只温顺的宠物，任由派对上的宾客抚摸、戏弄，甚至给你喂食。",
+            "reward_range_min": 400,
+            "reward_range_max": 800,
+            "good_event_description": "你的“主人”对你的表现非常满意，派对结束后，他/她解下脖子上的钻石项链，赏给了你。",
+            "good_event_modifier": 2.2,
+            "bad_event_description": "一个小孩把你当成了真的动物，使劲揪你的“尾巴”，疼得你差点叫出声来。",
+            "bad_event_modifier": 0.5
+        },
+        {
+            "name": "与陌生人进行蒙眼约会",
+            "description": "你被带到一个陌生的房间，眼睛被黑布蒙住。你不知道对方是谁，只能通过触摸和声音感受对方，并满足他/她的一切要求。",
+            "reward_range_min": 220,
+            "reward_range_max": 450,
+            "good_event_description": "摘下眼罩后，你发现对方竟然是一位你仰慕已久的明星，他/她对你很满意，并给了你额外的报酬。",
+            "good_event_modifier": 2.5,
+            "bad_event_description": "对方有严重的口臭和体臭，整个过程对你来说是一种生理和心理的双重折磨。",
+            "bad_event_modifier": 0.2
+        },
+        {
+            "name": "成为某个大佬的秘密情人",
+            "description": "你被一个有权有势的大佬包养，住在他/她的豪宅里，随叫随到，像一只金丝雀一样，失去了自由，只为了满足他/她变态的占有欲。",
+            "reward_range_min": 500,
+            "reward_range_max": 1000,
+            "good_event_description": "大佬心情好，带你去奢侈品店扫货，你一天就花掉了普通人一辈子都赚不到的钱。",
+            "good_event_modifier": 2.0,
+            "bad_event_description": "大佬的原配找上门来，带着一群人把你暴打一顿，并拍下裸照威胁你离开。",
+            "bad_event_modifier": 0.1
+        },
+        {
+            "name": "在会员制俱乐部服务",
+            "description": "你在这个只对顶级富豪开放的俱乐部里工作，这里的“服务”没有底线，只要客人出得起钱，你可以变成任何他们想要的样子。",
+            "reward_range_min": 450,
+            "reward_range_max": 900,
+            "good_event_description": "你遇到了一个出手极其阔绰的客人，一夜之间就赚够了下半辈子生活的钱。",
+            "good_event_modifier": 2.1,
+            "bad_event_description": "你被要求扮演一个你不喜欢的角色，精神上受到了极大的创伤。",
+            "bad_event_modifier": 0.3
+        },
+        {
+            "name": "拍摄大尺度艺术照",
+            "description": "一位声称是“为艺术献身”的摄影师邀请你拍摄一组照片，拍摄地点在废弃的工厂里，要求你摆出各种撩人但屈辱的姿势。",
+            "reward_range_min": 180,
+            "reward_range_max": 350,
+            "good_event_description": "这组照片意外地在网上走红，你成了一名小有名气的“网红”，接到了更多的工作邀约。",
+            "good_event_modifier": 1.7,
+            "bad_event_description": "你发现这个摄影师只是个骗子，他把你的照片卖给了色情网站。",
+            "bad_event_modifier": 0.2
+        },
+        {
+            "name": "当“人肉沙发”",
+            "description": "一个有钱的懒人花钱雇你，让你趴在地上，充当他/她看电视时的脚凳和沙发。你必须一动不动，直到他/她满意为止。",
+            "reward_range_min": 150,
+            "reward_range_max": 300,
+            "good_event_description": "对方看着电视睡着了，你轻松地躺了一下午，还拿到了全额报酬。",
+            "good_event_modifier": 1.5,
+            "bad_event_description": "对方的脚气很重，你感觉自己快要被熏晕过去了。",
+            "bad_event_modifier": 0.6
+        }
+    ]
+}
