@@ -513,7 +513,7 @@ class SellBodyButton(discord.ui.Button):
         result = await sell_body_service.perform_sell_body(user_id)
 
         if result["success"]:
-            # 2. 对于成功情况，构建 Embed 并公开发送到频道
+            # 2. 对于成功情况，构建 Embed
             embed_data = result["embed_data"]
             user = interaction.user
 
@@ -532,12 +532,18 @@ class SellBodyButton(discord.ui.Button):
                 embed.set_thumbnail(url=user.display_avatar.url)
             embed.set_footer(text=footer_text)
 
-            # 公开发送 Embed
-            if interaction.channel:
-                await interaction.channel.send(embed=embed)
+            # 检查是否为突发事件（有额外描述）
+            is_special_event = "\n\n" in embed_data["description"]
 
-            # 编辑原始的私密 "Thinking..." 消息，告知用户成功
-            await interaction.edit_original_response(content="✅ 操作成功！")
+            if is_special_event:
+                # 突发事件：公开发送到频道
+                if interaction.channel:
+                    await interaction.channel.send(embed=embed)
+                # 编辑原始的私密 "Thinking..." 消息，告知用户成功
+                await interaction.edit_original_response(content="✅ 操作成功！")
+            else:
+                # 正常事件：以私密方式显示
+                await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             # 3. 对于失败情况，私密地回应用户
             await interaction.followup.send(

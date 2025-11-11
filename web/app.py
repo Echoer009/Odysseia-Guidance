@@ -510,9 +510,12 @@ def calculate_hand_score(hand: List[str]) -> int:
     ace_count = 0
 
     for card in hand:
-        # 从牌的表示中提取牌面值
-        # 假设格式为 "ClubA", "Diamond10" 等
-        rank = card[-1] if len(card) <= 4 else card[4:]  # 处理不同长度的牌名
+        # 修复：正确提取牌面值
+        # 花色长度为5（Heart, Spade, Diamond, Club）
+        if len(card) > 5:
+            rank = card[5:]  # 跳过花色，取牌面值
+        else:
+            rank = card[-1]  # 备用逻辑
 
         if rank in ["J", "Q", "K"]:
             score += 10
@@ -523,12 +526,8 @@ def calculate_hand_score(hand: List[str]) -> int:
             try:
                 score += int(rank)
             except ValueError:
-                # 处理两位数的情况（如10）
-                if rank == "10":
-                    score += 10
-                else:
-                    log.warning(f"无法识别的牌面值: {card}")
-                    pass  # 忽略无效牌
+                log.warning(f"无法识别的牌面值: {card}, 提取的rank: {rank}")
+                continue  # 跳过无效牌，避免计算错误
 
     # 处理A的特殊情况
     while score > 21 and ace_count > 0:
