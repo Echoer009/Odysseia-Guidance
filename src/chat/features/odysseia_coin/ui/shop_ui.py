@@ -23,6 +23,7 @@ from src.chat.features.events.ui.event_panel_view import EventPanelView
 from src.chat.features.work_game.services.work_service import WorkService
 from src.chat.features.work_game.services.sell_body_service import SellBodyService
 from src.chat.features.work_game.services.work_db_service import WorkDBService
+from .leaderboard_ui import LeaderboardView
 
 log = logging.getLogger(__name__)
 
@@ -289,6 +290,7 @@ class SimpleShopView(discord.ui.View):
         self.add_item(LoanButton())
         self.add_item(WorkButton())
         self.add_item(SellBodyButton())
+        self.add_item(LeaderboardButton())
         # --- 动态添加入口 ---
         if event_service.get_active_event():
             self.add_item(EventButton())
@@ -549,6 +551,19 @@ class SellBodyButton(discord.ui.Button):
             await interaction.followup.send(
                 f"<@{user_id}> {result['message']}", ephemeral=True
             )
+
+
+class LeaderboardButton(discord.ui.Button):
+    """排行榜按钮"""
+
+    def __init__(self):
+        super().__init__(label="排行榜", style=discord.ButtonStyle.primary, emoji="🏆")
+
+    async def callback(self, interaction: discord.Interaction):
+        """打开排行榜界面"""
+        leaderboard_view = LeaderboardView(self.view.bot, self.view.author, self.view)
+        embed = await leaderboard_view.create_leaderboard_embed()
+        await interaction.response.edit_message(embed=embed, view=leaderboard_view)
 
 
 class PurchaseButton(discord.ui.Button):
