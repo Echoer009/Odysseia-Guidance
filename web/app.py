@@ -2,8 +2,6 @@ import os
 import httpx
 import logging
 import asyncio
-import json
-from collections import defaultdict
 from typing import List
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
@@ -504,30 +502,76 @@ async def verify_game_state(
         )
 
 
+def extract_card_rank(card: str) -> str:
+    """安全提取牌面值，处理所有花色长度和格式"""
+    if not card or not isinstance(card, str):
+        raise ValueError(f"无效的牌: {card}")
+
+    # 所有可能的花色前缀及其长度
+    suits = {"Diamond": 7, "Heart": 5, "Spade": 5, "Club": 4}
+
+    # 按长度降序排列，优先匹配长的花色（避免Diamond被误匹配）
+    sorted_suits = sorted(suits.items(), key=lambda x: x[1], reverse=True)
+
+    for suit_name, suit_length in sorted_suits:
+        if card.startswith(suit_name):
+            rank = card[suit_length:]
+            # 验证提取的rank是否有效
+            if rank in [
+                "A",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "J",
+                "Q",
+                "K",
+            ]:
+                return rank
+            else:
+                raise ValueError(f"无效的牌面值: {card}, 提取的rank: {rank}")
+
+    # 如果没有匹配到已知花色，尝试从末尾提取数字/字母
+    # 备用逻辑：处理可能的异常格式
+    if len(card) >= 1:
+        rank = card[-1]
+        if rank in ["A", "J", "Q", "K"]:
+            return rank
+        elif rank.isdigit():
+            # 尝试提取最后两位数字（处理10）
+            if len(card) >= 2 and card[-2].isdigit():
+                rank = card[-2:]
+                if rank == "10":
+                    return rank
+            return rank
+
+    raise ValueError(f"无法解析的牌格式: {card}")
+
+
 def calculate_hand_score(hand: List[str]) -> int:
     """计算手牌点数"""
     score = 0
     ace_count = 0
 
     for card in hand:
-        # 修复：正确提取牌面值
-        # 花色长度为5（Heart, Spade, Diamond, Club）
-        if len(card) > 5:
-            rank = card[5:]  # 跳过花色，取牌面值
-        else:
-            rank = card[-1]  # 备用逻辑
+        try:
+            rank = extract_card_rank(card)
 
-        if rank in ["J", "Q", "K"]:
-            score += 10
-        elif rank == "A":
-            score += 11
-            ace_count += 1
-        else:
-            try:
+            if rank in ["J", "Q", "K"]:
+                score += 10
+            elif rank == "A":
+                score += 11
+                ace_count += 1
+            else:
                 score += int(rank)
-            except ValueError:
-                log.warning(f"无法识别的牌面值: {card}, 提取的rank: {rank}")
-                continue  # 跳过无效牌，避免计算错误
+        except ValueError as e:
+            log.warning(str(e))
+            continue  # 跳过无效牌
 
     # 处理A的特殊情况
     while score > 21 and ace_count > 0:
