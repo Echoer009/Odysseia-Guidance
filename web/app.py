@@ -182,14 +182,6 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
     log.info(f"正在获取用户 {user_id} 的余额")
     try:
         # --- 新增：在加载游戏时，自动清理该用户任何卡住的旧游戏 ---
-        async with user_locks[user_id]:
-            stale_game = await blackjack_service.get_active_game(user_id)
-            if stale_game:
-                log.warning(
-                    f"检测到用户 {user_id} 有一个赌注为 {stale_game.bet_amount} 的遗留游戏。将在加载时自动将其删除。"
-                )
-                await blackjack_service.delete_game(user_id)
-
         balance = await coin_service.get_balance(user_id)
 
         # --- 安全检查和日志记录 ---
@@ -235,6 +227,9 @@ async def place_bet(
     log.info(f"用户 {user_id} 正在下注 {bet_amount}")
     async with user_locks[user_id]:
         try:
+            # --- 新增：在下注前，清理任何可能存在的遗留游戏 ---
+            await blackjack_service.cleanup_legacy_game(user_id)
+
             # 🔒 关键安全检查：防止游戏中途下注
             active_game = await blackjack_service.get_active_game(user_id)
             if active_game:

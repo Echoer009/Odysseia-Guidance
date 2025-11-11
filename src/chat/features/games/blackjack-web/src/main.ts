@@ -73,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let dealerHasSoftAce = false;
     let gameInProgress = false;
     let isSettling = false; // 防止重复结算的状态锁
+    let isPlacingBet = false; // 防止重复下注的状态锁
     let accessToken: string | null = null;
     let currentBalance = 0;
     let currentBet = 0;
@@ -259,6 +260,8 @@ document.addEventListener('DOMContentLoaded', () => {
         playerScore = playerResult.score;
         updateScoreDisplay();
         if (playerScore > 21) {
+            hitButton.disabled = true;
+            standButton.disabled = true;
             uiManager.showDialogue('player_bust');
             determineWinner();
         }
@@ -449,11 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
     doubleButton.addEventListener('click', doubleDown);
     betButton.addEventListener('click', () => handleBet(false));
     function continueWithSameBet(): void {
+        if (isSettling || isPlacingBet) {
+            console.warn("无法开始新游戏，因为前一局游戏仍在结算或下注中。");
+            return;
+        }
         if (countdownInterval) {
             clearInterval(countdownInterval);
             countdownInterval = null;
         }
-        isSettling = false; // 重置结算状态锁，允许在新游戏中进行操作
         // Start new game with the same bet
         handleBet(true);
     }
@@ -559,6 +565,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleBet(isRetry = false) {
+        if (isPlacingBet) {
+            console.warn("下注请求已在进行中，请勿重复操作。");
+            return;
+        }
+
         const amount = isRetry ? currentBet : parseInt(betAmountInput.value, 10);
         if (isNaN(amount) || amount <= 0) {
             uiManager.showDialogue('invalid_bet');
@@ -569,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        isPlacingBet = true; // 设置下注锁
         betButton.disabled = true;
         betAmountInput.disabled = true;
         const isAllIn = amount === currentBalance;
@@ -586,6 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentBalance -= amount;
             balanceEl.textContent = currentBalance.toString();
             startAfterBet();
+            isPlacingBet = false; // 非嵌入模式下快速解锁
         } else {
             try {
                 const response = await apiCall('/api/game/bet', 'POST', { amount });
@@ -599,6 +612,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 显示更友好的错误信息
                 uiManager.updateMessages(error.message || '下注失败了，你真是个笨蛋~❤');
                 resetGame();
+            } finally {
+                isPlacingBet = false; // 确保在API调用后解锁
             }
         }
     }

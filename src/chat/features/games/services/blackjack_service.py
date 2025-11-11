@@ -78,14 +78,6 @@ class BlackjackService:
         为用户创建新的游戏记录。如果游戏已存在，则替换它。
         如果创建成功，则返回新游戏，否则返回None。
         """
-        # 检查是否存在游戏，以便记录被没收的赌注
-        existing_game = await self.get_active_game(user_id)
-        if existing_game:
-            log.warning(
-                f"用户 {user_id} 有一个赌注为 {existing_game.bet_amount} 的遗留游戏。该赌注已被没收。"
-                f"正在创建新游戏..."
-            )
-
         # 使用 "REPLACE INTO" 原子地处理游戏的创建/替换
         # 这可以防止在删除旧游戏和创建新游戏之间出现竞态条件
         await self._db_manager._execute(
@@ -170,6 +162,33 @@ class BlackjackService:
             return True
         log.warning(f"尝试为用户 {user_id} 删除游戏，但未找到活跃游戏。")
         return False
+
+    async def cleanup_legacy_game(self, user_id: int):
+        """在用户开始新游戏前，清理该用户任何未完成的旧游戏并没收赌注。"""
+        # 查找用户的所有现有游戏记录
+        row = await self._db_manager._execute(
+            self._db_manager._db_transaction,
+            "SELECT bet_amount FROM blackjack_games WHERE user_id = ?",
+            (user_id,),
+            fetch="one",
+        )
+
+        if row:
+            log.info(f"正在为用户 {user_id} 清理遗留游戏...")
+            bet_amount = row[0]
+            log.warning(
+                f"检测到用户 {user_id} 有一个赌注为 {bet_amount} 的遗留游戏。该赌注将被没收。"
+            )
+            try:
+                # 删除游戏记录，赌注不予退还
+                await self.delete_game(user_id)
+                log.info(
+                    f"已成功为用户 {user_id} 清理遗留游戏，赌注 {bet_amount} 已被没收。"
+                )
+            except Exception as e:
+                log.error(
+                    f"为用户 {user_id} 清理遗留游戏失败。错误: {e}", exc_info=True
+                )
 
 
 # --- Singleton Instance ---
