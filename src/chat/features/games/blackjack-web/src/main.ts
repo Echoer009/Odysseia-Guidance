@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
     standButton.addEventListener('click', stand);
     doubleButton.addEventListener('click', doubleDown);
     betButton.addEventListener('click', () => handleBet(false));
-    function continueWithSameBet(): void {
+    async function continueWithSameBet(): Promise<void> {
         if (isSettling || isPlacingBet) {
             console.warn("无法开始新游戏，因为前一局游戏仍在结算或下注中。");
             return;
@@ -463,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             countdownInterval = null;
         }
         // Start new game with the same bet
-        handleBet(true);
+        await handleBet(true);
     }
 
     continueGameButton.addEventListener('click', continueWithSameBet);
