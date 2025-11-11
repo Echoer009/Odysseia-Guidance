@@ -2,10 +2,43 @@ import logging
 from typing import Dict, Any
 import sqlite3
 import os
+import asyncio
+from functools import wraps
 
 from src import config
 from src.chat.services.gemini_service import gemini_service
 from src.chat.services.vector_db_service import vector_db_service
+
+
+def async_retry(retries=3, delay=5):
+    """
+    一个异步函数的重试装饰器。
+
+    Args:
+        retries (int): 最大重试次数。
+        delay (int): 每次重试之间的延迟秒数。
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            for attempt in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    log.warning(
+                        f"函数 {func.__name__} 第 {attempt + 1} 次执行失败: {e}"
+                    )
+                    if attempt + 1 == retries:
+                        log.error(
+                            f"函数 {func.__name__} 在 {retries} 次尝试后最终失败。"
+                        )
+                        raise
+                    await asyncio.sleep(delay)
+
+        return wrapper
+
+    return decorator
 
 
 # 复制必要的函数，避免导入路径问题
@@ -71,6 +104,7 @@ def _format_content_dict(content_dict: dict) -> str:
     # 定义不应包含在向量化文档中的后端或敏感字段
     EXCLUDED_FIELDS = [
         "discord_id",
+        "discord_number_id",  # 新增：过滤掉数字ID，防止泄露到RAG上下文
         "uploaded_by",
         "uploaded_by_name",  # 新增：过滤掉上传者姓名
         "update_target_id",
@@ -207,6 +241,7 @@ class IncrementalRAGService:
             log.error(f"连接到世界书数据库失败: {e}", exc_info=True)
             return None
 
+    @async_retry(retries=3, delay=5)
     async def process_community_member(self, member_id: str) -> bool:
         """
         处理单个社区成员档案，将其添加到向量数据库
@@ -391,6 +426,7 @@ class IncrementalRAGService:
             log.error(f"处理条目 {entry_id} 时发生错误: {e}", exc_info=True)
             return False
 
+    @async_retry(retries=3, delay=5)
     async def process_general_knowledge(self, entry_id: str) -> bool:
         """
         处理单个通用知识条目，将其添加到向量数据库

@@ -120,6 +120,7 @@ def _format_content_dict(content_dict: dict) -> str:
     # 定义不应包含在向量化文档中的后端或敏感字段
     EXCLUDED_FIELDS = [
         "discord_id",
+        "discord_number_id",  # 新增：与增量服务同步，过滤掉数字ID
         "uploaded_by",
         "uploaded_by_name",  # 新增：过滤掉上传者姓名
         "update_target_id",

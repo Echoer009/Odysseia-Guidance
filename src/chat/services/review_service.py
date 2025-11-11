@@ -67,9 +67,7 @@ class ReviewService:
             if entry_type == "general_knowledge":
                 await self._start_general_knowledge_review(entry, data)
             elif entry_type == "community_member":
-                # 注意：社区成员的审核流程UI尚未完全分离，暂时复用通用知识的
-                # 未来可以创建一个 _start_community_member_review
-                await self._start_general_knowledge_review(entry, data)
+                await self._start_community_member_review(entry, data)
             elif entry_type == "work_event":
                 await self._start_work_event_review(entry, data)
             else:
@@ -117,7 +115,7 @@ class ReviewService:
             title="我收到了一张小纸条！",
             description=(
                 f"**{proposer.display_name}** 递给我一张纸条，上面写着关于 **{title}** 的知识，大家觉得内容怎么样？\n\n"
-                f"*审核将在{duration}分钟后自动结束。*"
+                f"*咱有 {duration} 分钟的时间来决定哦！*"
             ),
             color=discord.Color.orange(),
         )
@@ -157,11 +155,93 @@ class ReviewService:
         embed.add_field(name="内容预览", value=preview_content, inline=False)
 
         rules_text = (
-            f"投票规则: {VOTE_EMOJI} 达到{approval_threshold}个通过 | "
+            f"投票小贴士: {VOTE_EMOJI} 达到{approval_threshold}个通过 | "
             f"{VOTE_EMOJI} {duration}分钟内达到{instant_approval_threshold}个立即通过 | "
             f"{REJECT_EMOJI} 达到{rejection_threshold}个否决"
         )
-        footer_text = f"提交者: {proposer.display_name} (ID: {proposer.id}) | 审核ID: {entry['id']} | {rules_text}"
+        footer_text = f"递纸条的人: {proposer.display_name} | 纸条ID: {entry['id']} | {rules_text}"
+        embed.set_footer(text=footer_text)
+        embed.timestamp = datetime.fromisoformat(entry["created_at"])
+        return embed
+
+    async def _start_community_member_review(
+        self, entry: sqlite3.Row, data: Dict[str, Any]
+    ):
+        """为社区成员档案发起审核"""
+        proposer = await self.bot.fetch_user(entry["proposer_id"])
+        embed = self._build_community_member_embed(entry, data, proposer)
+
+        review_channel_id = entry["channel_id"]
+        channel = self.bot.get_channel(review_channel_id)
+        if not channel:
+            log.error(f"找不到提交时所在的频道 ID: {review_channel_id}")
+            return
+
+        review_message = await channel.send(embed=embed)
+        await self._update_message_id(entry["id"], review_message.id)
+
+    def _build_community_member_embed(
+        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User
+    ) -> discord.Embed:
+        """构建社区成员档案提交的审核 Embed"""
+        review_settings = self._get_review_settings(entry["entry_type"])
+        duration = review_settings["review_duration_minutes"]
+        approval_threshold = review_settings["approval_threshold"]
+        instant_approval_threshold = review_settings["instant_approval_threshold"]
+        rejection_threshold = review_settings["rejection_threshold"]
+        name = data.get("name", "未知姓名")
+
+        # --- 判断是自我介绍还是他人介绍 ---
+        is_self_introduction = str(data.get("discord_number_id")) == str(proposer.id)
+
+        if is_self_introduction:
+            title = "✨ 一份新的自我介绍！"
+            description = (
+                f"**{proposer.display_name}** 提交了一份关于自己的个人名片，大家快来看看吧！\n\n"
+                f"*咱有 {duration} 分钟的时间来决定哦！*"
+            )
+        else:
+            title = "💌 收到一份新的社区成员名片！"
+            description = (
+                f"**{proposer.display_name}** 向我介绍了一位新朋友 **{name}**，大家快来看看这份名片吧！\n\n"
+                f"*咱有 {duration} 分钟的时间来决定哦！*"
+            )
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=discord.Color.blue(),
+        )
+        embed.add_field(name="类别", value="社区成员", inline=True)
+        embed.add_field(name="姓名", value=name, inline=False)
+
+        preview_parts = []
+        personality = data.get("personality")
+        background = data.get("background")
+        preferences = data.get("preferences")
+
+        if personality:
+            preview_parts.append(f"**性格:** {personality}")
+        if background:
+            preview_parts.append(f"**背景:** {background}")
+        if preferences:
+            preview_parts.append(f"**偏好:** {preferences}")
+
+        if preview_parts:
+            preview_content = "\n".join(preview_parts)
+        else:
+            preview_content = "没有提供额外信息。"
+
+        embed.add_field(name="内容预览", value=preview_content, inline=False)
+
+        rules_text = (
+            f"投票小贴士: {VOTE_EMOJI} 达到{approval_threshold}个通过 | "
+            f"{VOTE_EMOJI} {duration}分钟内达到{instant_approval_threshold}个立即通过 | "
+            f"{REJECT_EMOJI} 达到{rejection_threshold}个否决"
+        )
+        footer_text = (
+            f"推荐人: {proposer.display_name} | 名片ID: {entry['id']} | {rules_text}"
+        )
         embed.set_footer(text=footer_text)
         embed.timestamp = datetime.fromisoformat(entry["created_at"])
         return embed
@@ -189,7 +269,7 @@ class ReviewService:
 
         embed = discord.Embed(
             title="🥵 拉皮条!",
-            description=f"**{proposer.display_name}** 提交了一个新的事件，大家看看怎么样？\n\n*审核将在{duration}分钟后自动结束。*",
+            description=f"**{proposer.display_name}** 提交了一个新的事件，大家看看怎么样？\n\n*咱有 {duration} 分钟的时间来决定哦！*",
             color=discord.Color.from_rgb(255, 182, 193),  # Light Pink
         )
 
@@ -211,12 +291,12 @@ class ReviewService:
             )
 
         rules_text = (
-            f"投票规则: {review_settings['vote_emoji']} 达到{review_settings['approval_threshold']}个通过 | "
+            f"投票小贴士: {review_settings['vote_emoji']} 达到{review_settings['approval_threshold']}个通过 | "
             f"{review_settings['vote_emoji']} {duration}分钟内达到{review_settings['instant_approval_threshold']}个立即通过 | "
             f"{review_settings['reject_emoji']} 达到{review_settings['rejection_threshold']}个否决"
         )
         footer_text = (
-            f"提交者: {proposer.display_name} | 审核ID: {entry['id']} | {rules_text}"
+            f"拉皮条的: {proposer.display_name} | 事件ID: {entry['id']} | {rules_text}"
         )
         embed.set_footer(text=footer_text)
         embed.timestamp = datetime.fromisoformat(entry["created_at"])
@@ -258,7 +338,7 @@ class ReviewService:
             return
 
         embed = message.embeds[0]
-        match = re.search(r"审核ID: (\d+)", embed.footer.text or "")
+        match = re.search(r"(?:纸条|名片|事件)ID: (\d+)", embed.footer.text or "")
         if not match:
             return
 
@@ -270,7 +350,7 @@ class ReviewService:
 
     def _get_review_settings(self, entry_type: str) -> dict:
         """根据条目类型获取对应的审核配置"""
-        if entry_type == "personal_profile":
+        if entry_type == "community_member":
             return chat_config.WORLD_BOOK_CONFIG.get(
                 "personal_profile_review_settings", REVIEW_SETTINGS
             )
@@ -381,8 +461,8 @@ class ReviewService:
                 log.info(
                     f"已创建通用知识条目 {new_entry_id} (源自审核 #{pending_id})。"
                 )
-                embed_title = "✅ 世界之书知识已入库"
-                embed_description = f"感谢社区的审核！标题为 **{data['title']}** 的贡献已成功添加到世界之书中。"
+                embed_title = "✅ 新知识Get！"
+                embed_description = f"大家的意见咱都收到啦！关于 **{data['title']}** 的新知识已经被我记在小本本上啦！"
 
             elif entry_type == "community_member":
                 clean_name = re.sub(r"[^\w\u4e00-\u9fff]", "_", data["name"])[:50]
@@ -421,8 +501,10 @@ class ReviewService:
                         )
                     log.info(f"为成员 {new_entry_id} 插入了 {len(nicknames)} 个昵称。")
 
-                embed_title = "✅ 社区成员档案已更新"
-                embed_description = f"感谢大家的审核！ **{data['name']}** 的个人档案已经成功收录进世界之书！"
+                embed_title = "✅ 新的名片已收录！"
+                embed_description = (
+                    f"大家的意见咱都收到啦！ **{data['name']}** 我已经记住他们啦！"
+                )
 
             elif entry_type == "work_event":
                 work_db_service = WorkDBService()
@@ -431,10 +513,8 @@ class ReviewService:
                     new_entry_id = (
                         f"work_event_{data['name']}"  # 模拟一个ID用于后续流程
                     )
-                    embed_title = "✅ 新的事件已添加！"
-                    embed_description = (
-                        f"感谢社区！自定义事件 **{data['name']}** 现已加入事件池。"
-                    )
+                    embed_title = "✅ 新活儿来啦！"
+                    embed_description = f"好耶！**{data['name']}** 这个新事件已经被添加到事件池里啦，大家又有新活儿干了！"
                 else:
                     log.error(f"将自定义事件 #{pending_id} 添加到数据库时失败。")
                     # 可以选择在这里否决条目或重试
@@ -497,15 +577,15 @@ class ReviewService:
                 try:
                     user = await self.bot.fetch_user(user_id)
                     embed = discord.Embed(
-                        title="【审核结果通知】",
-                        description=f"抱歉，您提交的 **{data.get('name', '未知档案')}** 未能通过社区审核。",
+                        title="【呜...有个坏消息】",
+                        description=f"那个...你提交的 **{data.get('name', '未知档案')}** 大家好像不太满意，没能通过...别灰心嘛！",
                         color=discord.Color.red(),
                     )
                     embed.add_field(
-                        name="退款通知",
-                        value=f"您购买时支付的 **{price}** 类脑币已自动还到您的账户。",
+                        name="钱钱还你啦",
+                        value=f"买这个花掉的 **{price}** 类脑币，我已经偷偷塞回你的口袋里啦。",
                     )
-                    embed.set_footer(text="感谢您的参与！")
+                    embed.set_footer(text="下次再试试看嘛！")
                     await user.send(embed=embed)
                     log.info(f"已向用户 {user_id} 发送退款通知。")
                 except discord.Forbidden:
@@ -545,10 +625,8 @@ class ReviewService:
                     else "未知贡献"
                 )
                 new_embed = original_embed.copy()
-                new_embed.title = "❌ 世界之书贡献"
-                new_embed.description = (
-                    f"标题为 **{data_name}** 的贡献提交未通过审核。\n**原因:** {reason}"
-                )
+                new_embed.title = "❌ 这份投稿好像不太行..."
+                new_embed.description = f"关于 **{data_name}** 的投稿没能通过大家的考验... \n**原因:** {reason}"
                 new_embed.color = discord.Color.red()
                 await message.edit(embed=new_embed)
 
@@ -590,7 +668,11 @@ class ReviewService:
                             f"过期条目 #{entry['id']} 有一个无效的 message_id ({entry['message_id']})。将直接否决。"
                         )
                         await self.reject_entry(
-                            entry["id"], entry, None, conn, "审核消息发送失败"
+                            entry["id"],
+                            entry,
+                            None,
+                            conn,
+                            "呜，我好像把投票消息弄丢了...",
                         )
                         continue
 
@@ -621,14 +703,18 @@ class ReviewService:
                     else:
                         log.info(f"过期审核ID #{entry['id']} 未满足通过条件。")
                         await self.reject_entry(
-                            entry["id"], entry, message, conn, "审核时间结束，票数不足"
+                            entry["id"],
+                            entry,
+                            message,
+                            conn,
+                            "时间到了，但是大家好像还没决定好...",
                         )
                 except discord.NotFound:
                     log.warning(
                         f"找不到审核消息 {entry['message_id']}，将直接否决条目 #{entry['id']}"
                     )
                     await self.reject_entry(
-                        entry["id"], entry, None, conn, "审核消息丢失"
+                        entry["id"], entry, None, conn, "哎呀，投票消息不见了！"
                     )
                 except Exception as e:
                     log.error(
