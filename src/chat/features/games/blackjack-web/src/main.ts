@@ -457,7 +457,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         // 立即设置状态锁，这会使后续的快速点击直接在上方的检查中返回，从而实现“只响应一次”的效果。
-        isPlacingBet = true;
         if (countdownInterval) {
             clearInterval(countdownInterval);
             countdownInterval = null;
