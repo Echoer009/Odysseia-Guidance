@@ -25,6 +25,7 @@ class WorkDBService:
             "work_count_today": 0,
             "sell_body_count_today": 0,
             "last_count_date": None,
+            "total_sell_body_count": 0,
         }
 
     async def _reset_daily_counts_if_needed(self, status: dict) -> dict:
@@ -108,6 +109,7 @@ class WorkDBService:
         status = await self._reset_daily_counts_if_needed(status)
 
         status["sell_body_count_today"] += 1
+        status["total_sell_body_count"] = status.get("total_sell_body_count", 0) + 1
         status["last_sell_body_timestamp"] = now
 
         await self._update_user_work_status_from_dict(user_id, status)
@@ -161,8 +163,9 @@ class WorkDBService:
         query = """
             INSERT INTO user_work_status (
                 user_id, last_work_timestamp, consecutive_work_days, last_streak_date,
-                last_sell_body_timestamp, work_count_today, sell_body_count_today, last_count_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                last_sell_body_timestamp, work_count_today, sell_body_count_today, last_count_date,
+                total_sell_body_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
                 last_work_timestamp = excluded.last_work_timestamp,
                 consecutive_work_days = excluded.consecutive_work_days,
@@ -170,7 +173,8 @@ class WorkDBService:
                 last_sell_body_timestamp = excluded.last_sell_body_timestamp,
                 work_count_today = excluded.work_count_today,
                 sell_body_count_today = excluded.sell_body_count_today,
-                last_count_date = excluded.last_count_date;
+                last_count_date = excluded.last_count_date,
+                total_sell_body_count = excluded.total_sell_body_count;
         """
         params = (
             user_id,
@@ -181,6 +185,7 @@ class WorkDBService:
             status.get("work_count_today"),
             status.get("sell_body_count_today"),
             status.get("last_count_date"),
+            status.get("total_sell_body_count"),
         )
         await chat_db_manager._execute(
             chat_db_manager._db_transaction, query, params, commit=True

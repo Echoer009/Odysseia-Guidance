@@ -425,6 +425,12 @@ class ChatDatabaseManager:
                 )
                 log.info("已向 user_work_status 表添加 last_count_date 列。")
 
+            if "total_sell_body_count" not in columns_work:
+                cursor.execute(
+                    "ALTER TABLE user_work_status ADD COLUMN total_sell_body_count INTEGER NOT NULL DEFAULT 0;"
+                )
+                log.info("已向 user_work_status 表添加 total_sell_body_count 列。")
+
             # --- 打工/卖屁股事件表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS work_events (

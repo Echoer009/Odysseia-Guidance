@@ -90,10 +90,10 @@ class LeaderboardView(discord.ui.View):
     async def get_sell_body_leaderboard(self, limit: int = 20) -> List[Dict[str, Any]]:
         """获取卖屁股次数排行榜数据"""
         query = """
-            SELECT user_id, sell_body_count_today 
-            FROM user_work_status 
-            WHERE sell_body_count_today > 0 
-            ORDER BY sell_body_count_today DESC 
+            SELECT user_id, total_sell_body_count
+            FROM user_work_status
+            WHERE total_sell_body_count > 0
+            ORDER BY total_sell_body_count DESC
             LIMIT ?
         """
         results = await chat_db_manager._execute(
@@ -111,7 +111,7 @@ class LeaderboardView(discord.ui.View):
                             "rank": rank,
                             "user_id": row["user_id"],
                             "username": user.display_name,
-                            "value": row["sell_body_count_today"],
+                            "value": row["total_sell_body_count"],
                         }
                     )
                     rank += 1
