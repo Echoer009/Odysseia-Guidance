@@ -1,7 +1,5 @@
 import discord
 import logging
-import asyncio
-import uuid
 from typing import List, Dict, Any
 
 from discord.ext import commands
@@ -15,7 +13,6 @@ from src.chat.features.odysseia_coin.service.coin_service import (
 )
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
 from src.chat.utils.database import chat_db_manager
-from src.chat.features.world_book.services.world_book_service import world_book_service
 from src.chat.config import chat_config
 from src.chat.features.affection.service.gift_service import GiftService
 from src.chat.features.affection.service.affection_service import affection_service
@@ -565,7 +562,7 @@ class PurchaseButton(discord.ui.Button):
     async def handle_personal_memory_purchase(
         self, interaction: discord.Interaction, item: Dict[str, Any]
     ):
-        """处理个人记忆商品的购买，采用先开模态框后扣款的逻辑"""
+        """处理个人记忆商品的购买，关注点分离后的版本"""
         # 1. 检查余额
         current_balance = await coin_service.get_balance(interaction.user.id)
         if current_balance < item["price"]:
@@ -575,141 +572,16 @@ class PurchaseButton(discord.ui.Button):
             )
             return
 
-        # 2. 创建一个带唯一ID的模态框
-        from src.chat.features.personal_memory.ui.profile_modal import ProfileEditModal
+        # 2. 弹出新的专用模态框
+        from src.chat.features.personal_memory.ui.profile_purchase_modal import (
+            PersonalProfilePurchaseModal,
+        )
 
-        unique_id = f"personal_profile_edit_modal_{uuid.uuid4()}"
-        modal = ProfileEditModal(custom_id=unique_id)
+        purchase_info = {"item_id": item["item_id"], "price": item["price"]}
+        modal = PersonalProfilePurchaseModal(purchase_info=purchase_info)
+
         await interaction.response.send_modal(modal)
-
-        try:
-            # 3. 等待模态框提交
-            modal_interaction: discord.Interaction = await self.view.bot.wait_for(
-                "interaction",
-                check=lambda i: i.type == discord.InteractionType.modal_submit
-                and i.data.get("custom_id") == unique_id,
-                timeout=300.0,  # 5分钟超时
-            )
-
-            # 4. 用户提交后，先扣款
-            await modal_interaction.response.defer(ephemeral=True)
-
-            success, message, new_balance, _, _ = await coin_service.purchase_item(
-                interaction.user.id,
-                interaction.guild.id if interaction.guild else 0,
-                item["item_id"],
-            )
-
-            if not success:
-                await modal_interaction.followup.send(
-                    f"购买失败：{message}", ephemeral=True
-                )
-                return
-
-            # 5. 扣款成功后，保存个人档案
-            components = modal_interaction.data.get("components", [])
-            values_by_id = {
-                comp["components"][0]["custom_id"]: comp["components"][0]["value"]
-                for comp in components
-                if comp.get("components") and comp["components"]
-            }
-            profile_data = {
-                "name": values_by_id.get("name", "").strip(),
-                "personality": values_by_id.get("personality", "").strip(),
-                "background": values_by_id.get("background", "").strip(),
-                "preferences": values_by_id.get("preferences", "").strip(),
-                "discord_id": str(interaction.user.id),
-                "uploaded_by": interaction.user.id,
-                "uploaded_by_name": interaction.user.display_name,
-                "update_target_id": str(
-                    interaction.user.id
-                ),  # 商店购买总是首次创建或覆盖
-            }
-
-            if not profile_data["name"] or not profile_data["personality"]:
-                await modal_interaction.followup.send(
-                    "名称和性格特点不能为空，购买失败，已自动退款。", ephemeral=True
-                )
-                # --- 新增退款逻辑 ---
-                await coin_service.add_balance(
-                    user_id=interaction.user.id,
-                    amount=item["price"],
-                    reason=f"个人档案提交信息不完整自动退款 (item_id: {item['item_id']})",
-                )
-                log.info(
-                    f"已为用户 {interaction.user.id} 退款 {item['price']} 类脑币，原因：提交信息不完整。"
-                )
-                return
-
-            # --- 构造支付信息 ---
-            purchase_info = {"item_id": item["item_id"], "price": item["price"]}
-
-            # 使用新的通用审核流程
-            review_settings = chat_config.WORLD_BOOK_CONFIG[
-                "personal_profile_review_settings"
-            ]
-
-            embed_title = "哇!我收到了一张新名片！"
-            embed_description = f"**{interaction.user.display_name}** 递给了我一张TA的名片，大伙怎么看？"
-
-            embed_fields = [
-                {"name": "名称", "value": profile_data["name"], "inline": True},
-                {
-                    "name": "性格特点",
-                    "value": profile_data["personality"][:300]
-                    + ("..." if len(profile_data["personality"]) > 300 else ""),
-                    "inline": False,
-                },
-            ]
-            if profile_data["background"]:
-                embed_fields.append(
-                    {
-                        "name": "背景信息",
-                        "value": profile_data["background"][:200]
-                        + ("..." if len(profile_data["background"]) > 200 else ""),
-                        "inline": False,
-                    }
-                )
-            if profile_data["preferences"]:
-                embed_fields.append(
-                    {
-                        "name": "喜好偏好",
-                        "value": profile_data["preferences"][:200]
-                        + ("..." if len(profile_data["preferences"]) > 200 else ""),
-                        "inline": False,
-                    }
-                )
-
-            # 注意：这里我们使用 modal_interaction 来发送后续消息，但审核流程需要原始的 interaction 来定位频道
-            await world_book_service.initiate_review_process(
-                interaction=interaction,  # 使用原始的 interaction
-                entry_type="personal_profile",
-                entry_data=profile_data,
-                review_settings=review_settings,
-                embed_title=embed_title,
-                embed_description=embed_description,
-                embed_fields=embed_fields,
-                is_update=False,  # 从商店购买视为首次提交
-                purchase_info=purchase_info,  # --- 传递支付信息 ---
-                followup_interaction=modal_interaction,  # 传递 modal_interaction 用于发送反馈
-            )
-
-            # 6. 更新商店界面
-            self.view.balance = new_balance
-            new_embed = self.view.create_shop_embed()
-            await interaction.edit_original_response(embed=new_embed, view=self.view)
-
-        except asyncio.TimeoutError:
-            # 7. 用户未提交，超时处理
-            await interaction.followup.send(
-                "由于你长时间未操作，购买已自动取消。", ephemeral=True
-            )
-        except Exception as e:
-            log.error(f"处理个人记忆商品购买时出错: {e}", exc_info=True)
-            if not interaction.response.is_done():
-                await interaction.followup.send(
-                    "处理你的购买请求时发生了一个意想不到的错误。", ephemeral=True
-                )
+        # 后续的扣款、验证、提交和反馈逻辑已全部移交到 Modal 和 SubmissionService 中处理
 
     async def handle_standard_modal_purchase(
         self, interaction: discord.Interaction, item: Dict[str, Any]

@@ -3,7 +3,6 @@ import asyncio
 import logging
 import queue
 import sys
-import traceback
 import discord
 import time
 import requests
@@ -33,6 +32,7 @@ from src.chat.features.tools.functions import get_user_avatar
 
 # 导入全局 gemini_service 实例
 from src.chat.services.gemini_service import gemini_service
+from src.chat.services.review_service import initialize_review_service
 from src.chat.utils.command_sync import sync_commands
 from src.chat.config import chat_config
 
@@ -443,6 +443,8 @@ async def main():
     # 在机器人启动时，将 bot 实例注入到 GeminiService 中
     # 这是确保工具能够访问 Discord API 的关键步骤
     gemini_service.set_bot(bot)
+    # 初始化审核服务，并将 bot 实例注入
+    initialize_review_service(bot)
 
     token = os.getenv("DISCORD_TOKEN")
     if not token:

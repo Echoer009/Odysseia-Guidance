@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 from src import config
 from src.chat.config import chat_config
-from src.chat.features.world_book.services.world_book_service import world_book_service
+from src.chat.services.submission_service import submission_service
 
 log = logging.getLogger(__name__)
 
@@ -158,13 +158,6 @@ class CommunityMemberUploadModal(discord.ui.Modal, title="上传社区成员档�
             finally:
                 conn.close()
 
-        is_update = existing_entry_id is not None
-        embed_title = "有人向我介绍了一位新朋友！"
-        if is_update:
-            embed_description = f"**{interaction.user.display_name}** 更新了关于 **{member_name}** 的一些信息，大家帮忙看看对不对。"
-        else:
-            embed_description = f"**{interaction.user.display_name}** 向我介绍了 **{member_name}**，大家也认识一下吧！"
-
         embed_fields = [
             {"name": "成员名称", "value": member_name, "inline": True},
         ]
@@ -198,14 +191,34 @@ class CommunityMemberUploadModal(discord.ui.Modal, title="上传社区成员档�
                 }
             )
 
-        await world_book_service.initiate_review_process(
+        # 调用新的 SubmissionService 来处理提交
+        pending_id = await submission_service.submit_community_member(
             interaction=interaction,
-            entry_type="community_member",
-            entry_data=member_data,
-            review_settings=REVIEW_SETTINGS,
-            embed_title=embed_title,
-            embed_description=embed_description,
-            embed_fields=embed_fields,
-            is_update=is_update,
-            purchase_info=self.purchase_info,  # 传递购买信息
+            member_data=member_data,
+            purchase_info=self.purchase_info,
         )
+
+        if pending_id:
+            await interaction.followup.send(
+                f"✅ 您的 **{member_name}** 档案已成功提交审核！\n请关注频道内的公开投票。",
+                ephemeral=True,
+            )
+        else:
+            # 如果提交失败，需要处理退款
+            if self.purchase_info:
+                from src.chat.features.odysseia_coin.service.coin_service import (
+                    coin_service,
+                )
+
+                await coin_service.add_coins(
+                    user_id=interaction.user.id,
+                    amount=self.purchase_info.get("price", 0),
+                    reason=f"社区成员档案提交失败自动退款 (item_id: {self.purchase_info.get('item_id')})",
+                )
+                await interaction.followup.send(
+                    "提交审核时发生错误，已自动退款，请稍后再试。", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "提交审核时发生错误，请稍后再试。", ephemeral=True
+                )
