@@ -569,15 +569,17 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleBet(isRetry = false) {
         const amount = isRetry ? currentBet : parseInt(betAmountInput.value, 10);
         if (isNaN(amount) || amount <= 0) {
+            isPlacingBet = false; // 释放锁
             uiManager.showDialogue('invalid_bet');
             return;
         }
         if (amount > currentBalance) {
+            isPlacingBet = false; // 释放锁
             uiManager.showDialogue('insufficient_funds');
             return;
         }
 
-        isPlacingBet = true; // 设置下注锁
+        // isPlacingBet 已经在 continueWithSameBet 中设置为 true
         betButton.disabled = true;
         betAmountInput.disabled = true;
         const isAllIn = amount === currentBalance;
@@ -587,6 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 uiManager.showView('game-view');
                 startGame();
+                isPlacingBet = false; // 在新游戏开始后才解锁
             }, isRetry ? 100 : 2000);
         };
 
@@ -595,7 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
             currentBalance -= amount;
             balanceEl.textContent = currentBalance.toString();
             startAfterBet();
-            isPlacingBet = false; // 非嵌入模式下快速解锁
         } else {
             try {
                 const response = await apiCall('/api/game/bet', 'POST', { amount });
@@ -604,12 +606,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentBalance = response.new_balance;
                     balanceEl.textContent = currentBalance.toString();
                     startAfterBet();
+                } else {
+                    // 如果API调用不成功，也需要释放锁并重置游戏
+                    uiManager.updateMessages(response.message || '下注失败了，你真是个笨蛋~❤');
+                    resetGame();
+                    isPlacingBet = false;
                 }
             } catch (error: any) {
                 // 显示更友好的错误信息
                 uiManager.updateMessages(error.message || '下注失败了，你真是个笨蛋~❤');
                 resetGame();
-            } finally {
                 isPlacingBet = false; // 确保在API调用后解锁
             }
         }
