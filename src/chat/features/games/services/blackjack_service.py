@@ -98,10 +98,10 @@ class BlackjackService:
         return BlackjackGame(user_id, bet_amount, "active")
 
     async def get_active_game(self, user_id: int) -> Optional[BlackjackGame]:
-        """Retrieves current active game for a user."""
+        """Retrievis current active game for a user."""
         row = await self._db_manager._execute(
             self._db_manager._db_transaction,
-            "SELECT user_id, bet_amount, game_state FROM blackjack_games WHERE user_id = ?",
+            "SELECT user_id, bet_amount, game_state FROM blackjack_games WHERE user_id = ? AND game_state IN ('active', 'doubled')",
             (user_id,),
             fetch="one",
         )
@@ -131,6 +131,26 @@ class BlackjackService:
         game.bet_amount = new_bet_amount
         game.game_state = "doubled"
         return game
+
+    async def finish_game(self, user_id: int) -> bool:
+        """
+        Marks a game as finished.
+        Returns True if a record was updated, False otherwise.
+        """
+        result = await self._db_manager._execute(
+            self._db_manager._db_transaction,
+            "UPDATE blackjack_games SET game_state = 'finished' WHERE user_id = ?",
+            (user_id,),
+            fetch="rowcount",
+            commit=True,
+        )
+        if result > 0:
+            log.info(f"Marked game as finished for user {user_id}.")
+            return True
+        log.warning(
+            f"Tried to mark game as finished for user {user_id}, but no game was found to update."
+        )
+        return False
 
     async def delete_game(self, user_id: int) -> bool:
         """

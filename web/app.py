@@ -181,6 +181,15 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
     """
     log.info(f"正在获取用户 {user_id} 的余额")
     try:
+        # --- 新增：在加载游戏时，自动清理该用户任何卡住的旧游戏 ---
+        async with user_locks[user_id]:
+            stale_game = await blackjack_service.get_active_game(user_id)
+            if stale_game:
+                log.warning(
+                    f"检测到用户 {user_id} 有一个赌注为 {stale_game.bet_amount} 的遗留游戏。将在加载时自动将其删除。"
+                )
+                await blackjack_service.delete_game(user_id)
+
         balance = await coin_service.get_balance(user_id)
 
         # --- 安全检查和日志记录 ---
@@ -319,6 +328,33 @@ async def double_down(user_id: int = Depends(get_current_user_id)):
             raise HTTPException(status_code=500, detail="Error processing double down")
 
 
+@app.post("/api/game/forfeit")
+async def forfeit_game(user_id: int = Depends(get_current_user_id)):
+    """
+    API: 玩家放弃当前游戏
+    用于解决玩家因任何原因（如网络断开、浏览器关闭）被卡在游戏中的问题。
+    """
+    log.warning(f"用户 {user_id} 正在请求放弃当前游戏。")
+    async with user_locks[user_id]:
+        active_game = await blackjack_service.get_active_game(user_id)
+        if not active_game:
+            log.info(f"用户 {user_id} 请求放弃游戏，但没有活跃游戏。")
+            # 即使没有游戏，也返回成功，因为最终状态是一致的（没有活跃游戏）
+            return JSONResponse(
+                content={"success": True, "message": "No active game to forfeit."},
+                status_code=200,
+            )
+
+        log.info(f"用户 {user_id} 已放弃赌注为 {active_game.bet_amount} 的游戏。")
+        # 直接删除游戏记录，赌注不退还
+        await blackjack_service.delete_game(user_id)
+
+        return JSONResponse(
+            content={"success": True, "message": "Game forfeited successfully."},
+            status_code=200,
+        )
+
+
 @app.post("/api/game/payout")
 async def give_payout(
     payout_request: PayoutRequest, user_id: int = Depends(get_current_user_id)
@@ -429,7 +465,7 @@ async def give_payout(
                 new_balance = await coin_service.get_balance(user_id)
 
             # 6. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
-            await blackjack_service.delete_game(user_id)
+            await blackjack_service.finish_game(user_id)
 
             log.info(
                 f"User {user_id} game concluded. Result: {game_result}. New balance: {new_balance}"
