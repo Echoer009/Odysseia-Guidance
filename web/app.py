@@ -226,6 +226,16 @@ async def place_bet(
     log.info(f"用户 {user_id} 正在下注 {bet_amount}")
     async with user_locks[user_id]:
         try:
+            # 🔒 关键安全检查：防止游戏中途下注
+            active_game = await blackjack_service.get_active_game(user_id)
+            if active_game:
+                log.warning(
+                    f"用户 {user_id} 试图在游戏进行中下注 {bet_amount}，当前游戏下注: {active_game.bet_amount}，已拒绝"
+                )
+                raise HTTPException(
+                    status_code=409, detail="Cannot place bet while game is in progress"
+                )
+
             new_balance = await coin_service.remove_coins(
                 user_id, bet_amount, "21点游戏下注"
             )
