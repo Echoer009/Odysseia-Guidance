@@ -8,6 +8,7 @@ export default defineConfig({
     server: {
         host: true, // 允许来自任何地址的连接
         hmr: false, // 禁用HMR以解决Discord CSP问题
+        allowedHosts: ['bring-optional-models-interviews.trycloudflare.com', '.trycloudflare.com'], // 允许Cloudflare隧道主机
         proxy: {
             // 将所有/api开头的请求代理到Python后端
             '/api': {

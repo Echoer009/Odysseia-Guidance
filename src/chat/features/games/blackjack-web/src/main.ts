@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let dealerHand: Card[] = [];
     let playerScore = 0;
     let dealerScore = 0;
+    let dealerHasSoftAce = false;
     let gameInProgress = false;
     let isSettling = false; // 防止重复结算的状态锁
     let accessToken: string | null = null;
@@ -213,23 +214,36 @@ document.addEventListener('DOMContentLoaded', () => {
         return parseInt(card.rank);
     }
 
-    function calculateHandScore(hand: Card[]): number {
+    function calculateHandScore(hand: Card[]): { score: number; hasSoftAce: boolean } {
         let score = 0;
         let aceCount = 0;
         for (const card of hand) {
             score += getCardValue(card);
             if (card.rank === 'A') aceCount++;
         }
+        let hasSoftAce = false;
         while (score > 21 && aceCount > 0) {
             score -= 10;
             aceCount--;
         }
-        return score;
+        // 如果还有Ace且总分 <= 21，说明是软手
+        if (aceCount > 0 && score <= 21) {
+            hasSoftAce = true;
+        }
+        return { score, hasSoftAce };
     }
 
     function calculateScores(isInitialDeal: boolean = false): void {
-        playerScore = calculateHandScore(playerHand);
-        dealerScore = isInitialDeal ? getCardValue(dealerHand[1]) : calculateHandScore(dealerHand);
+        const playerResult = calculateHandScore(playerHand);
+        playerScore = playerResult.score;
+
+        if (isInitialDeal) {
+            dealerScore = getCardValue(dealerHand[1]);
+        } else {
+            const dealerResult = calculateHandScore(dealerHand);
+            dealerScore = dealerResult.score;
+            dealerHasSoftAce = dealerResult.hasSoftAce;
+        }
     }
 
     function updateScoreDisplay(): void {
@@ -241,7 +255,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!gameInProgress) return;
         playerHand.push(deck.pop()!);
         renderHand(playerHand, playerHandEl);
-        playerScore = calculateHandScore(playerHand);
+        const playerResult = calculateHandScore(playerHand);
+        playerScore = playerResult.score;
         updateScoreDisplay();
         if (playerScore > 21) {
             uiManager.showDialogue('player_bust');
@@ -260,7 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateScoreDisplay();
 
         const dealerTurn = setInterval(() => {
-            if (dealerScore < 17) {
+            // 实现软17规则：庄家在软17时也要继续要牌
+            if (dealerScore < 17 || (dealerScore === 17 && dealerHasSoftAce)) {
                 dealerHand.push(deck.pop()!);
                 renderHand(dealerHand, dealerHandEl);
                 calculateScores();
@@ -286,12 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isSettling) return; // 防止重复调用
         isSettling = true; // 设置状态锁
 
+        // 立即显示结果，提供即时反馈
+        uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
+            // 台词输出完成后等待1.5秒再切换到游戏结束界面
+            setTimeout(() => showEndGameSequence(gameResult), 1500);
+        });
+
         if (!isEmbedded) {
             // 非嵌入模式下，前端计算派彩金额
             let payoutAmount = 0;
             switch (gameResult) {
                 case 'win': payoutAmount = currentBet * 2; break;
-                case 'blackjack': payoutAmount = Math.floor(currentBet * 2.5); break;
+                case 'blackjack': payoutAmount = Math.floor(currentBet * 1.5); break;
                 case 'push': payoutAmount = currentBet; break;
                 case 'loss': payoutAmount = 0; break;
             }
@@ -301,39 +323,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 balanceEl.textContent = currentBalance.toString();
             }
 
-            uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
-                // 台词输出完成后等待1.5秒再切换到游戏结束界面
-                setTimeout(() => showEndGameSequence(gameResult), 1500);
-                isSettling = false; // 在台词输出完成后重置状态，确保一致性
-            });
+            // 非嵌入模式立即重置状态锁
+            isSettling = false;
         } else {
-            try {
-                // 嵌入模式下，后端计算派彩金额，前端只负责展示
-                const response = await apiCall('/api/game/payout', 'POST', { result: gameResult });
-                if (response.success) {
-                    currentBalance = response.new_balance;
-                    balanceEl.textContent = currentBalance.toString();
+            // 嵌入模式，异步处理验证和结算
+            (async () => {
+                try {
+                    // 条件性验证：只在高额赌注时验证（大于500类脑币）
+                    const shouldVerify = currentBet > 500;
 
-                    uiManager.updateDealerExpression(gameResult, currentBet, currentBalance, () => {
-                        // 台词输出完成后等待1.5秒再切换到游戏结束界面
-                        setTimeout(() => showEndGameSequence(gameResult), 1500);
-                        isSettling = false; // 修复：在台词输出完成后重置状态锁，与非嵌入模式保持一致
-                    });
-                } else {
-                    // This case might not be hit if apiCall throws, but it's good practice.
-                    uiManager.updateMessages('结算失败了，杂鱼~❤');
-                    // 即使失败也要重置状态，让用户可以继续游戏
+                    // 准备结算请求数据
+                    const payoutData: any = { result: gameResult };
+
+                    if (shouldVerify) {
+                        // 添加游戏状态信息用于验证
+                        payoutData.player_hand = playerHand.map(card => `${card.suit}${card.rank}`);
+                        payoutData.dealer_hand = dealerHand.map(card => `${card.suit}${card.rank}`);
+                        payoutData.deck_snapshot = deck.map(card => `${card.suit}${card.rank}`);
+
+                        console.log(`高额赌注验证: ${currentBet} 类脑币`);
+                    }
+
+                    // 单次API调用完成验证和结算
+                    const response = await apiCall('/api/game/payout', 'POST', payoutData);
+                    if (response.success) {
+                        currentBalance = response.new_balance;
+                        balanceEl.textContent = currentBalance.toString();
+
+                        if (shouldVerify) {
+                            console.log(`结算完成，验证和结算已合并处理`);
+                        }
+                    }
+                } catch (error: any) {
+                    console.error("结算处理失败:", error);
+                    // 错误处理：不重新渲染UI，避免用户体验中断
+                    // 只在控制台记录错误，不影响已显示的游戏结果
+                } finally {
+                    // 确保状态锁被重置
                     isSettling = false;
-                    setTimeout(() => showEndGameSequence(gameResult), 1500);
                 }
-            } catch (error: any) {
-                console.error("Payout API call failed:", error);
-                // 显示更友好的错误信息
-                uiManager.updateMessages(error.message || '结算API调用失败了，真是个笨蛋~❤');
-                // 即使失败也要重置状态，让用户可以继续游戏
-                isSettling = false;
-                setTimeout(() => showEndGameSequence(gameResult), 1500);
-            }
+            })();
         }
     }
 
@@ -353,6 +382,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function doubleDown(): Promise<void> {
         if (!gameInProgress || currentBalance < currentBet) return;
 
+        // 限制双倍下注时机：只能在初始两张牌时双倍下注
+        if (playerHand.length !== 2) {
+            uiManager.showDialogue('double_down_invalid');
+            return;
+        }
+
         const additionalBet = currentBet;
 
         // Disable controls immediately
@@ -366,7 +401,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Player gets one more card
             playerHand.push(deck.pop()!);
             renderHand(playerHand, playerHandEl);
-            playerScore = calculateHandScore(playerHand);
+            const playerResult = calculateHandScore(playerHand);
+            playerScore = playerResult.score;
             updateScoreDisplay();
 
             if (playerScore > 21) {

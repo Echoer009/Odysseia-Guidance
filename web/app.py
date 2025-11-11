@@ -2,7 +2,9 @@ import os
 import httpx
 import logging
 import asyncio
+import json
 from collections import defaultdict
+from typing import List
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -113,7 +115,18 @@ class BetRequest(BaseModel):
 
 
 class PayoutRequest(BaseModel):
-    result: str  # 'win', 'blackjack', 'push'
+    result: str  # 'win', 'blackjack', 'push', 'loss'
+    # 可选的游戏状态信息，用于验证
+    player_hand: List[str] = None  # 玩家手牌
+    dealer_hand: List[str] = None  # 庄家手牌
+    deck_snapshot: List[str] = None  # 牌组快照
+
+
+class GameStateRequest(BaseModel):
+    player_hand: List[str]  # 玩家手牌
+    dealer_hand: List[str]  # 庄家手牌
+    deck_snapshot: List[str]  # 牌组快照
+    game_result: str  # 'win', 'blackjack', 'push', 'loss'
 
 
 @app.post("/api/token")
@@ -303,7 +316,7 @@ async def give_payout(
     payout_request: PayoutRequest, user_id: int = Depends(get_current_user_id)
 ):
     """
-    API: 游戏胜利派奖 (安全版本)
+    API: 游戏胜利派奖 (合并验证和结算)
     """
     game_result = payout_request.result
     log.info(f"Processing payout for user {user_id} with result: {game_result}")
@@ -323,14 +336,54 @@ async def give_payout(
 
         final_bet = active_game.bet_amount
 
-        # 2. 根据游戏结果计算派彩
+        # 2. 验证游戏结果的有效性
+        if game_result not in ["win", "blackjack", "push", "loss"]:
+            log.warning(f"用户 {user_id} 提供了无效的游戏结果: {game_result}")
+            raise HTTPException(status_code=400, detail="Invalid game result provided.")
+
+        # 3. 如果提供了游戏状态信息，进行验证（可选）
+        if (
+            payout_request.player_hand
+            and payout_request.dealer_hand
+            and payout_request.deck_snapshot
+        ):
+            log.info(f"用户 {user_id} 提供了游戏状态，进行验证")
+
+            # 计算手牌点数
+            player_score = calculate_hand_score(payout_request.player_hand)
+            dealer_score = calculate_hand_score(payout_request.dealer_hand)
+
+            # 计算实际应该的结果
+            actual_result = determine_actual_result(
+                player_score,
+                dealer_score,
+                payout_request.player_hand,
+                payout_request.dealer_hand,
+            )
+
+            # 记录验证日志
+            log.info(
+                f"游戏验证 - 用户: {user_id}, "
+                f"玩家手牌: {payout_request.player_hand} (点数: {player_score}), "
+                f"庄家手牌: {payout_request.dealer_hand} (点数: {dealer_score}), "
+                f"报告结果: {game_result}, 实际结果: {actual_result}"
+            )
+
+            # 如果前端报告的结果与计算结果不符，使用服务器计算的结果
+            if actual_result != game_result:
+                log.warning(
+                    f"用户 {user_id} 游戏结果不匹配: 报告={game_result}, 实际={actual_result}，使用服务器结果"
+                )
+                game_result = actual_result
+
+        # 3. 根据游戏结果计算派彩
         payout_amount = 0
         reason = "21点游戏结算"
         if game_result == "win":
             payout_amount = final_bet * 2  # 1:1 赔率
             reason = "21点游戏获胜"
         elif game_result == "blackjack":
-            payout_amount = int(final_bet * 2.5)  # 3:2 赔率
+            payout_amount = int(final_bet * 1.5)  # 3:2 赔率
             reason = "21点游戏Blackjack获胜"
         elif game_result == "push":
             payout_amount = final_bet  # 退还本金
@@ -347,7 +400,12 @@ async def give_payout(
                 status_code=400, detail="Calculated payout cannot be negative"
             )
 
-        # 3. 统一执行结算流程
+        # 4. 记录游戏结算日志
+        log.info(
+            f"用户 {user_id} 游戏结算: 结果={game_result}, 赌注={final_bet}, 派彩={payout_amount}"
+        )
+
+        # 5. 统一执行结算流程
         try:
             new_balance = active_game.bet_amount  # 默认为初始赌注
 
@@ -362,7 +420,7 @@ async def give_payout(
                 # 如果是输了，不需要操作余额，直接获取当前余额
                 new_balance = await coin_service.get_balance(user_id)
 
-            # 4. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
+            # 6. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
             await blackjack_service.delete_game(user_id)
 
             log.info(
@@ -381,6 +439,129 @@ async def give_payout(
                 status_code=500,
                 detail="An error occurred during payout. Your bet is safe. Please contact an administrator.",
             )
+
+
+@app.post("/api/game/verify")
+async def verify_game_state(
+    game_state: GameStateRequest, user_id: int = Depends(get_current_user_id)
+):
+    """
+    API: 验证游戏状态（防作弊）- 保留用于兼容性
+    """
+    log.info(f"Verifying game state for user {user_id}")
+
+    async with user_locks[user_id]:
+        # 检查是否有活跃游戏
+        active_game = await blackjack_service.get_active_game(user_id)
+        if not active_game:
+            raise HTTPException(
+                status_code=400, detail="No active game found for verification"
+            )
+
+        # 验证游戏结果的有效性
+        if game_state.game_result not in ["win", "blackjack", "push", "loss"]:
+            raise HTTPException(status_code=400, detail="Invalid game result provided")
+
+        # 计算手牌点数
+        player_score = calculate_hand_score(game_state.player_hand)
+        dealer_score = calculate_hand_score(game_state.dealer_hand)
+
+        # 计算实际应该的结果
+        actual_result = determine_actual_result(
+            player_score, dealer_score, game_state.player_hand, game_state.dealer_hand
+        )
+
+        # 记录验证日志
+        log.info(
+            f"游戏验证 - 用户: {user_id}, "
+            f"玩家手牌: {game_state.player_hand} (点数: {player_score}), "
+            f"庄家手牌: {game_state.dealer_hand} (点数: {dealer_score}), "
+            f"报告结果: {game_state.game_result}, 实际结果: {actual_result}"
+        )
+
+        # 如果前端报告的结果与计算结果不符，记录警告
+        if actual_result != game_state.game_result:
+            log.warning(
+                f"用户 {user_id} 游戏结果不匹配: 报告={game_state.game_result}, 实际={actual_result}"
+            )
+            return JSONResponse(
+                content={
+                    "valid": False,
+                    "expected_result": actual_result,
+                    "player_score": player_score,
+                    "dealer_score": dealer_score,
+                },
+                status_code=200,
+            )
+
+        return JSONResponse(
+            content={
+                "valid": True,
+                "player_score": player_score,
+                "dealer_score": dealer_score,
+            },
+            status_code=200,
+        )
+
+
+def calculate_hand_score(hand: List[str]) -> int:
+    """计算手牌点数"""
+    score = 0
+    ace_count = 0
+
+    for card in hand:
+        # 从牌的表示中提取牌面值
+        # 假设格式为 "ClubA", "Diamond10" 等
+        rank = card[-1] if len(card) <= 4 else card[4:]  # 处理不同长度的牌名
+
+        if rank in ["J", "Q", "K"]:
+            score += 10
+        elif rank == "A":
+            score += 11
+            ace_count += 1
+        else:
+            try:
+                score += int(rank)
+            except ValueError:
+                # 处理两位数的情况（如10）
+                if rank == "10":
+                    score += 10
+                else:
+                    log.warning(f"无法识别的牌面值: {card}")
+                    pass  # 忽略无效牌
+
+    # 处理A的特殊情况
+    while score > 21 and ace_count > 0:
+        score -= 10
+        ace_count -= 1
+
+    return score
+
+
+def determine_actual_result(
+    player_score: int, dealer_score: int, player_hand: List[str], dealer_hand: List[str]
+) -> str:
+    """确定实际的游戏结果"""
+    # 检查是否是Blackjack
+    player_blackjack = len(player_hand) == 2 and player_score == 21
+    dealer_blackjack = len(dealer_hand) == 2 and dealer_score == 21
+
+    if player_blackjack and dealer_blackjack:
+        return "push"
+    elif player_blackjack:
+        return "blackjack"
+    elif dealer_blackjack:
+        return "loss"
+    elif player_score > 21:
+        return "loss"
+    elif dealer_score > 21:
+        return "win"
+    elif player_score > dealer_score:
+        return "win"
+    elif player_score < dealer_score:
+        return "loss"
+    else:
+        return "push"
 
 
 # --- 静态文件服务 (仅在生产构建后生效) ---

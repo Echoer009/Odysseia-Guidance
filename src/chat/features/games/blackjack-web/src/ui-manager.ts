@@ -168,7 +168,14 @@ export class UIManager {
             }
         }
 
-        const dialogues = (dialogueConfig as any)[dialogueKey][betCategory] as string[];
+        // 安全访问dialogue配置，确保键存在
+        const dialogueSection = (dialogueConfig as any)[dialogueKey];
+        if (!dialogueSection || !dialogueSection[betCategory]) {
+            console.error(`Missing dialogue configuration for ${dialogueKey}.${betCategory}`);
+            return;
+        }
+
+        const dialogues = dialogueSection[betCategory] as string[];
         const randomDialogueTemplate = dialogues[Math.floor(Math.random() * dialogues.length)];
         const randomDialogue = randomDialogueTemplate.replace(/\${amount}/g, currentBet.toString());
 
