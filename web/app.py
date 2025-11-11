@@ -460,7 +460,7 @@ async def give_payout(
                 new_balance = await coin_service.get_balance(user_id)
 
             # 6. 结算流程（支付或确认亏损）完成后，才安全删除游戏记录
-            await blackjack_service.finish_game(user_id)
+            await blackjack_service.delete_game(user_id)
 
             log.info(
                 f"User {user_id} game concluded. Result: {game_result}. New balance: {new_balance}"
