@@ -15,6 +15,7 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
 from src.chat.features.admin_panel.ui.coin_management_view import CoinManagementView
+from src.chat.utils.database import DB_PATH as CHAT_DB_PATH
 
 log = logging.getLogger(__name__)
 
@@ -243,6 +244,179 @@ class EditCommunityMemberModal(discord.ui.Modal):
             await interaction.response.send_message(f"更新失败: {e}", ephemeral=True)
         finally:
             conn.close()
+
+
+# --- 编辑工作事件的模态窗口 (已更新为倍率模型) ---
+class EditWorkEventModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView", item_id: str, current_data: sqlite3.Row):
+        super().__init__(title=f"编辑工作事件 #{item_id}")
+        self.db_view = db_view
+        self.item_id = item_id
+        self.current_data = dict(current_data)
+
+        # 1. 事件名称
+        self.add_item(
+            discord.ui.TextInput(
+                label="事件名称",
+                default=self.current_data.get("name", ""),
+                required=True,
+            )
+        )
+        # 2. 事件描述
+        self.add_item(
+            discord.ui.TextInput(
+                label="事件描述",
+                default=self.current_data.get("description", ""),
+                style=discord.TextStyle.paragraph,
+                required=True,
+            )
+        )
+        # 3. 基础奖励范围
+        self.add_item(
+            discord.ui.TextInput(
+                label="基础奖励范围 (最小,最大)",
+                placeholder="例如: 200,500",
+                default=f"{self.current_data.get('reward_range_min', '')},{self.current_data.get('reward_range_max', '')}",
+                required=True,
+            )
+        )
+        # 4. 好事
+        self.add_item(
+            discord.ui.TextInput(
+                label="好事: 描述 # 倍率 (可选)",
+                placeholder="例如: 客人很满意 # 1.5",
+                default=(
+                    f"{self.current_data.get('good_event_description', '')} # {self.current_data.get('good_event_modifier', '')}"
+                    if self.current_data.get("good_event_description")
+                    else ""
+                ),
+                required=False,
+                style=discord.TextStyle.paragraph,
+            )
+        )
+        # 5. 坏事
+        self.add_item(
+            discord.ui.TextInput(
+                label="坏事: 描述 # 倍率 (可选)",
+                placeholder="例如: 被警察查房 # -0.5",
+                default=(
+                    f"{self.current_data.get('bad_event_description', '')} # {self.current_data.get('bad_event_modifier', '')}"
+                    if self.current_data.get("bad_event_description")
+                    else ""
+                ),
+                required=False,
+                style=discord.TextStyle.paragraph,
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        conn = self.db_view._get_db_connection()
+        if not conn:
+            await interaction.response.send_message("数据库连接失败。", ephemeral=True)
+            return
+
+        try:
+            cursor = conn.cursor()
+
+            # --- 解析字段 ---
+            # 解析奖励范围
+            try:
+                reward_min_str, reward_max_str = (
+                    self.children[2].value.strip().split(",")
+                )
+                reward_range_min = int(reward_min_str)
+                reward_range_max = int(reward_max_str)
+            except (ValueError, IndexError):
+                await interaction.response.send_message(
+                    "❌ 格式错误：基础奖励范围应为 `最小,最大`，例如 `200,500`。",
+                    ephemeral=True,
+                )
+                return
+
+            # 解析好事
+            good_event_str = self.children[3].value.strip()
+            good_event_description = None
+            good_event_modifier = None
+            if good_event_str:
+                parts = good_event_str.split("#")
+                if len(parts) == 2:
+                    good_event_description = parts[0].strip()
+                    try:
+                        good_event_modifier = float(parts[1].strip())
+                    except ValueError:
+                        await interaction.response.send_message(
+                            "❌ 格式错误：好事倍率必须是数字。", ephemeral=True
+                        )
+                        return
+                else:
+                    await interaction.response.send_message(
+                        "❌ 格式错误：好事应为 `描述 # 倍率`。", ephemeral=True
+                    )
+                    return
+
+            # 解析坏事
+            bad_event_str = self.children[4].value.strip()
+            bad_event_description = None
+            bad_event_modifier = None
+            if bad_event_str:
+                parts = bad_event_str.split("#")
+                if len(parts) == 2:
+                    bad_event_description = parts[0].strip()
+                    try:
+                        bad_event_modifier = float(parts[1].strip())
+                    except ValueError:
+                        await interaction.response.send_message(
+                            "❌ 格式错误：坏事倍率必须是数字。", ephemeral=True
+                        )
+                        return
+                else:
+                    await interaction.response.send_message(
+                        "❌ 格式错误：坏事应为 `描述 # 倍率`。", ephemeral=True
+                    )
+                    return
+
+            # 构建 SQL 更新语句
+            sql = """
+                UPDATE work_events
+                SET name = ?, description = ?, reward_range_min = ?, reward_range_max = ?,
+                    good_event_description = ?, good_event_modifier = ?,
+                    bad_event_description = ?, bad_event_modifier = ?
+                WHERE event_id = ?
+            """
+            params = (
+                self.children[0].value.strip(),  # name
+                self.children[1].value.strip(),  # description
+                reward_range_min,
+                reward_range_max,
+                good_event_description,
+                good_event_modifier,
+                bad_event_description,
+                bad_event_modifier,
+                self.item_id,
+            )
+
+            cursor.execute(sql, params)
+            conn.commit()
+            log.info(
+                f"管理员 {interaction.user.display_name} 成功更新了表 'work_events' 中 ID 为 {self.item_id} 的记录。"
+            )
+
+            await interaction.response.send_message(
+                f"✅ 工作事件 `#{self.item_id}` 已成功更新。", ephemeral=True
+            )
+            await self.db_view.update_view()
+
+        except sqlite3.Error as e:
+            log.error(f"更新工作事件失败: {e}", exc_info=True)
+            await interaction.response.send_message(f"更新失败: {e}", ephemeral=True)
+        except Exception as e:
+            log.error(f"解析工作事件字段时发生未知错误: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"处理输入时发生错误: {e}", ephemeral=True
+            )
+        finally:
+            if conn:
+                conn.close()
 
 
 # --- 编辑条目的模态窗口 ---
@@ -587,6 +761,146 @@ class SearchKnowledgeModal(discord.ui.Modal):
                 conn.close()
 
 
+# --- 新增：搜索工作事件的模态窗口 ---
+class SearchWorkEventModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView"):
+        super().__init__(title="搜索工作事件")
+        self.db_view = db_view
+        self.keyword_input = discord.ui.TextInput(
+            label="输入搜索关键词",
+            placeholder="搜索名称和描述...",
+            required=True,
+            max_length=100,
+        )
+        self.add_item(self.keyword_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        keyword = self.keyword_input.value.strip()
+        if not keyword:
+            await interaction.response.send_message(
+                "请输入有效的搜索关键词。", ephemeral=True
+            )
+            return
+
+        conn = self.db_view._get_db_connection()
+        if not conn:
+            await interaction.response.send_message("数据库连接失败。", ephemeral=True)
+            return
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM work_events
+                WHERE name LIKE ? OR description LIKE ?
+                ORDER BY id DESC
+                """,
+                (f"%{keyword}%", f"%{keyword}%"),
+            )
+            results = cursor.fetchall()
+
+            if not results:
+                await interaction.response.send_message(
+                    f"❌ 未找到包含关键词 `{keyword}` 的工作事件。", ephemeral=True
+                )
+                return
+
+            self.db_view.current_list_items = results
+            self.db_view.current_page = 0
+            self.db_view.total_pages = (
+                len(results) + self.db_view.items_per_page - 1
+            ) // self.db_view.items_per_page
+            self.db_view.search_mode = True
+            self.db_view.search_keyword = keyword
+
+            await interaction.response.defer()
+            await self.db_view.update_view()
+            await interaction.followup.send(
+                f"✅ 找到 {len(results)} 条包含关键词 `{keyword}` 的工作事件。",
+                ephemeral=True,
+            )
+
+        except sqlite3.Error as e:
+            log.error(f"搜索工作事件时发生数据库错误: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"搜索时发生数据库错误: {e}", ephemeral=True
+            )
+        finally:
+            if conn:
+                conn.close()
+
+
+# --- 新增：搜索社区成员的模态窗口 ---
+class SearchCommunityMemberModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView"):
+        super().__init__(title="搜索社区成员")
+        self.db_view = db_view
+        self.keyword_input = discord.ui.TextInput(
+            label="输入搜索关键词",
+            placeholder="搜索标题和内容...",
+            required=True,
+            max_length=100,
+        )
+        self.add_item(self.keyword_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        keyword = self.keyword_input.value.strip()
+        if not keyword:
+            await interaction.response.send_message(
+                "请输入有效的搜索关键词。", ephemeral=True
+            )
+            return
+
+        conn = self.db_view._get_db_connection()
+        if not conn:
+            await interaction.response.send_message("数据库连接失败。", ephemeral=True)
+            return
+
+        try:
+            cursor = conn.cursor()
+            # 搜索 title 和 content_json 字段
+            cursor.execute(
+                """
+                SELECT * FROM community_members
+                WHERE title LIKE ? OR content_json LIKE ?
+                ORDER BY id DESC
+                """,
+                (f"%{keyword}%", f"%{keyword}%"),
+            )
+            results = cursor.fetchall()
+
+            if not results:
+                await interaction.response.send_message(
+                    f"❌ 未找到包含关键词 `{keyword}` 的社区成员档案。", ephemeral=True
+                )
+                return
+
+            self.db_view.current_list_items = results
+            self.db_view.current_page = 0
+            self.db_view.total_pages = (
+                len(results) + self.db_view.items_per_page - 1
+            ) // self.db_view.items_per_page
+            self.db_view.search_mode = True
+            self.db_view.search_keyword = keyword
+
+            await interaction.response.defer()
+            await self.db_view.update_view()
+            await interaction.followup.send(
+                f"✅ 找到 {len(results)} 条包含关键词 `{keyword}` 的社区成员档案。",
+                ephemeral=True,
+            )
+
+        except sqlite3.Error as e:
+            log.error(f"搜索社区成员时发生数据库错误: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"搜索时发生数据库错误: {e}", ephemeral=True
+            )
+        finally:
+            if conn:
+                conn.close()
+                conn.close()
+
+
 # --- 数据库浏览器视图 ---
 class DBView(discord.ui.View):
     """数据库浏览器的交互式视图"""
@@ -594,7 +908,8 @@ class DBView(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=300)
         self.author_id = author_id
-        self.db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
+        self.world_book_db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
+        self.chat_db_path = CHAT_DB_PATH
         self.message: Optional[discord.Message] = None
 
         # --- 状态管理 ---
@@ -621,13 +936,27 @@ class DBView(discord.ui.View):
         return True
 
     def _get_db_connection(self):
+        """根据当前选择的表，智能地连接到正确的数据库。"""
+        # 'work_events' 和金币管理相关的功能使用 chat.db
+        if self.current_table in ["work_events"]:
+            db_path_to_use = self.chat_db_path
+        # 其他（如社区成员、通用知识）使用 world_book.sqlite3
+        else:
+            db_path_to_use = self.world_book_db_path
+
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(db_path_to_use)
             conn.row_factory = sqlite3.Row
             return conn
         except sqlite3.Error as e:
-            log.error(f"连接到世界书数据库失败: {e}", exc_info=True)
+            log.error(f"连接到数据库 {db_path_to_use} 失败: {e}", exc_info=True)
             return None
+
+    def _get_primary_key_column(self) -> str:
+        """根据当前表返回主键列的名称。"""
+        if self.current_table == "work_events":
+            return "event_id"
+        return "id"
 
     # --- UI 构建 ---
 
@@ -665,38 +994,61 @@ class DBView(discord.ui.View):
             self.jump_button.callback = self.jump_to_page
             self.add_item(self.jump_button)
 
-            # --- 新增：仅在 community_members 表中显示搜索按钮 ---
+            # --- 搜索功能按钮 ---
+            button_row = 1
+            # 社区成员：ID搜索 + 关键词搜索
             if self.current_table == "community_members":
                 self.search_user_button = discord.ui.Button(
                     label="搜索用户",
                     emoji="🔍",
                     style=discord.ButtonStyle.success,
-                    row=1,
+                    row=button_row,
                 )
                 self.search_user_button.callback = self.search_user
                 self.add_item(self.search_user_button)
 
-            # --- 新增：仅在 general_knowledge 表中显示搜索按钮 ---
-            if self.current_table == "general_knowledge":
+                if not self.search_mode:
+                    self.search_member_button = discord.ui.Button(
+                        label="关键词搜索",
+                        emoji="🔍",
+                        style=discord.ButtonStyle.primary,
+                        row=button_row,
+                    )
+                    self.search_member_button.callback = self.search_community_member
+                    self.add_item(self.search_member_button)
+
+            # 通用知识：关键词搜索
+            elif self.current_table == "general_knowledge" and not self.search_mode:
                 self.search_knowledge_button = discord.ui.Button(
-                    label="搜索知识",
+                    label="关键词搜索",
                     emoji="🔍",
-                    style=discord.ButtonStyle.success,
-                    row=1,
+                    style=discord.ButtonStyle.primary,
+                    row=button_row,
                 )
                 self.search_knowledge_button.callback = self.search_knowledge
                 self.add_item(self.search_knowledge_button)
 
-                # 添加退出搜索模式的按钮
-                if self.search_mode:
-                    self.exit_search_button = discord.ui.Button(
-                        label="退出搜索",
-                        emoji="❌",
-                        style=discord.ButtonStyle.secondary,
-                        row=1,
-                    )
-                    self.exit_search_button.callback = self.exit_search
-                    self.add_item(self.exit_search_button)
+            # 工作事件：关键词搜索
+            elif self.current_table == "work_events" and not self.search_mode:
+                self.search_work_event_button = discord.ui.Button(
+                    label="关键词搜索",
+                    emoji="🔍",
+                    style=discord.ButtonStyle.primary,
+                    row=button_row,
+                )
+                self.search_work_event_button.callback = self.search_work_event
+                self.add_item(self.search_work_event_button)
+
+            # 通用：退出搜索模式的按钮
+            if self.search_mode:
+                self.exit_search_button = discord.ui.Button(
+                    label="退出搜索",
+                    emoji="❌",
+                    style=discord.ButtonStyle.secondary,
+                    row=button_row,
+                )
+                self.exit_search_button.callback = self.exit_search
+                self.add_item(self.exit_search_button)
 
             if self.current_list_items:
                 self.add_item(self._create_item_select())
@@ -740,6 +1092,7 @@ class DBView(discord.ui.View):
             discord.SelectOption(
                 label="类脑币管理", value="coin_management", emoji="🪙"
             ),
+            discord.SelectOption(label="工作管理", value="work_events", emoji="💼"),
         ]
         for option in options:
             if option.value == self.current_table:
@@ -754,12 +1107,14 @@ class DBView(discord.ui.View):
     def _create_item_select(self) -> discord.ui.Select:
         """根据当前列表页的条目创建选择菜单"""
         options = []
+        pk = self._get_primary_key_column()
         for item in self.current_list_items:
             title = self._get_entry_title(item)
-            label = f"{item['id']}. {title}"
+            item_id = item[pk]
+            label = f"#{item_id}. {title}"
             if len(label) > 100:
                 label = label[:97] + "..."
-            options.append(discord.SelectOption(label=label, value=str(item["id"])))
+            options.append(discord.SelectOption(label=label, value=str(item_id)))
 
         select = discord.ui.Select(
             placeholder="选择一个条目查看详情...", options=options
@@ -826,6 +1181,16 @@ class DBView(discord.ui.View):
     async def search_knowledge(self, interaction: discord.Interaction):
         """显示一个模态窗口让用户输入关键词搜索社区知识"""
         modal = SearchKnowledgeModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def search_work_event(self, interaction: discord.Interaction):
+        """显示一个模态窗口让用户输入关键词搜索工作事件"""
+        modal = SearchWorkEventModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def search_community_member(self, interaction: discord.Interaction):
+        """显示一个模态窗口让用户输入关键词搜索社区成员"""
+        modal = SearchCommunityMemberModal(self)
         await interaction.response.send_modal(modal)
 
     async def exit_search(self, interaction: discord.Interaction):
@@ -995,9 +1360,10 @@ class DBView(discord.ui.View):
         if not conn or not self.current_table:
             return None
         try:
+            pk = self._get_primary_key_column()
             cursor = conn.cursor()
             cursor.execute(
-                f"SELECT * FROM {self.current_table} WHERE id = ?", (item_id,)
+                f"SELECT * FROM {self.current_table} WHERE {pk} = ?", (item_id,)
             )
             return cursor.fetchone()
         finally:
@@ -1018,12 +1384,19 @@ class DBView(discord.ui.View):
             elif self.current_table == "general_knowledge":
                 return entry["title"]
 
+            # 3. 工作事件：使用 name 字段
+            elif self.current_table == "work_events":
+                return entry["name"]
+
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            log.warning(f"解析条目 {entry['id']} 标题时出错: {e}")
-            return f"ID: {entry['id']} (解析错误)"
+            pk = self._get_primary_key_column()
+            item_id = entry[pk]
+            log.warning(f"解析条目 #{item_id} 标题时出错: {e}")
+            return f"ID: #{item_id} (解析错误)"
 
         # 3. 回退机制：以防未来有其他表
-        return f"ID: {entry['id']}"
+        pk = self._get_primary_key_column()
+        return f"ID: #{entry[pk]}"
 
     def _truncate_field_value(self, value: any) -> str:
         """将值截断以符合 Discord embed 字段值的长度限制。"""
@@ -1052,6 +1425,8 @@ class DBView(discord.ui.View):
         # 根据表名选择不同的模态框
         if self.current_table == "community_members":
             modal = EditCommunityMemberModal(self, self.current_item_id, current_item)
+        elif self.current_table == "work_events":
+            modal = EditWorkEventModal(self, self.current_item_id, current_item)
         else:
             modal = EditModal(
                 self, self.current_table, self.current_item_id, current_item
@@ -1076,8 +1451,9 @@ class DBView(discord.ui.View):
                 )
             try:
                 cursor = conn.cursor()
+                pk = self._get_primary_key_column()
                 cursor.execute(
-                    f"DELETE FROM {self.current_table} WHERE id = ?", (item_id,)
+                    f"DELETE FROM {self.current_table} WHERE {pk} = ?", (item_id,)
                 )
                 conn.commit()
                 log.info(
@@ -1177,23 +1553,32 @@ class DBView(discord.ui.View):
             cursor = conn.cursor()
 
             # 如果是搜索模式，使用已加载的搜索结果
-            if self.search_mode and self.current_table == "general_knowledge":
-                # 从搜索结果中获取当前页的数据
+            if self.search_mode:
                 start_idx = self.current_page * self.items_per_page
                 end_idx = start_idx + self.items_per_page
                 page_items = self.current_list_items[start_idx:end_idx]
 
-                table_display_name = f"通用知识 (搜索: '{self.search_keyword}')"
+                table_name_map = {
+                    "community_members": "社区成员档案",
+                    "general_knowledge": "通用知识",
+                    "work_events": "工作事件",
+                }
+                table_display_name = table_name_map.get(
+                    self.current_table, self.current_table
+                )
+
                 embed = discord.Embed(
-                    title=f"搜索结果：{table_display_name}", color=discord.Color.gold()
+                    title=f"搜索: {table_display_name} (关键词: '{self.search_keyword}')",
+                    color=discord.Color.gold(),
                 )
 
                 if not page_items:
                     embed.description = "当前页没有搜索结果。"
                 else:
+                    pk = self._get_primary_key_column()
                     list_text = "\n".join(
                         [
-                            f"**`#{item['id']}`** - {item['title']}"
+                            f"**`#{item[pk]}`** - {self._get_entry_title(item)}"
                             for item in page_items
                         ]
                     )
@@ -1225,9 +1610,10 @@ class DBView(discord.ui.View):
                     (self.items_per_page, offset),
                 )
             else:
-                # 其他表默认按ID降序排序（最新的在前）
+                # 其他表默认按其主键降序排序
+                pk = self._get_primary_key_column()
                 cursor.execute(
-                    f"SELECT * FROM {self.current_table} ORDER BY id DESC LIMIT ? OFFSET ?",
+                    f"SELECT * FROM {self.current_table} ORDER BY {pk} DESC LIMIT ? OFFSET ?",
                     (self.items_per_page, offset),
                 )
             self.current_list_items = cursor.fetchall()
@@ -1235,6 +1621,7 @@ class DBView(discord.ui.View):
             table_name_map = {
                 "community_members": "社区成员档案",
                 "general_knowledge": "通用知识",
+                "work_events": "工作事件",
             }
             table_display_name = table_name_map.get(
                 self.current_table, self.current_table
@@ -1247,9 +1634,10 @@ class DBView(discord.ui.View):
             if not self.current_list_items:
                 embed.description = "这个表中目前没有数据。"
             else:
+                pk = self._get_primary_key_column()
                 list_text = "\n".join(
                     [
-                        f"**`#{item['id']}`** - {self._get_entry_title(item)}"
+                        f"**`#{item[pk]}`** - {self._get_entry_title(item)}"
                         for item in self.current_list_items
                     ]
                 )

@@ -16,6 +16,7 @@ DISABLE_THREAD_COMMENTOR_EFFECT_ID = "disable_thread_commentor"
 BLOCK_THREAD_REPLIES_EFFECT_ID = "block_thread_replies"
 ENABLE_THREAD_COMMENTOR_EFFECT_ID = "enable_thread_commentor"
 ENABLE_THREAD_REPLIES_EFFECT_ID = "enable_thread_replies"
+SELL_BODY_EVENT_SUBMISSION_EFFECT_ID = "submit_sell_body_event"
 
 
 class CoinService:
@@ -353,6 +354,15 @@ class CoinService:
                 )
             elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
                 # 购买"社区成员档案上传"商品，需要弹出模态窗口
+                return (
+                    True,
+                    f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    new_balance,
+                    True,
+                    False,
+                )
+            elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
+                # 购买“拉皮条”商品，需要弹出模态窗口
                 return (
                     True,
                     f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",

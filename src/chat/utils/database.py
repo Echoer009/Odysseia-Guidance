@@ -425,6 +425,25 @@ class ChatDatabaseManager:
                 )
                 log.info("已向 user_work_status 表添加 last_count_date 列。")
 
+            # --- 打工/卖屁股事件表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS work_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL, -- 'work' or 'sell_body'
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    reward_range_min INTEGER NOT NULL,
+                    reward_range_max INTEGER NOT NULL,
+                    good_event_description TEXT,
+                    good_event_modifier REAL,
+                    bad_event_description TEXT,
+                    bad_event_modifier REAL,
+                    is_enabled BOOLEAN NOT NULL DEFAULT 1,
+                    custom_event_by INTEGER, -- NULL for default events
+                    UNIQUE(event_type, name)
+                );
+            """)
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -1157,6 +1176,55 @@ class ChatDatabaseManager:
         """
         await self._execute(
             self._db_transaction, query, (user_id, timestamp), commit=True
+        )
+
+    # --- 打工/卖屁股事件管理 ---
+    async def add_work_event(self, event_data: Dict[str, Any]) -> int:
+        """向 work_events 表中添加一个新的事件。"""
+        query = """
+            INSERT INTO work_events (
+                event_type, name, description, reward_range_min, reward_range_max,
+                good_event_description, good_event_modifier,
+                bad_event_description, bad_event_modifier,
+                is_enabled, custom_event_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(event_type, name) DO UPDATE SET
+                description = excluded.description,
+                reward_range_min = excluded.reward_range_min,
+                reward_range_max = excluded.reward_range_max,
+                good_event_description = excluded.good_event_description,
+                good_event_modifier = excluded.good_event_modifier,
+                bad_event_description = excluded.bad_event_description,
+                bad_event_modifier = excluded.bad_event_modifier,
+                is_enabled = excluded.is_enabled,
+                custom_event_by = excluded.custom_event_by;
+        """
+        params = (
+            event_data["event_type"],
+            event_data["name"],
+            event_data["description"],
+            event_data["reward_range_min"],
+            event_data["reward_range_max"],
+            event_data.get("good_event_description"),
+            event_data.get("good_event_modifier"),
+            event_data.get("bad_event_description"),
+            event_data.get("bad_event_modifier"),
+            event_data.get("is_enabled", 1),
+            event_data.get("custom_event_by"),
+        )
+        return await self._execute(
+            self._db_transaction, query, params, commit=True, fetch="lastrowid"
+        )
+
+    async def get_work_events(
+        self, event_type: str, include_disabled: bool = False
+    ) -> List[sqlite3.Row]:
+        """根据类型获取所有启用的工作/卖屁股事件。"""
+        query = "SELECT * FROM work_events WHERE event_type = ?"
+        if not include_disabled:
+            query += " AND is_enabled = 1"
+        return await self._execute(
+            self._db_transaction, query, (event_type,), fetch="all"
         )
 
 

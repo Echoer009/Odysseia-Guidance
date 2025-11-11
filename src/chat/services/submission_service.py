@@ -47,10 +47,21 @@ class SubmissionService:
         try:
             cursor = conn.cursor()
 
-            # 从配置中获取审核时长
-            duration_minutes = chat_config.WORLD_BOOK_CONFIG["review_settings"][
-                "review_duration_minutes"
-            ]
+            # --- 动态获取审核配置 ---
+            review_config_key = ""
+            if entry_type in ["general_knowledge", "community_member"]:
+                review_config_key = "review_settings"
+            elif entry_type == "work_event":
+                review_config_key = "work_event_review_settings"
+
+            if not review_config_key:
+                log.error(f"未知的提交类型 '{entry_type}'，无法找到审核配置。")
+                return None
+
+            review_settings = chat_config.WORLD_BOOK_CONFIG.get(review_config_key, {})
+            duration_minutes = review_settings.get(
+                "review_duration_minutes", 1
+            )  # 默认为1分钟
             expires_at = datetime.utcnow() + timedelta(minutes=duration_minutes)
 
             data_json = json.dumps(entry_data, ensure_ascii=False)
@@ -213,6 +224,28 @@ class SubmissionService:
         )
 
         return True, "✅ 你的名片已成功提交审核！审核通过后将自动生效。"
+
+    async def submit_work_event(
+        self,
+        interaction: discord.Interaction,
+        event_data: Dict[str, Any],
+        purchase_info: Optional[Dict[str, Any]] = None,
+    ) -> Optional[int]:
+        """提交一个新的自定义工作/卖屁股事件以供审核。"""
+        if purchase_info:
+            event_data["purchase_info"] = purchase_info
+
+        pending_id = await self._create_pending_entry(
+            "work_event", interaction, event_data
+        )
+
+        if pending_id:
+            asyncio.create_task(review_service.start_review(pending_id))
+            log.info(
+                f"自定义工作事件提交成功，待审核ID: {pending_id}。已启动审核流程。"
+            )
+
+        return pending_id
 
 
 # 创建 SubmissionService 的单例

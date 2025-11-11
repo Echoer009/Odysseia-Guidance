@@ -274,6 +274,15 @@ WORLD_BOOK_CONFIG = {
         "vote_emoji": "✅",
         "reject_emoji": "❌",
     },
+    # 自定义工作/卖屁股事件审核设置
+    "work_event_review_settings": {
+        "review_duration_minutes": 1,
+        "approval_threshold": 1,
+        "instant_approval_threshold": 2,
+        "rejection_threshold": 1,
+        "vote_emoji": "✅",
+        "reject_emoji": "❌",
+    },
 }
 
 # --- 礼物功能提示词配置 ---

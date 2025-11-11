@@ -17,6 +17,7 @@ from src.chat.features.world_book.services.incremental_rag_service import (
     incremental_rag_service,
 )
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.chat.features.work_game.services.work_db_service import WorkDBService
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,8 @@ class ReviewService:
                 # 注意：社区成员的审核流程UI尚未完全分离，暂时复用通用知识的
                 # 未来可以创建一个 _start_community_member_review
                 await self._start_general_knowledge_review(entry, data)
+            elif entry_type == "work_event":
+                await self._start_work_event_review(entry, data)
             else:
                 log.warning(
                     f"未知的审核条目类型: {entry_type} for pending_id: {pending_id}"
@@ -163,6 +166,62 @@ class ReviewService:
         embed.timestamp = datetime.fromisoformat(entry["created_at"])
         return embed
 
+    async def _start_work_event_review(self, entry: sqlite3.Row, data: Dict[str, Any]):
+        """为自定义工作事件发起审核"""
+        proposer = await self.bot.fetch_user(entry["proposer_id"])
+        embed = self._build_work_event_embed(entry, data, proposer)
+
+        review_channel_id = entry["channel_id"]
+        channel = self.bot.get_channel(review_channel_id)
+        if not channel:
+            log.error(f"找不到提交时所在的频道 ID: {review_channel_id}")
+            return
+
+        review_message = await channel.send(embed=embed)
+        await self._update_message_id(entry["id"], review_message.id)
+
+    def _build_work_event_embed(
+        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User
+    ) -> discord.Embed:
+        """构建自定义工作事件的审核 Embed"""
+        review_settings = chat_config.WORLD_BOOK_CONFIG["work_event_review_settings"]
+        duration = review_settings["review_duration_minutes"]
+
+        embed = discord.Embed(
+            title="🥵 拉皮条!",
+            description=f"**{proposer.display_name}** 提交了一个新的事件，大家看看怎么样？\n\n*审核将在{duration}分钟后自动结束。*",
+            color=discord.Color.from_rgb(255, 182, 193),  # Light Pink
+        )
+
+        embed.add_field(name="事件名称", value=data.get("name", "N/A"), inline=False)
+        embed.add_field(name="描述", value=data.get("description", "N/A"), inline=False)
+        embed.add_field(
+            name="基础奖励",
+            value=f"{data.get('reward_range_min')} - {data.get('reward_range_max')} 类脑币",
+            inline=True,
+        )
+
+        if data.get("good_event_description"):
+            embed.add_field(
+                name="好事发生 ✅", value=data["good_event_description"], inline=False
+            )
+        if data.get("bad_event_description"):
+            embed.add_field(
+                name="坏事发生 ❌", value=data["bad_event_description"], inline=False
+            )
+
+        rules_text = (
+            f"投票规则: {review_settings['vote_emoji']} 达到{review_settings['approval_threshold']}个通过 | "
+            f"{review_settings['vote_emoji']} {duration}分钟内达到{review_settings['instant_approval_threshold']}个立即通过 | "
+            f"{review_settings['reject_emoji']} 达到{review_settings['rejection_threshold']}个否决"
+        )
+        footer_text = (
+            f"提交者: {proposer.display_name} | 审核ID: {entry['id']} | {rules_text}"
+        )
+        embed.set_footer(text=footer_text)
+        embed.timestamp = datetime.fromisoformat(entry["created_at"])
+        return embed
+
     async def _update_message_id(self, pending_id: int, message_id: int):
         """更新待审核条目的 message_id"""
         conn = self._get_db_connection()
@@ -214,6 +273,10 @@ class ReviewService:
         if entry_type == "personal_profile":
             return chat_config.WORLD_BOOK_CONFIG.get(
                 "personal_profile_review_settings", REVIEW_SETTINGS
+            )
+        elif entry_type == "work_event":
+            return chat_config.WORLD_BOOK_CONFIG.get(
+                "work_event_review_settings", REVIEW_SETTINGS
             )
         return REVIEW_SETTINGS
 
@@ -360,6 +423,23 @@ class ReviewService:
 
                 embed_title = "✅ 社区成员档案已更新"
                 embed_description = f"感谢大家的审核！ **{data['name']}** 的个人档案已经成功收录进世界之书！"
+
+            elif entry_type == "work_event":
+                work_db_service = WorkDBService()
+                success = await work_db_service.add_custom_event(data)
+                if success:
+                    new_entry_id = (
+                        f"work_event_{data['name']}"  # 模拟一个ID用于后续流程
+                    )
+                    embed_title = "✅ 新的事件已添加！"
+                    embed_description = (
+                        f"感谢社区！自定义事件 **{data['name']}** 现已加入事件池。"
+                    )
+                else:
+                    log.error(f"将自定义事件 #{pending_id} 添加到数据库时失败。")
+                    # 可以选择在这里否决条目或重试
+                    conn.rollback()
+                    return
 
             if new_entry_id:
                 cursor.execute(

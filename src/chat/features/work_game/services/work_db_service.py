@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Tuple, Dict, Any, Optional
+import logging
 
+import random
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.time_utils import format_time_delta
 from ..config.work_config import WorkConfig
@@ -183,3 +185,49 @@ class WorkDBService:
         await chat_db_manager._execute(
             chat_db_manager._db_transaction, query, params, commit=True
         )
+
+    async def add_custom_event(self, event_data: Dict[str, Any]) -> bool:
+        """
+        将一个通过审核的自定义事件添加到数据库。
+        """
+        try:
+            # 将所有需要的字段打包到一个字典中
+            event_to_add = {
+                "event_type": event_data["event_type"],
+                "name": event_data["name"],
+                "description": event_data["description"],
+                "reward_range_min": event_data["reward_range_min"],
+                "reward_range_max": event_data["reward_range_max"],
+                "good_event_description": event_data.get("good_event_description"),
+                "good_event_modifier": event_data.get("good_event_modifier"),
+                "bad_event_description": event_data.get("bad_event_description"),
+                "bad_event_modifier": event_data.get("bad_event_modifier"),
+                "is_enabled": True,  # 审核通过的事件默认为启用
+                "custom_event_by": event_data.get("contributor_id"),
+            }
+            await chat_db_manager.add_work_event(event_to_add)
+            logging.info(f"成功将自定义事件 '{event_data['name']}' 添加到数据库。")
+            return True
+        except Exception as e:
+            logging.error(
+                f"添加自定义事件 '{event_data['name']}' 到数据库时失败: {e}",
+                exc_info=True,
+            )
+            return False
+
+    async def get_random_work_event(self, event_type: str) -> Optional[Dict[str, Any]]:
+        """从数据库中随机获取一个指定类型的已启用事件。"""
+        try:
+            events = await chat_db_manager.get_work_events(event_type)
+            if not events:
+                return None
+
+            # 将 sqlite3.Row 对象转换为字典
+            event_dicts = [dict(event) for event in events]
+            return random.choice(event_dicts)
+
+        except Exception as e:
+            logging.error(
+                f"获取随机事件 (类型: {event_type}) 时失败: {e}", exc_info=True
+            )
+            return None

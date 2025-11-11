@@ -10,6 +10,7 @@ from src.chat.features.odysseia_coin.service.coin_service import (
     WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
     COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
     ENABLE_THREAD_REPLIES_EFFECT_ID,
+    SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
 )
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
 from src.chat.utils.database import chat_db_manager
@@ -506,13 +507,42 @@ class SellBodyButton(discord.ui.Button):
         """
         user_id = interaction.user.id
 
-        # 直接调用服务，由服务处理所有逻辑并返回最终消息
-        await interaction.response.defer(ephemeral=False, thinking=True)
+        # 1. 以私密模式延迟响应，确保失败消息是私密的
+        await interaction.response.defer(ephemeral=True, thinking=True)
         sell_body_service = SellBodyService(coin_service)
-        result_message = await sell_body_service.perform_sell_body(user_id)
+        result = await sell_body_service.perform_sell_body(user_id)
 
-        # 发送由服务层构建的统一消息
-        await interaction.followup.send(result_message, ephemeral=False)
+        if result["success"]:
+            # 2. 对于成功情况，构建 Embed 并公开发送到频道
+            embed_data = result["embed_data"]
+            user = interaction.user
+
+            event_name = embed_data["title"].lstrip("🥵").strip()
+            title = f"{user.display_name} 选择了 {event_name}"
+            description = f"{embed_data['description']}"
+            footer_text = embed_data["reward_text"]
+
+            embed = discord.Embed(
+                title=title,
+                description=description,
+                color=discord.Color.pink(),
+            )
+
+            if user.display_avatar:
+                embed.set_thumbnail(url=user.display_avatar.url)
+            embed.set_footer(text=footer_text)
+
+            # 公开发送 Embed
+            if interaction.channel:
+                await interaction.channel.send(embed=embed)
+
+            # 编辑原始的私密 "Thinking..." 消息，告知用户成功
+            await interaction.edit_original_response(content="✅ 操作成功！")
+        else:
+            # 3. 对于失败情况，私密地回应用户
+            await interaction.followup.send(
+                f"<@{user_id}> {result['message']}", ephemeral=True
+            )
 
 
 class PurchaseButton(discord.ui.Button):
@@ -551,6 +581,7 @@ class PurchaseButton(discord.ui.Button):
         modal_effects = [
             WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
             COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
+            SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
         ]
         if item_effect in modal_effects:
             await self.handle_standard_modal_purchase(interaction, selected_item)
@@ -600,6 +631,7 @@ class PurchaseButton(discord.ui.Button):
         modal_map = {
             WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID: "src.chat.features.world_book.ui.contribution_modal.WorldBookContributionModal",
             COMMUNITY_MEMBER_UPLOAD_EFFECT_ID: "src.chat.features.community_member.ui.community_member_modal.CommunityMemberUploadModal",
+            SELL_BODY_EVENT_SUBMISSION_EFFECT_ID: "src.chat.features.work_game.ui.sell_body_submission_modal.SellBodySubmissionModal",
         }
         modal_path = modal_map.get(item["effect_id"])
         if not modal_path:
