@@ -534,18 +534,8 @@ class SellBodyButton(discord.ui.Button):
                 embed.set_thumbnail(url=user.display_avatar.url)
             embed.set_footer(text=footer_text)
 
-            # 检查是否为突发事件（有额外描述）
-            is_special_event = "\n\n" in embed_data["description"]
-
-            if is_special_event:
-                # 突发事件：公开发送到频道
-                if interaction.channel:
-                    await interaction.channel.send(embed=embed)
-                # 编辑原始的私密 "Thinking..." 消息，告知用户成功
-                await interaction.edit_original_response(content="✅ 操作成功！")
-            else:
-                # 正常事件：以私密方式显示
-                await interaction.followup.send(embed=embed, ephemeral=True)
+            # 统一以私密方式显示
+            await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             # 3. 对于失败情况，私密地回应用户
             await interaction.followup.send(

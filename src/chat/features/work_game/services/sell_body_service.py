@@ -26,6 +26,7 @@ class SellBodyService:
                 return {
                     "success": False,
                     "message": f"你今天已经卖了 **{count}** 次了，身体要紧，明天再来吧！",
+                    "ephemeral": True,
                 }
 
         # 2. 检查冷却时间（开发者跳过）
@@ -50,6 +51,7 @@ class SellBodyService:
                     return {
                         "success": False,
                         "message": f"卖这么多不好吧... **{format_time_delta(remaining)}** 后再卖吧🥵",
+                        "ephemeral": True,
                     }
 
         # 3. 从数据库获取随机事件
@@ -58,6 +60,7 @@ class SellBodyService:
             return {
                 "success": False,
                 "message": f"今天好像没什么客人，你暂时安全...我是说，真不巧。",
+                "ephemeral": True,
             }
 
         # 4. 计算基础奖励和决定事件结果
@@ -114,4 +117,5 @@ class SellBodyService:
                 "reward_text": reward_text,
                 "user_id": user_id,
             },
+            "ephemeral": True,
         }
