@@ -87,7 +87,24 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if response_text:
             try:
-                await message.reply(response_text, mention_author=True)
+                if len(response_text) > 200:
+                    try:
+                        await message.author.send(
+                            f"刚刚在 {message.channel.mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
+                        )
+                        log.info(
+                            f"回复因过长已通过私信发送给 {message.author.display_name}"
+                        )
+                    except discord.Forbidden:
+                        log.warning(
+                            f"无法通过私信发送给 {message.author.display_name}，将在原频道回复提示信息。"
+                        )
+                        await message.reply(
+                            "字太多啦，我不要刷屏。你的私信又关了，我就不给你讲啦！",
+                            mention_author=True,
+                        )
+                else:
+                    await message.reply(response_text, mention_author=True)
             except discord.errors.HTTPException as e:
                 log.warning(f"发送回复失败: {e}")
                 pass  # 如果发送回复失败，则忽略
