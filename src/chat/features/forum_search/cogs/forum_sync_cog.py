@@ -96,26 +96,39 @@ class ForumSyncCog(commands.Cog):
 
             log.info(f"正在轮询论坛频道: {channel.name} ({channel_id})")
             try:
-                active_threads = channel.threads
-                archived_threads_iterator = channel.archived_threads(
-                    limit=chat_config.FORUM_POLL_THREAD_LIMIT
-                )
-                archived_threads = [t async for t in archived_threads_iterator]
+                # 1. 获取所有已处理的帖子ID
+                async with aiosqlite.connect(self.db_path) as db:
+                    cursor = await db.execute("SELECT thread_id FROM processed_threads")
+                    processed_ids = {row[0] for row in await cursor.fetchall()}
 
-                all_threads_dict = {t.id: t for t in active_threads}
-                all_threads_dict.update({t.id: t for t in archived_threads})
+                # 2. 获取频道中所有帖子，并筛选出未处理的
+                log.info(f"正在从频道 {channel.name} 获取帖子列表...")
+                all_threads_in_channel = []
+                all_threads_in_channel.extend(channel.threads)
+                # 限制一个较大的数量以防无限加载和API滥用
+                async for t in channel.archived_threads(limit=5000):
+                    all_threads_in_channel.append(t)
 
-                sorted_threads = sorted(
-                    all_threads_dict.values(), key=lambda t: t.created_at, reverse=True
+                unprocessed_threads = [
+                    t for t in all_threads_in_channel if t.id not in processed_ids
+                ]
+
+                # 3. 按时间倒序排列，并获取本轮要处理的批次
+                sorted_unprocessed = sorted(
+                    unprocessed_threads, key=lambda t: t.created_at, reverse=True
                 )
-                threads_to_process = sorted_threads[
+                threads_to_process = sorted_unprocessed[
                     : chat_config.FORUM_POLL_THREAD_LIMIT
                 ]
 
                 if not threads_to_process:
+                    log.info(f"频道 {channel.name} 中没有找到新的未处理帖子。")
                     continue
 
-                log.info(f"找到 {len(threads_to_process)} 个帖子，准备并发处理...")
+                # 4. 并发处理这一批次的帖子
+                log.info(
+                    f"找到 {len(threads_to_process)} 个未处理帖子，准备并发处理..."
+                )
                 async with aiosqlite.connect(self.db_path) as db:
                     tasks = [
                         self._process_thread_concurrently(thread, semaphore, db)
