@@ -256,6 +256,10 @@ FORUM_VECTOR_DB_COLLECTION_NAME = "forum_threads"
 # 在这里添加需要轮询的论坛频道ID
 FORUM_SEARCH_CHANNEL_IDS = _parse_ids("FORUM_SEARCH_CHANNEL_IDS")
 
+# 每日轮询任务处理的帖子数量上限
+FORUM_POLL_THREAD_LIMIT = 50
+
+
 # --- 世界之书向量化任务配置 ---
 WORLD_BOOK_CONFIG = {
     "VECTOR_INDEX_UPDATE_INTERVAL_HOURS": 6,  # 向量索引更新间隔（小时）

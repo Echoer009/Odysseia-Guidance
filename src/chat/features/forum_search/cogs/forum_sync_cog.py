@@ -97,7 +97,9 @@ class ForumSyncCog(commands.Cog):
             log.info(f"正在轮询论坛频道: {channel.name} ({channel_id})")
             try:
                 active_threads = channel.threads
-                archived_threads_iterator = channel.archived_threads(limit=50)
+                archived_threads_iterator = channel.archived_threads(
+                    limit=chat_config.FORUM_POLL_THREAD_LIMIT
+                )
                 archived_threads = [t async for t in archived_threads_iterator]
 
                 all_threads_dict = {t.id: t for t in active_threads}
@@ -106,7 +108,9 @@ class ForumSyncCog(commands.Cog):
                 sorted_threads = sorted(
                     all_threads_dict.values(), key=lambda t: t.created_at, reverse=True
                 )
-                threads_to_process = sorted_threads[:50]
+                threads_to_process = sorted_threads[
+                    : chat_config.FORUM_POLL_THREAD_LIMIT
+                ]
 
                 if not threads_to_process:
                     continue
