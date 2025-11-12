@@ -87,7 +87,7 @@ class ForumSyncCog(commands.Cog):
             log.info("没有配置要轮询的论坛频道ID，任务结束。")
             return
 
-        semaphore = asyncio.Semaphore(10)  # 设置并发数为10
+        semaphore = asyncio.Semaphore(chat_config.FORUM_POLL_CONCURRENCY)  # 设置并发数
 
         for channel_id in channel_ids:
             channel = self.bot.get_channel(channel_id)

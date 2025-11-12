@@ -259,6 +259,9 @@ FORUM_SEARCH_CHANNEL_IDS = _parse_ids("FORUM_SEARCH_CHANNEL_IDS")
 # 每日轮询任务处理的帖子数量上限
 FORUM_POLL_THREAD_LIMIT = 50
 
+# 轮询任务的并发数
+FORUM_POLL_CONCURRENCY = 10
+
 
 # --- 世界之书向量化任务配置 ---
 WORLD_BOOK_CONFIG = {

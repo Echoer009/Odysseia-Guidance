@@ -82,7 +82,9 @@ async def reindex_forums():
             try:
                 # 获取最新的50个帖子（包括活跃和已归档的）
                 active_threads = channel.threads
-                archived_threads_iterator = channel.archived_threads(limit=50)
+                archived_threads_iterator = channel.archived_threads(
+                    limit=chat_config.FORUM_POLL_THREAD_LIMIT
+                )
                 archived_threads = [t async for t in archived_threads_iterator]
 
                 all_threads_dict = {t.id: t for t in active_threads}
@@ -93,11 +95,13 @@ async def reindex_forums():
                     key=lambda t: t.created_at,
                     reverse=True,
                 )
-                threads_to_process = sorted_threads[:50]
+                threads_to_process = sorted_threads[
+                    : chat_config.FORUM_POLL_THREAD_LIMIT
+                ]
                 log.info(f"找到 {len(threads_to_process)} 个帖子准备处理。")
 
                 # --- 并发处理 ---
-                semaphore = asyncio.Semaphore(10)
+                semaphore = asyncio.Semaphore(chat_config.FORUM_POLL_CONCURRENCY)
                 tasks = []
 
                 async def process_with_semaphore(thread):
