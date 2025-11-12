@@ -270,7 +270,7 @@ class GeminiService:
         formatted = re.sub(
             r"<CURRENT_USER_MESSAGE_TO_REPLY.*?>", "", formatted, flags=re.IGNORECASE
         )
-        formatted = regex_service.clean_ai_output(formatted)
+        # formatted = regex_service.clean_ai_output(formatted)
 
         # 2. Remove old Discord emoji codes
         discord_emoji_pattern = re.compile(r":\w+:")
@@ -641,13 +641,14 @@ class GeminiService:
             if log_detailed:
                 if response.candidates:
                     candidate = response.candidates[0]
-                    for part in candidate.content.parts:
-                        # 检查 part 是否代表思考过程
-                        if hasattr(part, "thought") and part.thought:
-                            thinking_was_used = True  # 标记思考功能已被使用
-                            log.info("--- 模型思考过程 (Thinking) ---")
-                            log.info(part.text)
-                            log.info("---------------------------------")
+                    if candidate.content:
+                        for part in candidate.content.parts:
+                            # 检查 part 是否代表思考过程
+                            if hasattr(part, "thought") and part.thought:
+                                thinking_was_used = True  # 标记思考功能已被使用
+                                log.info("--- 模型思考过程 (Thinking) ---")
+                                log.info(part.text)
+                                log.info("---------------------------------")
 
             # 检查是否有函数调用建议
             function_calls = response.function_calls
@@ -674,7 +675,8 @@ class GeminiService:
                 called_tool_names.append(call.name)
 
             # 将包含 FunctionCall 建议的模型响应添加到历史记录中
-            conversation_history.append(response.candidates[0].content)
+            if response.candidates and response.candidates[0].content:
+                conversation_history.append(response.candidates[0].content)
 
             # 步骤 3: 提取并执行函数
             if log_detailed:

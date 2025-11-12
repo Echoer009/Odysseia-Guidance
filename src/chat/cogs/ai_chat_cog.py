@@ -15,7 +15,7 @@ from src.chat.services.context_service_test import context_service_test  # 导�
 
 # 导入数据库管理器以进行黑名单检查和斜杠命令
 from src.chat.utils.database import chat_db_manager
-from src.chat.config.chat_config import CHAT_ENABLED
+from src.chat.config.chat_config import CHAT_ENABLED, MESSAGE_SETTINGS
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 
 log = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if response_text:
             try:
-                if len(response_text) > 200:
+                if len(response_text) > MESSAGE_SETTINGS["DM_THRESHOLD"]:
                     try:
                         await message.author.send(
                             f"刚刚在 {message.channel.mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"

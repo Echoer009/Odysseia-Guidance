@@ -80,6 +80,11 @@ GEMINI_CHAT_CONFIG = {
     "thinking_budget": -1,  # 思考预算 (设置为-1以启用动态思考模式)
 }
 
+# --- 消息设置 ---
+MESSAGE_SETTINGS = {
+    "DM_THRESHOLD": 200,  # 当消息长度超过此值时，通过私信发送
+}
+
 GEMINI_TEXT_GEN_CONFIG = {
     "temperature": 0.1,
     "max_output_tokens": 200,
@@ -242,6 +247,14 @@ PROMPT_CONFIG = {
 # --- Vector DB (ChromaDB) ---
 VECTOR_DB_PATH = "data/chroma_db"
 VECTOR_DB_COLLECTION_NAME = "world_book"
+
+# --- 论坛帖子语义搜索 Vector DB ---
+FORUM_VECTOR_DB_PATH = "data/forum_chroma_db"
+FORUM_VECTOR_DB_COLLECTION_NAME = "forum_threads"
+
+# --- 论坛帖子轮询配置 ---
+# 在这里添加需要轮询的论坛频道ID
+FORUM_SEARCH_CHANNEL_IDS = _parse_ids("FORUM_SEARCH_CHANNEL_IDS")
 
 # --- 世界之书向量化任务配置 ---
 WORLD_BOOK_CONFIG = {

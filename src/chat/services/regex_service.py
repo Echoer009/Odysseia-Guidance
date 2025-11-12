@@ -11,24 +11,40 @@ class RegexService:
     def clean_ai_output(self, text: str) -> str:
         """
         清理AI模型的输出文本。
-        - 移除 () 和 [] 及其内部内容。
+        - 移除 () 和 [] 及其内部内容，但保留 Markdown 链接。
         - 移除全角/半角括号。
         """
         if not isinstance(text, str):
             return ""
 
-        # 新增：移除模型输出中可能包含的各种思考过程标签和内容
-        # 使用 re.DOTALL 匹配换行符, re.IGNORECASE 忽略大小写
+        # 1. 保护 Markdown 链接
+        markdown_links = {}
+
+        def replacer(match):
+            placeholder = f"__MARKDOWN_LINK_{len(markdown_links)}__"
+            markdown_links[placeholder] = match.group(0)
+            return placeholder
+
+        # 匹配 [text](url) 格式的链接
+        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", replacer, text)
+
+        # 2. 移除模型输出中可能包含的各种思考过程标签和内容
         think_pattern = re.compile(
             r"<(思考|think|thinking|thought|scratchpad|reasoning|rationale)>.*?</\1>\s*",
             re.DOTALL | re.IGNORECASE,
         )
         text = think_pattern.sub("", text)
 
+        # 3. 清理其他括号
         # 匹配 (), （）
         text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
         # 匹配 [], 【】
         text = re.sub(r"[\[【][^\]】]*[\]】]:?\s*", "", text)
+
+        # 4. 恢复 Markdown 链接
+        for placeholder, original_link in markdown_links.items():
+            text = text.replace(placeholder, original_link)
+
         return text.strip()
 
     def clean_user_input(self, text: str) -> str:

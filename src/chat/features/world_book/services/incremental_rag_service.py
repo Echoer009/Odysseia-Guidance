@@ -6,7 +6,6 @@ import asyncio
 from functools import wraps
 
 from src import config
-from src.chat.services.gemini_service import gemini_service
 from src.chat.services.vector_db_service import vector_db_service
 
 
@@ -221,15 +220,22 @@ class IncrementalRAGService:
     """
 
     def __init__(self):
-        self.gemini_service = gemini_service
+        self.gemini_service = None
         self.vector_db_service = vector_db_service
         self.db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
 
+    def _get_gemini_service(self):
+        """延迟导入 Gemini 服务以避免循环导入。"""
+        if self.gemini_service is None:
+            from src.chat.services.gemini_service import gemini_service
+
+            self.gemini_service = gemini_service
+        return self.gemini_service
+
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
-        return (
-            self.vector_db_service.is_available() and self.gemini_service.is_available()
-        )
+        gemini_service = self._get_gemini_service()
+        return self.vector_db_service.is_available() and gemini_service.is_available()
 
     def _get_db_connection(self):
         """获取数据库连接"""
@@ -388,7 +394,8 @@ class IncrementalRAGService:
                 log.debug(f"正在为块 {chunk_id} 生成嵌入向量...")
 
                 # 生成嵌入向量
-                embedding = await self.gemini_service.generate_embedding(
+                gemini_service = self._get_gemini_service()
+                embedding = await gemini_service.generate_embedding(
                     text=chunk_content,
                     title=entry.get("title", entry_id),
                     task_type="retrieval_document",
