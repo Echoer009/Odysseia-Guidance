@@ -4,6 +4,7 @@ import io
 from discord import app_commands
 from discord.ext import commands
 
+from src.chat.utils.database import chat_db_manager
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.feeding_service import feeding_service
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
@@ -32,6 +33,13 @@ class FeedingCog(commands.Cog):
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
         # --- 交互可用性检查 ---
         channel = interaction.channel
+        # 0. 检查频道是否被禁言
+        if channel and await chat_db_manager.is_channel_muted(channel.id):
+            await interaction.response.send_message(
+                "呜…我现在不能在这里说话啦…", ephemeral=True
+            )
+            return
+
         # 1. 检查是否在禁用的频道中
         if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
             await interaction.response.send_message(

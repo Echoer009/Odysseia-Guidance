@@ -223,8 +223,27 @@ class GuidanceBot(commands.Bot):
         如果返回 False，则命令不会执行。
         """
         channel = interaction.channel
+        if not channel:
+            return True  # DM等情况
+
+        # 检查频道是否被禁言
+        if await chat_db_manager.is_channel_muted(channel.id):
+            logging.getLogger(__name__).debug(
+                f"交互来自被禁言的频道 {channel.name}，已忽略。"
+            )
+            # 尝试发送一个仅自己可见的提示消息
+            try:
+                await interaction.response.send_message(
+                    "呜…我现在不能在这里说话啦…", ephemeral=True
+                )
+            except discord.errors.InteractionResponded:
+                pass  # 如果已经响应过，就忽略
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"在禁言频道发送提示时出错: {e}")
+            return False
+
         # 检查交互是否来自配置中禁用的频道
-        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+        if channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
             logging.getLogger(__name__).debug(
                 f"交互来自禁用的频道 {channel.name}，已忽略。"
             )

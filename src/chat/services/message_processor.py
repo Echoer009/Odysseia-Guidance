@@ -10,6 +10,7 @@ import aiohttp
 from src.chat.services.regex_service import regex_service
 from src import config
 from src.chat.config import chat_config
+from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +101,12 @@ class MessageProcessor:
         处理传入的 discord 消息对象。
         如果消息来自一个不应被触发的频道（如永久面板或置顶帖子），则返回 None。
         """
+        # 检查消息是否来自置顶帖子
+        # 检查频道是否被禁言
+        if await chat_db_manager.is_channel_muted(message.channel.id):
+            log.debug(f"消息来自被禁言的频道 {message.channel.name}，已忽略。")
+            return None
+
         # 检查消息是否来自置顶帖子
         if isinstance(message.channel, discord.Thread) and message.channel.flags.pinned:
             log.debug(f"消息来自置顶帖子 {message.channel.name}，已忽略。")

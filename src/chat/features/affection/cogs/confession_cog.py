@@ -9,6 +9,7 @@ from src.chat.config.chat_config import (
     CONFESSION_PERSONA_INJECTION,
 )
 from src.chat.config import chat_config
+from src.chat.utils.database import chat_db_manager
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.confession_service import ConfessionService
 from src.chat.services.gemini_service import gemini_service
@@ -33,6 +34,13 @@ class ConfessionCog(commands.Cog):
     async def confess(self, interaction: discord.Interaction, content: str):
         # --- 交互可用性检查 ---
         channel = interaction.channel
+        # 0. 检查频道是否被禁言
+        if channel and await chat_db_manager.is_channel_muted(channel.id):
+            await interaction.response.send_message(
+                "呜…我现在不能在这里说话啦…", ephemeral=True
+            )
+            return
+
         # 1. 检查是否在禁用的频道中
         if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
             await interaction.response.send_message(

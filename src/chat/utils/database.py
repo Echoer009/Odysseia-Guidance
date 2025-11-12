@@ -5,7 +5,8 @@ import os
 import asyncio
 from functools import partial
 from typing import Optional, List, Dict, Any, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from src.chat.config import chat_config
 
 # --- 常量定义 ---
 _PROJECT_ROOT = os.path.abspath(
@@ -450,6 +451,25 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 频道禁言表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS muted_channels (
+                    channel_id INTEGER PRIMARY KEY,
+                    muted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    muted_until TIMESTAMP
+                );
+            """)
+
+            # 检查并添加 muted_until 列到 muted_channels
+            cursor.execute("PRAGMA table_info(muted_channels);")
+            columns_muted = [info[1] for info in cursor.fetchall()]
+            if "muted_until" not in columns_muted:
+                cursor.execute("""
+                    ALTER TABLE muted_channels
+                    ADD COLUMN muted_until TIMESTAMP;
+                """)
+                log.info("已向 muted_channels 表添加 muted_until 列。")
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -803,6 +823,25 @@ class ChatDatabaseManager:
         log.info(
             f"用户 {user_id} 在服务器 {guild_id} 的警告次数更新为: {current_warnings}"
         )
+
+        # --- 扣除好感度 ---
+        penalty = chat_config.AFFECTION_CONFIG["BLACKLIST_PENALTY"]
+        if penalty != 0:
+            query_affection = """
+                INSERT INTO ai_affection (user_id, guild_id, affection_points)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, guild_id) DO UPDATE SET
+                    affection_points = affection_points + excluded.affection_points;
+            """
+            await self._execute(
+                self._db_transaction,
+                query_affection,
+                (user_id, guild_id, penalty),
+                commit=True,
+            )
+            log.info(
+                f"用户 {user_id} 在服务器 {guild_id} 因收到警告被扣除好感度: {penalty}"
+            )
 
         # 检查是否达到拉黑阈值
         if current_warnings >= 3:
@@ -1232,6 +1271,60 @@ class ChatDatabaseManager:
         return await self._execute(
             self._db_transaction, query, (event_type,), fetch="all"
         )
+
+    # --- 频道禁言管理 ---
+    async def add_muted_channel(self, channel_id: int, duration_minutes: int):
+        """将一个频道添加到禁言列表，并设置禁言持续时间。"""
+        muted_until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+        query = "INSERT OR REPLACE INTO muted_channels (channel_id, muted_until) VALUES (?, ?)"
+        await self._execute(
+            self._db_transaction, query, (channel_id, muted_until), commit=True
+        )
+        log.info(
+            f"已将频道 {channel_id} 添加到禁言列表，解禁时间: {muted_until.isoformat()}"
+        )
+
+    async def remove_muted_channel(self, channel_id: int) -> None:
+        """将一个频道从禁言列表中移除。"""
+        query = "DELETE FROM muted_channels WHERE channel_id = ?"
+        await self._execute(self._db_transaction, query, (channel_id,), commit=True)
+        log.info(f"已将频道 {channel_id} 从禁言列表中移除。")
+
+    async def is_channel_muted(self, channel_id: int) -> bool:
+        """
+        检查一个频道当前是否被禁言。
+        如果禁言已过期，则会自动从数据库中移除该记录。
+        """
+        query = "SELECT muted_until FROM muted_channels WHERE channel_id = ?"
+        row = await self._execute(
+            self._db_transaction, query, (channel_id,), fetch="one"
+        )
+
+        if row:
+            muted_until_str = row["muted_until"]
+            if not muted_until_str:
+                # 兼容旧数据，如果没有设置过期时间，则视为未禁言
+                return False
+
+            try:
+                # 尝试解析带时区信息的时间字符串
+                muted_until = datetime.fromisoformat(muted_until_str)
+            except ValueError:
+                # 兼容可能不带时区信息的旧格式
+                muted_until = datetime.strptime(
+                    muted_until_str, "%Y-%m-%d %H:%M:%S.%f"
+                ).replace(tzinfo=timezone.utc)
+
+            if datetime.now(timezone.utc) > muted_until:
+                # 禁言已过期，移除记录并返回 False
+                await self.remove_muted_channel(channel_id)
+                log.info(f"频道 {channel_id} 的禁言已到期，已自动解除。")
+                return False
+            else:
+                # 仍在禁言期
+                return True
+        # 不在禁言列表
+        return False
 
 
 # --- 单例实例 ---
