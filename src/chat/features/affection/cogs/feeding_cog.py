@@ -147,21 +147,6 @@ class FeedingCog(commands.Cog):
 
             # 从配置中获取图片 URL
             # --- 动态获取图片 ---
-            image_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")  # 默认图片
-            selected_faction_id = event_service.get_selected_faction()
-            if selected_faction_id:
-                factions = event_service.get_event_factions()
-                if factions:
-                    for faction in factions:
-                        if faction.get("faction_id") == selected_faction_id:
-                            # 从新的 response_images 结构中获取投喂专用的图片
-                            image_url = faction.get("response_images", {}).get(
-                                "feeding", image_url
-                            )
-                            break
-
-            if image_url:
-                embed.set_image(url=image_url)
 
             # 将用户上传的图片作为缩略图
             file = discord.File(fp=io.BytesIO(image_bytes), filename=image.filename)
