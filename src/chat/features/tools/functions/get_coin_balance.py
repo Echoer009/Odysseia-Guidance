@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 async def get_coin_balance(user_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
     """
-    获取指定用户的奥德赛币余额。此工具用于以下两种场景：
+    获取指定用户的类脑币余额。此工具用于以下两种场景：
     1. 当用户想查询自己的余额时,在这种情况下，请不要在调用时传入 user_id，系统会自动传入当前用户ID。
     2. 当用户想查询其他特定用户的余额时：例如“看看 <@123456789012345678> 有多少钱”。在这种情况下，请传入目标用户的纯数字ID。
 

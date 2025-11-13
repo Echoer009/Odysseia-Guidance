@@ -164,43 +164,6 @@ class ForumSyncCog(commands.Cog):
             )
             await db.commit()
 
-    @discord.app_commands.command(
-        name="forum_search", description="在指定论坛频道中进行语义搜索"
-    )
-    @discord.app_commands.describe(query="你要搜索的关键词")
-    async def forum_search(self, interaction: discord.Interaction, query: str):
-        """处理论坛语义搜索的斜杠命令。"""
-        await interaction.response.defer(ephemeral=True)
-
-        results = await forum_search_service.search(query)
-
-        if not results:
-            await interaction.followup.send("没有找到相关的帖子。", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title=f"“{query}”的论坛搜索结果", color=discord.Color.blue()
-        )
-
-        # 使用集合来防止重复的帖子ID
-        processed_thread_ids = set()
-        description_lines = []
-
-        for result in results:
-            thread_id = result["metadata"]["thread_id"]
-            if thread_id in processed_thread_ids:
-                continue
-            processed_thread_ids.add(thread_id)
-
-            thread_name = result["metadata"]["thread_name"]
-            thread_url = (
-                f"https://discord.com/channels/{interaction.guild_id}/{thread_id}"
-            )
-            description_lines.append(f"[{thread_name}]({thread_url})")
-
-        embed.description = "\n".join(description_lines)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     """将此Cog添加到机器人中。"""
