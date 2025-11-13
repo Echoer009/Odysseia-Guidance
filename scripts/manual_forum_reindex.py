@@ -6,6 +6,8 @@ import os
 import sys
 import shutil
 import discord
+import argparse
+from tqdm.asyncio import tqdm_asyncio
 
 # 将项目根目录添加到系统路径中，以便导入 src 中的模块
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -47,7 +49,7 @@ def clear_existing_database():
         return False
 
 
-async def reindex_forums():
+async def reindex_forums(rebuild: bool):
     """连接到Discord并执行重新索引任务。"""
     intents = discord.Intents.default()
     intents.guilds = True
@@ -57,6 +59,14 @@ async def reindex_forums():
     @client.event
     async def on_ready():
         log.info(f"机器人已作为 {client.user} 登录，准备开始索引。")
+
+        if rebuild:
+            if not clear_existing_database():
+                log.error("数据库清理失败，索引任务已中止。")
+                await client.close()
+                return
+        else:
+            log.info("将执行更新/增量索引（跳过数据库清理）。")
 
         # 在这里导入服务和配置，确保它们在数据库清理和 .env 加载之后才被初始化
         from src.chat.config import chat_config
@@ -80,11 +90,9 @@ async def reindex_forums():
 
             log.info(f"--- 开始处理频道: {channel.name} ({channel.id}) ---")
             try:
-                # 获取最新的50个帖子（包括活跃和已归档的）
+                # 获取最新的100个帖子（包括活跃和已归档的）
                 active_threads = channel.threads
-                archived_threads_iterator = channel.archived_threads(
-                    limit=chat_config.FORUM_POLL_THREAD_LIMIT
-                )
+                archived_threads_iterator = channel.archived_threads(limit=100)
                 archived_threads = [t async for t in archived_threads_iterator]
 
                 all_threads_dict = {t.id: t for t in active_threads}
@@ -95,9 +103,7 @@ async def reindex_forums():
                     key=lambda t: t.created_at,
                     reverse=True,
                 )
-                threads_to_process = sorted_threads[
-                    : chat_config.FORUM_POLL_THREAD_LIMIT
-                ]
+                threads_to_process = sorted_threads[:100]
                 log.info(f"找到 {len(threads_to_process)} 个帖子准备处理。")
 
                 # --- 并发处理 ---
@@ -106,13 +112,17 @@ async def reindex_forums():
 
                 async def process_with_semaphore(thread):
                     async with semaphore:
-                        log.info(f"正在处理帖子: '{thread.name}' ({thread.id})")
+                        # log.info(f"正在处理帖子: '{thread.name}' ({thread.id})") # 由tqdm处理日志
                         await forum_search_service.process_thread(thread)
 
                 for thread in threads_to_process:
                     tasks.append(process_with_semaphore(thread))
 
-                await asyncio.gather(*tasks)
+                # 使用tqdm显示进度条
+                for f in tqdm_asyncio.as_completed(
+                    tasks, desc=f"索引频道 {channel.name}"
+                ):
+                    await f
 
             except Exception as e:
                 log.error(f"处理频道 {channel.name} 时发生错误: {e}", exc_info=True)
@@ -133,11 +143,15 @@ async def reindex_forums():
 
 
 async def main():
-    if not clear_existing_database():
-        log.error("数据库清理失败，索引任务已中止。")
-        return
+    parser = argparse.ArgumentParser(description="手动重新索引Discord论坛帖子。")
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="如果设置此标志，将完全清空并重建索引数据库。否则，将执行更新/增量索引。",
+    )
+    args = parser.parse_args()
 
-    await reindex_forums()
+    await reindex_forums(args.rebuild)
 
 
 if __name__ == "__main__":

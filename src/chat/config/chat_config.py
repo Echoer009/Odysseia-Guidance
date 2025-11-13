@@ -134,6 +134,9 @@ COOLDOWN_RATES = {
 # (min, max) 分钟
 BLACKLIST_BAN_DURATION_MINUTES = (3, 8)
 
+# --- API 并发与密钥配置 ---
+MAX_CONCURRENT_REQUESTS = 50  # 同时处理的最大API请求数
+
 # --- API 密钥重试与轮换配置 ---
 API_RETRY_CONFIG = {
     "MAX_ATTEMPTS_PER_KEY": 1,  # 单个密钥在因可重试错误而被轮换前，允许的最大尝试次数
@@ -262,7 +265,7 @@ FORUM_VECTOR_DB_COLLECTION_NAME = "forum_threads"
 FORUM_SEARCH_CHANNEL_IDS = _parse_ids("FORUM_SEARCH_CHANNEL_IDS")
 
 # 每日轮询任务处理的帖子数量上限
-FORUM_POLL_THREAD_LIMIT = 50
+FORUM_POLL_THREAD_LIMIT = 100
 
 # 轮询任务的并发数
 FORUM_POLL_CONCURRENCY = 10

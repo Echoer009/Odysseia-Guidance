@@ -93,6 +93,9 @@ class ForumSearchService:
                             "thread_id": thread.id,
                             "thread_name": title,
                             "author_name": author_name,
+                            "author_id": thread.owner.id
+                            if thread.owner
+                            else 0,  # 新增：作者ID
                             "category_name": category_name,
                             "tags": tags,
                             "channel_id": thread.parent_id,

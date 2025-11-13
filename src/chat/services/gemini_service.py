@@ -88,7 +88,9 @@ class GeminiService:
         )
 
         self.default_model_name = app_config.GEMINI_MODEL
-        self.executor = ThreadPoolExecutor(max_workers=10)
+        self.executor = ThreadPoolExecutor(
+            max_workers=app_config.MAX_CONCURRENT_REQUESTS
+        )
         self.user_request_timestamps: Dict[int, List[datetime]] = {}
         self.safety_settings = [
             types.SafetySetting(
