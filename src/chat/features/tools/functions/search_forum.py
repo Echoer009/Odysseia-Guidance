@@ -40,28 +40,28 @@ async def search_forum_threads(query: str, **kwargs) -> str:
             continue
 
         thread_name = metadata.get("thread_name", "未知标题")
+        category_name = metadata.get("category_name", "未知论坛")
         guild_id = metadata.get("guild_id")
-        channel_id = metadata.get("channel_id")
 
         # 确保我们拥有创建链接所需的所有信息
-        if guild_id and channel_id and thread_name:
-            # 清理标题中的换行符，这对于防止破坏Markdown链接格式至关重要。
+        if guild_id and thread_name and category_name:
+            # 清理标题中的换行符
             cleaned_thread_name = thread_name.replace("\n", " ").replace("\r", " ")
 
-            # 动态构建帖子链接
-            thread_url = (
-                f"https://discord.com/channels/{guild_id}/{channel_id}/{thread_id}"
+            # 动态构建帖子链接 (服务器ID/帖子ID)
+            thread_url = f"https://discord.com/channels/{guild_id}/{thread_id}"
+
+            # 按照 “标题 面包屑导航格式” 进行渲染
+            output_lines.append(
+                f"- {category_name} > {cleaned_thread_name} {thread_url}"
             )
-            output_lines.append(f"- [{cleaned_thread_name}]({thread_url})")
 
             # 成功添加后，再将 thread_id 计入“已处理”集合
             processed_thread_ids.add(thread_id)
         else:
             # 如果缺少信息，记录警告并继续处理下一个结果。
-            # 这修复了一个 bug：之前，即使缺少 guild_id，thread_id 也会被添加到 processed_thread_ids，
-            # 导致同一个帖子的其他有效区块（chunk）被跳过。
             log.warning(
-                f"元数据不完整 (guild_id: {guild_id}, channel_id: {channel_id}, thread_name: {thread_name})，无法为帖子 {thread_id} 创建链接。"
+                f"元数据不完整 (guild_id: {guild_id}, thread_name: {thread_name}, category_name: {category_name})，无法为帖子 {thread_id} 创建链接。"
             )
 
         # 限制最多返回5个结果，避免信息过载

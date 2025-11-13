@@ -641,7 +641,7 @@ class GeminiService:
             if log_detailed:
                 if response.candidates:
                     candidate = response.candidates[0]
-                    if candidate.content:
+                    if candidate.content and candidate.content.parts:
                         for part in candidate.content.parts:
                             # 检查 part 是否代表思考过程
                             if hasattr(part, "thought") and part.thought:
