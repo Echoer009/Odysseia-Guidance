@@ -57,14 +57,14 @@ class ForumSearchService:
             title = thread.name.replace("\n", " ").replace("\r", " ")
             content = first_message.content
             author_name = thread.owner.name if thread.owner else "未知作者"
-            tags = (
-                ", ".join([tag.name for tag in thread.applied_tags])
-                if thread.applied_tags
-                else "无标签"
-            )
+            # 将标签处理为字符串列表，以便进行精确的元数据过滤
+            tags_list = [tag.name for tag in thread.applied_tags]
+            # 为了文档可读性，创建一个逗号分隔的字符串版本
+            tags_str = ", ".join(tags_list) if tags_list else "无标签"
+
             # 提取论坛频道的名称作为分类
             category_name = thread.parent.name if thread.parent else "未知分类"
-            document_text = f"标题: {title}\n作者: {author_name}\n分类: {category_name}\n标签: {tags}\n内容: {content}"
+            document_text = f"标题: {title}\n作者: {author_name}\n分类: {category_name}\n标签: {tags_str}\n内容: {content}"
 
             # 3. 文本分块
             chunks = create_text_chunks(document_text, max_chars=1000)
@@ -97,7 +97,7 @@ class ForumSearchService:
                             if thread.owner
                             else 0,  # 新增：作者ID
                             "category_name": category_name,
-                            "tags": tags,
+                            "tags": tags_list,  # 使用列表以便于过滤
                             "channel_id": thread.parent_id,
                             "guild_id": thread.guild.id,
                             "created_at": thread.created_at.isoformat(),
@@ -119,15 +119,93 @@ class ForumSearchService:
         except Exception as e:
             log.error(f"处理帖子 {thread.id} 时发生错误: {e}", exc_info=True)
 
-    async def search(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    async def get_oldest_indexed_thread_timestamp(self, channel_id: int) -> str | None:
         """
-        执行语义搜索。
+        获取指定频道中已索引的最旧帖子的创建时间戳。
+
+        Args:
+            channel_id (int): 目标论坛频道的ID。
+
+        Returns:
+            str | None: 最旧帖子的ISO 8601格式时间戳字符串，如果该频道没有任何帖子被索引，则返回None。
+        """
+        try:
+            log.info(f"正在查询频道 {channel_id} 中已索引的最旧帖子...")
+            # 使用 get 方法获取所有匹配频道的文档的元数据
+            results = self.vector_db_service.get(
+                where={"channel_id": channel_id}, include=["metadatas"]
+            )
+
+            metadatas = results.get("metadatas")
+            if not metadatas:
+                log.info(f"在频道 {channel_id} 中未找到任何已索引的帖子。")
+                return None
+
+            # 从元数据中提取所有的时间戳
+            timestamps = [
+                meta["created_at"] for meta in metadatas if "created_at" in meta
+            ]
+
+            if not timestamps:
+                log.warning(f"频道 {channel_id} 的已索引帖子中缺少 created_at 元数据。")
+                return None
+
+            # 找到并返回最早的时间戳
+            oldest_timestamp = min(timestamps)
+            log.info(
+                f"频道 {channel_id} 中最旧的已索引帖子的时间戳是: {oldest_timestamp}"
+            )
+            return oldest_timestamp
+
+        except Exception as e:
+            log.error(
+                f"查询频道 {channel_id} 最旧帖子时间戳时发生错误: {e}", exc_info=True
+            )
+            return None
+
+    async def search(
+        self, query: str, n_results: int = 5, filters: Dict[str, Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        执行高级语义搜索，支持多种元数据过滤。
+
+        Args:
+            query (str): 搜索查询。
+            n_results (int): 返回结果的数量。
+            filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
+                - key 是元数据字段名 (例如 "category_name", "author_id", "tags")。
+                - value 可以是直接匹配的值，或是一个用于范围/包含查询的字典。
+                - 对于 "tags", value 应为列表，查询将检查是否包含任一标签。
+                示例:
+                {
+                    "category_name": "男性向",
+                    "author_id": 1234567890,
+                    "tags": ["角色卡", "原创"]
+                }
+        Returns:
+            List[Dict[str, Any]]: 搜索结果列表。
         """
         if not self.is_ready():
             log.error("论坛搜索服务尚未准备就绪，无法执行搜索。")
             return []
 
         try:
+            # 构建元数据过滤条件 (where 子句)
+            where_clause = {}
+            if filters:
+                for key, value in filters.items():
+                    if key == "tags" and isinstance(value, dict):
+                        # 支持更复杂的标签查询, e.g., {"$all": ["tag1", "tag2"]} or {"$in": ["tag1", "tag2"]}
+                        where_clause[key] = value
+                    elif key == "tags" and isinstance(value, list) and value:
+                        # 默认行为: 如果只提供一个列表，则要求匹配所有标签 (AND)
+                        where_clause[key] = {"$all": value}
+                    elif value is not None:
+                        # 对于其他字段，我们进行直接相等匹配
+                        where_clause[key] = value
+
+            log.info(f"论坛搜索过滤器: {where_clause}")
+
             gemini_service = self._get_gemini_service()
             query_embedding = await gemini_service.generate_embedding(
                 text=query, task_type="retrieval_query"
@@ -139,7 +217,8 @@ class ForumSearchService:
             search_results = self.vector_db_service.search(
                 query_embedding=query_embedding,
                 n_results=n_results,
-                max_distance=1.0,  # 论坛搜索可以放宽距离限制
+                where=where_clause if where_clause else None,
+                max_distance=1.0,
             )
             return search_results
 

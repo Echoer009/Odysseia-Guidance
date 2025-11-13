@@ -27,14 +27,32 @@ class ForumSyncCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.db_path = DB_PATH
+        # 用于在内存中缓存回溯进度，避免重复DB查询
+        self.backfill_bookmarks = {}
         self.poll_threads.start()
 
     async def cog_load(self):
+        """Cog加载时执行初始化，并从数据库恢复回溯书签。"""
         await self.initialize_db()
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT channel_id, oldest_known_timestamp, is_complete FROM backfill_status"
+            )
+            rows = await cursor.fetchall()
+            for row in rows:
+                self.backfill_bookmarks[row[0]] = {
+                    "timestamp": row[1],
+                    "is_complete": bool(row[2]),
+                }
+            if self.backfill_bookmarks:
+                log.info(
+                    f"已从数据库恢复 {len(self.backfill_bookmarks)} 个频道的回溯书签。"
+                )
 
     async def initialize_db(self):
-        """初始化数据库，创建用于存储已处理帖子ID的表。"""
+        """初始化数据库，创建所需的数据表。"""
         async with aiosqlite.connect(self.db_path) as db:
+            # 表1: 存储已处理的帖子ID，用于避免重复处理
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS processed_threads (
@@ -42,29 +60,41 @@ class ForumSyncCog(commands.Cog):
                 )
                 """
             )
+            # 表2: 存储每个频道的回溯进度书签
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS backfill_status (
+                    channel_id INTEGER PRIMARY KEY,
+                    oldest_known_timestamp TEXT,
+                    is_complete INTEGER DEFAULT 0
+                )
+                """
+            )
             await db.commit()
 
     async def _process_thread_concurrently(
-        self, thread: discord.Thread, semaphore: asyncio.Semaphore, db_conn
+        self, thread: discord.Thread, semaphore: asyncio.Semaphore
     ):
         """并发处理单个帖子的辅助函数"""
         async with semaphore:
             try:
-                # 检查帖子是否已被处理
-                cursor = await db_conn.execute(
-                    "SELECT 1 FROM processed_threads WHERE thread_id = ?", (thread.id,)
-                )
-                if await cursor.fetchone():
-                    return  # 跳过
+                # 使用 aiosqlite 连接池来处理并发写入
+                async with aiosqlite.connect(self.db_path) as db:
+                    cursor = await db.execute(
+                        "SELECT 1 FROM processed_threads WHERE thread_id = ?",
+                        (thread.id,),
+                    )
+                    if await cursor.fetchone():
+                        return  # 如果已被实时监听处理过，则跳过
 
-                log.info(f"正在处理帖子: {thread.name} ({thread.id})")
-                await forum_search_service.process_thread(thread)
+                    log.info(f"正在回溯处理帖子: {thread.name} ({thread.id})")
+                    await forum_search_service.process_thread(thread)
 
-                # 标记为已处理
-                await db_conn.execute(
-                    "INSERT INTO processed_threads (thread_id) VALUES (?)", (thread.id,)
-                )
-                await db_conn.commit()
+                    await db.execute(
+                        "INSERT OR IGNORE INTO processed_threads (thread_id) VALUES (?)",
+                        (thread.id,),
+                    )
+                    await db.commit()
             except Exception as e:
                 log.error(
                     f"并发处理帖子 {thread.name} ({thread.id}) 时出错: {e}",
@@ -75,71 +105,114 @@ class ForumSyncCog(commands.Cog):
     @tasks.loop(time=datetime.time(hour=20, minute=0, tzinfo=datetime.timezone.utc))
     async def poll_threads(self):
         """
-        每天运行一次，轮询指定论坛频道的最新帖子，并以10个并发进行处理。
+        历史回溯任务：每天运行一次，从每个频道已索引的最旧帖子开始，向更早的帖子回溯处理一批。
         """
-        log.info("开始每日论坛帖子轮询任务...")
+        log.info("开始每日论坛历史回溯任务...")
         if not forum_search_service.is_ready():
-            log.warning("论坛搜索服务未就绪，跳过此次轮询。")
+            log.warning("论坛搜索服务未就绪，跳过此次回溯。")
             return
 
         channel_ids = chat_config.FORUM_SEARCH_CHANNEL_IDS
         if not channel_ids:
-            log.info("没有配置要轮询的论坛频道ID，任务结束。")
+            log.info("没有配置要回溯的论坛频道ID，任务结束。")
             return
 
-        semaphore = asyncio.Semaphore(chat_config.FORUM_POLL_CONCURRENCY)  # 设置并发数
+        semaphore = asyncio.Semaphore(chat_config.FORUM_POLL_CONCURRENCY)
 
         for channel_id in channel_ids:
-            channel = self.bot.get_channel(channel_id)
-            if not isinstance(channel, discord.ForumChannel):
+            bookmark = self.backfill_bookmarks.get(channel_id, {})
+            if bookmark.get("is_complete"):
+                log.info(f"频道 {channel_id} 已完成历史回溯，本次跳过。")
                 continue
 
-            log.info(f"正在轮询论坛频道: {channel.name} ({channel_id})")
+            channel = self.bot.get_channel(channel_id)
+            if not isinstance(channel, discord.ForumChannel):
+                log.warning(f"ID {channel_id} 不是有效的论坛频道，已跳过。")
+                continue
+
+            log.info(f"--- 开始回溯频道: {channel.name} ({channel_id}) ---")
             try:
-                # 1. 获取所有已处理的帖子ID
-                async with aiosqlite.connect(self.db_path) as db:
-                    cursor = await db.execute("SELECT thread_id FROM processed_threads")
-                    processed_ids = {row[0] for row in await cursor.fetchall()}
+                # 1. 确定回溯的起点
+                before_timestamp = None
+                # 优先使用内存/DB中的书签
+                if bookmark.get("timestamp"):
+                    before_timestamp = datetime.datetime.fromisoformat(
+                        bookmark["timestamp"]
+                    )
+                else:
+                    # 如果没有书签，则实时查询一次向量库作为冷启动的起点
+                    log.info(
+                        f"频道 {channel_id} 没有找到回溯书签，将从向量库查询初始起点。"
+                    )
+                    oldest_ts_str = (
+                        await forum_search_service.get_oldest_indexed_thread_timestamp(
+                            channel_id
+                        )
+                    )
+                    if oldest_ts_str:
+                        before_timestamp = datetime.datetime.fromisoformat(
+                            oldest_ts_str
+                        )
 
-                # 2. 获取频道中所有帖子，并筛选出未处理的
-                log.info(f"正在从频道 {channel.name} 获取帖子列表...")
-                all_threads_in_channel = []
-                all_threads_in_channel.extend(channel.threads)
-                # 限制一个较大的数量以防无限加载和API滥用
-                async for t in channel.archived_threads(limit=5000):
-                    all_threads_in_channel.append(t)
-
-                unprocessed_threads = [
-                    t for t in all_threads_in_channel if t.id not in processed_ids
-                ]
-
-                # 3. 按时间倒序排列，并获取本轮要处理的批次
-                sorted_unprocessed = sorted(
-                    unprocessed_threads, key=lambda t: t.created_at, reverse=True
+                log.info(
+                    f"将从时间点 {before_timestamp or '最新'} 开始向前回溯历史帖子。"
                 )
-                threads_to_process = sorted_unprocessed[
-                    : chat_config.FORUM_POLL_THREAD_LIMIT
-                ]
+
+                # 2. 获取一批更旧的帖子
+                threads_iterator = channel.archived_threads(
+                    limit=chat_config.FORUM_POLL_THREAD_LIMIT, before=before_timestamp
+                )
+                threads_to_process = [t async for t in threads_iterator]
 
                 if not threads_to_process:
-                    log.info(f"频道 {channel.name} 中没有找到新的未处理帖子。")
+                    log.info(
+                        f"频道 {channel.name} 没有找到更早的帖子，标记为回溯完成。"
+                    )
+                    self.backfill_bookmarks[channel_id] = {
+                        "timestamp": bookmark.get("timestamp"),
+                        "is_complete": True,
+                    }
+                    async with aiosqlite.connect(self.db_path) as db:
+                        await db.execute(
+                            "INSERT OR REPLACE INTO backfill_status (channel_id, oldest_known_timestamp, is_complete) VALUES (?, ?, 1)",
+                            (channel_id, bookmark.get("timestamp")),
+                        )
+                        await db.commit()
                     continue
 
-                # 4. 并发处理这一批次的帖子
-                log.info(
-                    f"找到 {len(threads_to_process)} 个未处理帖子，准备并发处理..."
-                )
+                # 3. 并发处理这批帖子
+                log.info(f"找到 {len(threads_to_process)} 个历史帖子，准备并发处理...")
+                tasks = [
+                    self._process_thread_concurrently(thread, semaphore)
+                    for thread in threads_to_process
+                ]
+                await asyncio.gather(*tasks)
+
+                # 4. 更新书签
+                new_oldest_thread = min(threads_to_process, key=lambda t: t.created_at)
+                new_bookmark_ts = new_oldest_thread.created_at.isoformat()
+                self.backfill_bookmarks[channel_id] = {
+                    "timestamp": new_bookmark_ts,
+                    "is_complete": False,
+                }
                 async with aiosqlite.connect(self.db_path) as db:
-                    tasks = [
-                        self._process_thread_concurrently(thread, semaphore, db)
-                        for thread in threads_to_process
-                    ]
-                    await asyncio.gather(*tasks)
+                    await db.execute(
+                        "INSERT OR REPLACE INTO backfill_status (channel_id, oldest_known_timestamp, is_complete) VALUES (?, ?, 0)",
+                        (channel_id, new_bookmark_ts),
+                    )
+                    await db.commit()
+                log.info(f"频道 {channel.name} 的回溯书签已更新为: {new_bookmark_ts}")
 
             except Exception as e:
-                log.error(f"轮询论坛频道 {channel_id} 时出错: {e}", exc_info=True)
+                log.error(f"回溯频道 {channel.name} 时出错: {e}", exc_info=True)
 
-        log.info("每日论坛帖子轮询任务完成。")
+        completed_count = sum(
+            1 for b in self.backfill_bookmarks.values() if b.get("is_complete")
+        )
+        if completed_count == len(channel_ids):
+            log.info("所有频道的历史回溯任务均已完成，未来的轮询将只进行检查。")
+        else:
+            log.info("每日论坛历史回溯任务完成。")
 
     @poll_threads.before_loop
     async def before_poll_threads(self):
