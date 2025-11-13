@@ -46,7 +46,7 @@ async def search_forum_threads(query: str, **kwargs) -> str:
         # 确保我们拥有创建链接所需的所有信息
         if guild_id and channel_id and thread_name:
             # 清理标题中的换行符，这对于防止破坏Markdown链接格式至关重要。
-            cleaned_thread_name = thread_name.replace("\n", " ")
+            cleaned_thread_name = thread_name.replace("\n", " ").replace("\r", " ")
 
             # 动态构建帖子链接
             thread_url = (

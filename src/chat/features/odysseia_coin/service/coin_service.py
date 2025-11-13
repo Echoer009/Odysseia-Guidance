@@ -572,59 +572,59 @@ class CoinService:
         )
         log.info(f"用户 {user_id} 的暖贴偏好已设置为: {wants_warmup}")
 
-    async def transfer_coins(
-        self, sender_id: int, receiver_id: int, amount: int
-    ) -> tuple[bool, str, Optional[int]]:
-        """
-        处理用户之间的转账。
-        返回 (success, message, new_balance)。
-        """
-        if sender_id == receiver_id:
-            return False, "❌ 你不能给自己转账。", None
-
-        if amount <= 0:
-            return False, "❌ 转账金额必须是正数。", None
-
-        tax = int(amount * COIN_CONFIG["TRANSFER_TAX_RATE"])
-        total_deduction = amount + tax
-
-        sender_balance = await self.get_balance(sender_id)
-        if sender_balance < total_deduction:
-            return (
-                False,
-                f"❌ 你的余额不足以完成转账。需要 {total_deduction} (包含 {tax} 税费)，你只有 {sender_balance}。",
-                None,
-            )
-
-        try:
-            # 扣除发送者余额
-            sender_new_balance = await self.remove_coins(
-                sender_id, total_deduction, f"转账给用户 {receiver_id} (含税)"
-            )
-            if sender_new_balance is None:
-                # 这理论上不应该发生，因为我们已经检查过余额了
-                return False, "❌ 转账失败：扣款时发生错误。", None
-
-            # 增加接收者余额
-            await self.add_coins(
-                receiver_id, amount, f"收到来自用户 {sender_id} 的转账"
-            )
-
-            log.info(
-                f"用户 {sender_id} 成功转账 {amount} 类脑币给用户 {receiver_id}，税费 {tax}。"
-            )
-            return (
-                True,
-                f"✅ 转账成功！你向 <@{receiver_id}> 转账了 **{amount}** 类脑币，并支付了 **{tax}** 的税费。",
-                sender_new_balance,
-            )
-        except Exception as e:
-            log.error(
-                f"转账失败: 从 {sender_id} 到 {receiver_id}，金额 {amount}。错误: {e}"
-            )
-            # 在一个更健壮的系统中，这里需要处理分布式事务回滚
-            # 但对于当前场景，我们假设如果扣款成功，收款大概率也会成功
-            return False, f"❌ 转账时发生未知错误: {e}", None
+    # async def transfer_coins(
+    #     self, sender_id: int, receiver_id: int, amount: int
+    # ) -> tuple[bool, str, Optional[int]]:
+    #     """
+    #     处理用户之间的转账。
+    #     返回 (success, message, new_balance)。
+    #     """
+    #     if sender_id == receiver_id:
+    #         return False, "❌ 你不能给自己转账。", None
+    #
+    #     if amount <= 0:
+    #         return False, "❌ 转账金额必须是正数。", None
+    #
+    #     tax = int(amount * COIN_CONFIG["TRANSFER_TAX_RATE"])
+    #     total_deduction = amount + tax
+    #
+    #     sender_balance = await self.get_balance(sender_id)
+    #     if sender_balance < total_deduction:
+    #         return (
+    #             False,
+    #             f"❌ 你的余额不足以完成转账。需要 {total_deduction} (包含 {tax} 税费)，你只有 {sender_balance}。",
+    #             None,
+    #         )
+    #
+    #     try:
+    #         # 扣除发送者余额
+    #         sender_new_balance = await self.remove_coins(
+    #             sender_id, total_deduction, f"转账给用户 {receiver_id} (含税)"
+    #         )
+    #         if sender_new_balance is None:
+    #             # 这理论上不应该发生，因为我们已经检查过余额了
+    #             return False, "❌ 转账失败：扣款时发生错误。", None
+    #
+    #         # 增加接收者余额
+    #         await self.add_coins(
+    #             receiver_id, amount, f"收到来自用户 {sender_id} 的转账"
+    #         )
+    #
+    #         log.info(
+    #             f"用户 {sender_id} 成功转账 {amount} 类脑币给用户 {receiver_id}，税费 {tax}。"
+    #         )
+    #         return (
+    #             True,
+    #             f"✅ 转账成功！你向 <@{receiver_id}> 转账了 **{amount}** 类脑币，并支付了 **{tax}** 的税费。",
+    #             sender_new_balance,
+    #         )
+    #     except Exception as e:
+    #         log.error(
+    #             f"转账失败: 从 {sender_id} 到 {receiver_id}，金额 {amount}。错误: {e}"
+    #         )
+    #         # 在一个更健壮的系统中，这里需要处理分布式事务回滚
+    #         # 但对于当前场景，我们假设如果扣款成功，收款大概率也会成功
+    #         return False, f"❌ 转账时发生未知错误: {e}", None
 
     async def get_active_loan(self, user_id: int) -> Optional[dict]:
         """获取用户当前未还清的贷款"""

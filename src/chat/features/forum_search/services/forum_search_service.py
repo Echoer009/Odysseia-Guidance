@@ -53,7 +53,8 @@ class ForumSearchService:
                 return
 
             # 2. 构建文档
-            title = thread.name
+            # 清理标题中的换行符和回车符，以确保数据一致性
+            title = thread.name.replace("\n", " ").replace("\r", " ")
             content = first_message.content
             author_name = thread.owner.name if thread.owner else "未知作者"
             tags = (
@@ -90,7 +91,7 @@ class ForumSearchService:
                     metadatas_to_add.append(
                         {
                             "thread_id": thread.id,
-                            "thread_name": thread.name,
+                            "thread_name": title,
                             "author_name": author_name,
                             "category_name": category_name,
                             "tags": tags,

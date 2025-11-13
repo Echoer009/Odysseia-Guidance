@@ -71,82 +71,82 @@ class EventButton(discord.ui.Button):
 # --- Transfer UI ---
 
 
-class TransferModal(discord.ui.Modal, title="类脑币转账"):
-    def __init__(self, main_view: "SimpleShopView"):
-        super().__init__(timeout=180)
-        self.main_view = main_view
-
-        self.receiver_input = discord.ui.TextInput(
-            label="收款人 (用户英文id或数字id)",
-            placeholder="输入对方的英文id或数字ID",
-            style=discord.TextStyle.short,
-            required=True,
-        )
-        self.add_item(self.receiver_input)
-
-        self.amount_input = discord.ui.TextInput(
-            label="转账金额",
-            placeholder="请输入你要转账的类脑币数量",
-            style=discord.TextStyle.short,
-            required=True,
-        )
-        self.add_item(self.amount_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        # 1. 验证金额
-        try:
-            amount = int(self.amount_input.value)
-            if amount <= 0:
-                await interaction.followup.send(
-                    "❌ 转账金额必须是正数。", ephemeral=True
-                )
-                return
-        except ValueError:
-            await interaction.followup.send("❌ 金额必须是有效的数字。", ephemeral=True)
-            return
-
-        # 2. 查找收款人
-        receiver_str = self.receiver_input.value.strip()
-        receiver: discord.Member = None
-
-        if not interaction.guild:
-            await interaction.followup.send(
-                "❌ 无法在当前上下文中找到服务器信息。", ephemeral=True
-            )
-            return
-
-        # 优先通过ID查找
-        try:
-            receiver_id = int(receiver_str)
-            receiver = interaction.guild.get_member(receiver_id)
-        except ValueError:
-            # 如果不是ID，则通过名称查找
-            receiver = discord.utils.find(
-                lambda m: m.name.lower() == receiver_str.lower(),
-                interaction.guild.members,
-            )
-
-        if receiver is None:
-            await interaction.followup.send(
-                f"❌ 在这个服务器中找不到用户 '{receiver_str}'。", ephemeral=True
-            )
-            return
-
-        # 3. 调用服务执行转账
-        success, message, new_balance = await coin_service.transfer_coins(
-            sender_id=interaction.user.id, receiver_id=receiver.id, amount=amount
-        )
-
-        # 4. 发送反馈并更新视图
-        await interaction.followup.send(message, ephemeral=True)
-
-        if success:
-            self.main_view.balance = new_balance
-            await self.main_view.interaction.edit_original_response(
-                embed=self.main_view.create_shop_embed(), view=self.main_view
-            )
+# class TransferModal(discord.ui.Modal, title="类脑币转账"):
+#     def __init__(self, main_view: "SimpleShopView"):
+#         super().__init__(timeout=180)
+#         self.main_view = main_view
+#
+#         self.receiver_input = discord.ui.TextInput(
+#             label="收款人 (用户英文id或数字id)",
+#             placeholder="输入对方的英文id或数字ID",
+#             style=discord.TextStyle.short,
+#             required=True,
+#         )
+#         self.add_item(self.receiver_input)
+#
+#         self.amount_input = discord.ui.TextInput(
+#             label="转账金额",
+#             placeholder="请输入你要转账的类脑币数量",
+#             style=discord.TextStyle.short,
+#             required=True,
+#         )
+#         self.add_item(self.amount_input)
+#
+#     async def on_submit(self, interaction: discord.Interaction):
+#         await interaction.response.defer(ephemeral=True)
+#
+#         # 1. 验证金额
+#         try:
+#             amount = int(self.amount_input.value)
+#             if amount <= 0:
+#                 await interaction.followup.send(
+#                     "❌ 转账金额必须是正数。", ephemeral=True
+#                 )
+#                 return
+#         except ValueError:
+#             await interaction.followup.send("❌ 金额必须是有效的数字。", ephemeral=True)
+#             return
+#
+#         # 2. 查找收款人
+#         receiver_str = self.receiver_input.value.strip()
+#         receiver: discord.Member = None
+#
+#         if not interaction.guild:
+#             await interaction.followup.send(
+#                 "❌ 无法在当前上下文中找到服务器信息。", ephemeral=True
+#             )
+#             return
+#
+#         # 优先通过ID查找
+#         try:
+#             receiver_id = int(receiver_str)
+#             receiver = interaction.guild.get_member(receiver_id)
+#         except ValueError:
+#             # 如果不是ID，则通过名称查找
+#             receiver = discord.utils.find(
+#                 lambda m: m.name.lower() == receiver_str.lower(),
+#                 interaction.guild.members,
+#             )
+#
+#         if receiver is None:
+#             await interaction.followup.send(
+#                 f"❌ 在这个服务器中找不到用户 '{receiver_str}'。", ephemeral=True
+#             )
+#             return
+#
+#         # 3. 调用服务执行转账
+#         success, message, new_balance = await coin_service.transfer_coins(
+#             sender_id=interaction.user.id, receiver_id=receiver.id, amount=amount
+#         )
+#
+#         # 4. 发送反馈并更新视图
+#         await interaction.followup.send(message, ephemeral=True)
+#
+#         if success:
+#             self.main_view.balance = new_balance
+#             await self.main_view.interaction.edit_original_response(
+#                 embed=self.main_view.create_shop_embed(), view=self.main_view
+#             )
 
 
 # --- Loan UI ---
@@ -286,7 +286,7 @@ class SimpleShopView(discord.ui.View):
         # 添加购买按钮和刷新余额按钮
         self.add_item(PurchaseButton())
         self.add_item(RefreshBalanceButton())
-        self.add_item(TransferButton())
+        # self.add_item(TransferButton())
         self.add_item(LoanButton())
         self.add_item(WorkButton())
         self.add_item(SellBodyButton())
@@ -433,15 +433,15 @@ class BackToCategoriesButton(discord.ui.Button):
         await interaction.response.edit_message(embed=new_embed, view=self.view)
 
 
-class TransferButton(discord.ui.Button):
-    """转账按钮"""
-
-    def __init__(self):
-        super().__init__(label="转账", style=discord.ButtonStyle.primary, emoji="💸")
-
-    async def callback(self, interaction: discord.Interaction):
-        modal = TransferModal(main_view=self.view)
-        await interaction.response.send_modal(modal)
+# class TransferButton(discord.ui.Button):
+#     """转账按钮"""
+#
+#     def __init__(self):
+#         super().__init__(label="转账", style=discord.ButtonStyle.primary, emoji="💸")
+#
+#     async def callback(self, interaction: discord.Interaction):
+#         modal = TransferModal(main_view=self.view)
+#         await interaction.response.send_modal(modal)
 
 
 class LoanButton(discord.ui.Button):
