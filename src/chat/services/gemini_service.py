@@ -709,30 +709,33 @@ class GeminiService:
                         )
                     )
                 else:
-                    # --- 新增：对特定工具的结果应用“破限”包装 ---
-                    # 从 Part 对象中提取工具名称和原始结果
-                    tool_name = result.function_response.name
-                    # `result.function_response.response` 是一个 protobuf Struct 对象，其行为类似于字典。
-                    # 我们可以直接从中获取内容，而无需转换。
-                    original_result_str = result.function_response.response.get(
-                        "result", ""
-                    )
-
-                    # 调用 prompt_service 来获取可能被包装过的结果
-                    wrapped_result_str = (
-                        prompt_service.build_tool_result_wrapper_prompt(
-                            tool_name, original_result_str
+                    # --- 修正：处理工具返回的多种 Part 类型 ---
+                    # 检查 Part 是否为函数响应。如果是，则处理并包装结果。
+                    if result.function_response:
+                        tool_name = result.function_response.name
+                        # `result.function_response.response` 是一个 protobuf Struct 对象，其行为类似于字典。
+                        original_result_str = result.function_response.response.get(
+                            "result", ""
                         )
-                    )
 
-                    # 用包装后的结果创建一个新的 Part 对象
-                    # 注意：我们必须保持 Part 的结构，只替换其内容
-                    new_response_part = types.Part.from_function_response(
-                        name=tool_name,
-                        response={"result": wrapped_result_str},
-                    )
-                    tool_result_parts.append(new_response_part)
-                    # --- “破限”包装结束 ---
+                        # 调用 prompt_service 来获取可能被包装过的结果
+                        wrapped_result_str = (
+                            prompt_service.build_tool_result_wrapper_prompt(
+                                tool_name, original_result_str
+                            )
+                        )
+
+                        # 用包装后的结果创建一个新的 Part 对象
+                        new_response_part = types.Part.from_function_response(
+                            name=tool_name,
+                            response={"result": wrapped_result_str},
+                        )
+                        tool_result_parts.append(new_response_part)
+                    else:
+                        # 如果 Part 不是函数响应 (例如，它是一个包含图片的 Part)，
+                        # 则直接将其添加到结果列表中，以便模型可以“看到”它。
+                        tool_result_parts.append(result)
+                    # --- 修正结束 ---
 
             if log_detailed:
                 log.info(

@@ -55,7 +55,15 @@ class ForumSearchService:
             # 2. 构建文档
             title = thread.name
             content = first_message.content
-            document_text = f"标题: {title}\n内容: {content}"
+            author_name = thread.owner.name if thread.owner else "未知作者"
+            tags = (
+                ", ".join([tag.name for tag in thread.applied_tags])
+                if thread.applied_tags
+                else "无标签"
+            )
+            # 提取论坛频道的名称作为分类
+            category_name = thread.parent.name if thread.parent else "未知分类"
+            document_text = f"标题: {title}\n作者: {author_name}\n分类: {category_name}\n标签: {tags}\n内容: {content}"
 
             # 3. 文本分块
             chunks = create_text_chunks(document_text, max_chars=1000)
@@ -83,6 +91,9 @@ class ForumSearchService:
                         {
                             "thread_id": thread.id,
                             "thread_name": thread.name,
+                            "author_name": author_name,
+                            "category_name": category_name,
+                            "tags": tags,
                             "channel_id": thread.parent_id,
                             "guild_id": thread.guild.id,
                             "created_at": thread.created_at.isoformat(),
