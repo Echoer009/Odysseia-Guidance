@@ -70,7 +70,9 @@ class ConfessionCog(commands.Cog):
                 )
                 return
 
-        await interaction.response.defer(ephemeral=True)
+        # 检查是否在豁免频道，以决定回复是否公开
+        is_unrestricted = interaction.channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+        await interaction.response.defer(ephemeral=not is_unrestricted)
 
         try:
             affection_status = await self.affection_service.get_affection_status(
@@ -180,7 +182,7 @@ class ConfessionCog(commands.Cog):
 
             embed.set_footer(text="类脑娘对你的忏悔做出了一些回应...")
 
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=not is_unrestricted)
 
         except Exception as e:
             print(f"Error during confession: {e}")

@@ -19,6 +19,11 @@ DISABLED_INTERACTION_CHANNEL_IDS = [
     1234431470773338143,
 ]
 
+# --- 限制豁免频道 ---
+# 在这些频道ID中，“长回复私聊”、“闭嘴命令”和“忏悔内容不可见”的限制将无效。
+UNRESTRICTED_CHANNEL_IDS = _parse_ids("UNRESTRICTED_CHANNEL_IDS")
+
+
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
 GEMINI_MODEL = "gemini-2.5-flash"

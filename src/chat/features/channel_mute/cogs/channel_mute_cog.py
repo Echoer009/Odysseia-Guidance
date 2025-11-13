@@ -8,6 +8,7 @@ import logging
 
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHANNEL_MUTE_CONFIG
+from src.chat.config import chat_config
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,13 @@ class ChannelMuteCog(commands.Cog):
         发起一个投票，如果票数足够，机器人将在当前频道被禁言。
         """
         channel_id = interaction.channel_id
+
+        # 0. 检查是否在豁免频道
+        if channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS:
+            await interaction.response.send_message(
+                "在这个频道里，我可是有豁免权的哦，不能让我闭嘴！", ephemeral=True
+            )
+            return
 
         # 1. 检查频道是否已经被禁言
         if await chat_db_manager.is_channel_muted(channel_id):
