@@ -44,17 +44,17 @@ async def search_forum_threads(
     # 诊断日志：打印从向量数据库返回的原始结果
     log.info(f"原始搜索结果: {results}")
 
-    # ChromaDB 返回一个包含列表的字典，我们需要解构它
-    if not results or not results.get("ids") or not results["ids"][0]:
+    # forum_search_service 现在返回一个字典列表
+    if not results:
         return "在论坛中没有找到相关的帖子。"
 
     # 使用集合来防止返回重复的帖子链接
     processed_thread_ids = set()
     output_lines = ["找到了以下相关的论坛帖子:"]
 
-    metadatas = results.get("metadatas", [[]])[0]
-
-    for metadata in metadatas:
+    for result in results:
+        # 每个 result 现在是一个包含 'id', 'content', 'distance', 'metadata' 的字典
+        metadata = result.get("metadata", {})
         thread_id = metadata.get("thread_id")
 
         if not thread_id or thread_id in processed_thread_ids:

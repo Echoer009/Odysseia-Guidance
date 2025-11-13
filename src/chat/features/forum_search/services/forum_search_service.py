@@ -176,7 +176,7 @@ class ForumSearchService:
             n_results (int): 返回结果的数量。
             filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
                 - key 是元数据字段名 (例如 "category_name", "author_id", "tags")。
-                - value 可以是直接匹配的值，或是一个用于范围/包含查询的字典。
+                - value 可以是直接匹配的值。
                 - 对于 "tags", value 应为列表，查询将检查是否包含任一标签。
                 示例:
                 {
@@ -185,7 +185,7 @@ class ForumSearchService:
                     "tags": ["角色卡", "原创"]
                 }
         Returns:
-            List[Dict[str, Any]]: 搜索结果列表。
+            List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
         if not self.is_ready():
             log.error("论坛搜索服务尚未准备就绪，无法执行搜索。")
@@ -264,18 +264,8 @@ class ForumSearchService:
                     # 如果没有标签过滤，直接取所需数量的结果
                     final_results_list = search_results_list[:n_results]
 
-            # 4. 将过滤和截断后的结果列表转换为 ChromaDB 风格的字典
-            if not final_results_list:
-                return {}
-
-            search_results = {
-                "ids": [[res["id"] for res in final_results_list]],
-                "documents": [[res["content"] for res in final_results_list]],
-                "metadatas": [[res["metadata"] for res in final_results_list]],
-                "distances": [[res["distance"] for res in final_results_list]],
-            }
-
-            return search_results
+            # 4. 直接返回过滤和截断后的结果列表
+            return final_results_list
 
         except Exception as e:
             log.error(f"执行论坛搜索时发生错误: {e}", exc_info=True)
