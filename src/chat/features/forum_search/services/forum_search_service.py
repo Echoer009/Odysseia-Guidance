@@ -221,37 +221,59 @@ class ForumSearchService:
             # 为了进行二次过滤，我们需要请求更多的结果
             n_results_for_db = n_results * 5 if tags_to_filter else n_results
 
-            search_results = self.vector_db_service.search(
+            search_results_list = self.vector_db_service.search(
                 query_embedding=query_embedding,
                 n_results=n_results_for_db,
-                where=where_clause if where_clause else None,
                 max_distance=1.0,
             )
 
-            # 3. 在应用层进行标签的二次过滤 (如果需要)
-            if tags_to_filter and search_results and search_results.get("metadatas"):
-                required_tags = set(t.lower() for t in tags_to_filter)
-                filtered_indices = []
+            # 3. 在应用层进行元数据和标签的二次过滤
+            final_results_list = []
+            if search_results_list:
+                # 3.1. 首先处理 where_clause 过滤
+                if where_clause:
+                    intermediate_results = []
+                    for item in search_results_list:
+                        metadata = item.get("metadata", {})
+                        if all(
+                            metadata.get(key) == value
+                            for key, value in where_clause.items()
+                        ):
+                            intermediate_results.append(item)
+                    search_results_list = intermediate_results
 
-                # ChromaDB 返回的是一个包含多个列表的字典
-                for i, meta in enumerate(search_results["metadatas"]):
-                    if len(filtered_indices) >= n_results:
-                        break  # 已找到足够的结果
+                # 3.2. 接着处理标签过滤
+                if tags_to_filter:
+                    required_tags = set(t.lower() for t in tags_to_filter)
+                    for item in search_results_list:
+                        if len(final_results_list) >= n_results:
+                            break  # 已找到足够的结果
+                        metadata = item.get("metadata", {})
+                        if (
+                            metadata
+                            and metadata.get("tags")
+                            and isinstance(metadata["tags"], str)
+                        ):
+                            available_tags = set(
+                                t.lower()
+                                for t in metadata["tags"].strip("|").split("|")
+                            )
+                            if required_tags.issubset(available_tags):
+                                final_results_list.append(item)
+                else:
+                    # 如果没有标签过滤，直接取所需数量的结果
+                    final_results_list = search_results_list[:n_results]
 
-                    if meta and meta.get("tags") and isinstance(meta["tags"], str):
-                        # 不区分大小写地进行匹配
-                        available_tags = set(
-                            t.lower() for t in meta["tags"].strip("|").split("|")
-                        )
-                        if required_tags.issubset(available_tags):
-                            filtered_indices.append(i)
+            # 4. 将过滤和截断后的结果列表转换为 ChromaDB 风格的字典
+            if not final_results_list:
+                return {}
 
-                # 根据找到的索引，过滤所有结果列表
-                for key in search_results:
-                    if search_results[key] is not None:
-                        search_results[key] = [
-                            search_results[key][i] for i in filtered_indices
-                        ]
+            search_results = {
+                "ids": [[res["id"] for res in final_results_list]],
+                "documents": [[res["content"] for res in final_results_list]],
+                "metadatas": [[res["metadata"] for res in final_results_list]],
+                "distances": [[res["distance"] for res in final_results_list]],
+            }
 
             return search_results
 
