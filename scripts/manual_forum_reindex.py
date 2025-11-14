@@ -54,6 +54,7 @@ async def reindex_forums(rebuild: bool):
     intents = discord.Intents.default()
     intents.guilds = True
     intents.message_content = True  # 需要此权限来读取帖子内容
+    intents.members = True  # 新增：获取成员信息的必要权限
     client = discord.Client(intents=intents)
 
     @client.event

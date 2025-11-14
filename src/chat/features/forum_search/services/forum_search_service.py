@@ -56,17 +56,36 @@ class ForumSearchService:
             # 清理标题中的换行符和回车符，以确保数据一致性
             title = thread.name.replace("\n", " ").replace("\r", " ")
             content = first_message.content
-            author_name = thread.owner.name if thread.owner else "未知作者"
-            # 将标签处理为字符串列表
-            tags_list = [tag.name for tag in thread.applied_tags]
-            # 为了文档可读性，创建一个逗号分隔的字符串版本
-            tags_str_for_doc = ", ".join(tags_list) if tags_list else "无标签"
-            # 为了元数据过滤，创建一个管道分隔的字符串，如果无标签则为None
-            tags_for_meta = f"|{'|'.join(tags_list)}|" if tags_list else None
+
+            # 2. 获取作者信息 (更稳健的方式)
+            author_id = thread.owner_id
+            author_name = "未知作者"
+            if author_id:
+                # 优先从缓存中获取
+                author = thread.owner or thread.guild.get_member(author_id)
+                if not author:
+                    try:
+                        # 缓存未命中，则通过 API 拉取
+                        log.info(
+                            f"缓存未命中，正在为帖子 {thread.id} 拉取作者信息 (ID: {author_id})..."
+                        )
+                        author = await thread.guild.fetch_member(author_id)
+                    except discord.NotFound:
+                        log.warning(
+                            f"无法为帖子 {thread.id} 找到作者 (ID: {author_id})，可能已离开服务器。"
+                        )
+                    except discord.HTTPException as e:
+                        log.error(
+                            f"通过 API 获取作者 (ID: {author_id}) 信息时出错: {e}"
+                        )
+
+                if author:
+                    # 使用 display_name，因为它能更好地反映用户在服务器中的昵称
+                    author_name = author.display_name
 
             # 提取论坛频道的名称作为分类
             category_name = thread.parent.name if thread.parent else "未知分类"
-            document_text = f"标题: {title}\n作者: {author_name}\n分类: {category_name}\n标签: {tags_str_for_doc}\n内容: {content}"
+            document_text = f"标题: {title}\n作者: {author_name}\n分类: {category_name}\n内容: {content}"
 
             # 3. 文本分块
             chunks = create_text_chunks(document_text, max_chars=1000)
@@ -95,11 +114,8 @@ class ForumSearchService:
                             "thread_id": thread.id,
                             "thread_name": title,
                             "author_name": author_name,
-                            "author_id": thread.owner.id
-                            if thread.owner
-                            else 0,  # 新增：作者ID
+                            "author_id": author_id or 0,
                             "category_name": category_name,
-                            "tags": tags_for_meta,  # 使用特殊格式的字符串以便于过滤
                             "channel_id": thread.parent_id,
                             "guild_id": thread.guild.id,
                             "created_at": thread.created_at.isoformat(),
@@ -166,24 +182,25 @@ class ForumSearchService:
             return None
 
     async def search(
-        self, query: str, n_results: int = 5, filters: Dict[str, Any] = None
+        self,
+        query: str = None,
+        n_results: int = 5,
+        filters: Dict[str, Any] = None,
     ) -> List[Dict[str, Any]]:
         """
-        执行高级语义搜索，支持多种元数据过滤。
+        执行高级语义搜索或按元数据浏览。
+        - 如果提供了有效的 `query`，则执行语义搜索。
+        - 如果 `query` 为 None 或空字符串，则按 `filters` 浏览，并按时间倒序返回最新结果。
 
         Args:
-            query (str): 搜索查询。
+            query (str, optional): 搜索查询。
             n_results (int): 返回结果的数量。
             filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
-                - key 是元数据字段名 (例如 "category_name", "author_id", "tags")。
-                - value 可以是直接匹配的值。
-                - 对于 "tags", value 应为列表，查询将检查是否包含任一标签。
-                示例:
-                {
-                    "category_name": "男性向",
-                    "author_id": 1234567890,
-                    "tags": ["角色卡", "原创"]
-                }
+                - `category_name` (str): 按指定的论坛频道名称进行过滤。
+                - `author_id` (int): 按作者的Discord ID进行过滤。
+                - `author_name` (str): 按作者的显示名称进行过滤。
+                - `start_date` (str): 筛选发布日期在此日期之后的帖子 (格式: YYYY-MM-DD)。
+                - `end_date` (str): 筛选发布日期在此日期之前的帖子 (格式: YYYY-MM-DD)。
         Returns:
             List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
@@ -192,80 +209,85 @@ class ForumSearchService:
             return []
 
         try:
-            # 1. 构建数据库查询的元数据过滤条件 (where 子句)
-            where_clause = {}
-            tags_to_filter = None
+            # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
+            where_filter = None
             if filters:
-                # 提取标签用于后续在代码中过滤，因为DB不支持我们需要的复杂查询
-                if "tags" in filters:
-                    tags_to_filter = filters.pop("tags")
+                conditions = []
+                date_filters = {}
 
                 for key, value in filters.items():
-                    if value is not None:
-                        # 对于其他字段，我们进行直接相等匹配
-                        where_clause[key] = value
+                    if value is None:
+                        continue
 
-            log.info(f"论坛搜索数据库过滤器 (where): {where_clause}")
-            if tags_to_filter:
-                log.info(f"论坛搜索应用层过滤器 (tags): {tags_to_filter}")
+                    if key == "start_date":
+                        date_filters["$gte"] = f"{value}T00:00:00"
+                    elif key == "end_date":
+                        date_filters["$lte"] = f"{value}T23:59:59"
+                    else:
+                        conditions.append({key: {"$eq": value}})
 
-            # 2. 从向量数据库获取初步结果
-            gemini_service = self._get_gemini_service()
-            query_embedding = await gemini_service.generate_embedding(
-                text=query, task_type="retrieval_query"
-            )
-            if not query_embedding:
-                log.warning("无法为查询生成嵌入向量。")
-                return []
+                if date_filters:
+                    conditions.append({"created_at": date_filters})
 
-            # 为了进行二次过滤，我们需要请求更多的结果
-            n_results_for_db = n_results * 5 if tags_to_filter else n_results
+                if len(conditions) > 1:
+                    where_filter = {"$and": conditions}
+                elif conditions:
+                    where_filter = conditions[0]
 
-            search_results_list = self.vector_db_service.search(
-                query_embedding=query_embedding,
-                n_results=n_results_for_db,
-                max_distance=1.0,
-            )
+            log.info(f"论坛搜索数据库过滤器 (where): {where_filter or '无'}")
 
-            # 3. 在应用层进行元数据和标签的二次过滤
-            final_results_list = []
-            if search_results_list:
-                # 3.1. 首先处理 where_clause 过滤
-                if where_clause:
-                    intermediate_results = []
-                    for item in search_results_list:
-                        metadata = item.get("metadata", {})
-                        if all(
-                            metadata.get(key) == value
-                            for key, value in where_clause.items()
-                        ):
-                            intermediate_results.append(item)
-                    search_results_list = intermediate_results
+            # 2. 根据是否有有效 query 决定执行语义搜索还是元数据浏览
+            if query and query.strip():
+                # --- 语义搜索逻辑 ---
+                log.info(f"执行语义搜索，查询: '{query}'")
+                gemini_service = self._get_gemini_service()
+                query_embedding = await gemini_service.generate_embedding(
+                    text=query, task_type="retrieval_query"
+                )
+                if not query_embedding:
+                    log.warning("无法为查询生成嵌入向量。")
+                    return []
 
-                # 3.2. 接着处理标签过滤
-                if tags_to_filter:
-                    required_tags = set(t.lower() for t in tags_to_filter)
-                    for item in search_results_list:
-                        if len(final_results_list) >= n_results:
-                            break  # 已找到足够的结果
-                        metadata = item.get("metadata", {})
-                        if (
-                            metadata
-                            and metadata.get("tags")
-                            and isinstance(metadata["tags"], str)
-                        ):
-                            available_tags = set(
-                                t.lower()
-                                for t in metadata["tags"].strip("|").split("|")
-                            )
-                            if required_tags.issubset(available_tags):
-                                final_results_list.append(item)
-                else:
-                    # 如果没有标签过滤，直接取所需数量的结果
-                    final_results_list = search_results_list[:n_results]
+                search_results = self.vector_db_service.search(
+                    query_embedding=query_embedding,
+                    n_results=n_results,
+                    where_filter=where_filter,
+                    max_distance=1.0,
+                )
+                return search_results
+            else:
+                # --- 元数据浏览逻辑 ---
+                log.info("执行元数据浏览 (无查询关键词)。")
+                if not where_filter:
+                    log.warning("无关键词浏览模式下必须提供有效的过滤器。")
+                    return []
 
-            # 4. 直接返回过滤和截断后的结果列表
-            return final_results_list
+                # 直接从数据库获取所有匹配的文档
+                results = self.vector_db_service.get(
+                    where=where_filter, include=["metadatas", "documents"]
+                )
+                ids = results.get("ids", [])
+                metadatas = results.get("metadatas", [])
+                documents = results.get("documents", [])
+
+                if not ids:
+                    return []
+
+                # 重构结果以便排序
+                reconstructed_results = [
+                    {"id": id, "content": doc, "metadata": meta, "distance": 0.0}
+                    for id, doc, meta in zip(ids, documents, metadatas)
+                ]
+
+                # 按创建时间倒序排序
+                sorted_results = sorted(
+                    reconstructed_results,
+                    key=lambda x: x["metadata"].get("created_at", ""),
+                    reverse=True,
+                )
+
+                # 返回最新的 n_results 个结果
+                return sorted_results[:n_results]
 
         except Exception as e:
             log.error(f"执行论坛搜索时发生错误: {e}", exc_info=True)

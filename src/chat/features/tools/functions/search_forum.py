@@ -13,92 +13,86 @@ from typing import Dict, Any, List
 
 async def search_forum_threads(
     query: str = None, filters: Dict[str, Any] = None, **kwargs
-) -> str:
+) -> List[str]:
     """
-    根据用户提问进行语义搜索，并支持通过元数据进行精确过滤。
+    根据用户提问在论坛中进行语义搜索或按条件浏览。
+    - 如果提供了 `query`，则执行语义搜索。
+    - 如果 `query` 未提供但提供了 `filters`，则按条件列出最新的帖子。
+    此工具返回一个字符串列表，每个字符串都结合了帖子的分类和其URL。你应该将列表中的每个字符串作为新的一行直接展示给用户。
 
     Args:
-        query (str): 用于语义搜索的核心查询内容。
+        query (str, optional): 用于语义搜索的核心查询内容。如果省略或为空字符串，则变为按 `filters` 浏览模式。
         filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
             - `category_name` (str): 按指定的论坛频道名称进行过滤。
             - `author_id` (int): 按作者的Discord ID进行过滤。
             - `author_name` (str): 按作者的显示名称进行过滤。
-            - `tags` (List[str]): 按标签进行过滤，帖子必须包含列表中的所有指定标签。
+            - `start_date` (str): 筛选发布日期在此日期之后的帖子 (格式: YYYY-MM-DD)。
+            - `end_date` (str): 筛选发布日期在此日期之前的帖子 (格式: YYYY-MM-DD)。
             示例:
             {
                 "category_name": "男性向",
-                "author_name": "张三",
-                "tags": ["角色卡", "原创"]
+                "author_name": "张三"
             }
 
     Returns:
-        str: 一个Markdown格式的、包含帖子标题和链接的列表。
+        List[str]: 一个字符串列表，每个字符串格式为 '分类名 > https://discord.com/channels/...'。
     """
     if filters is None:
         filters = {}
+
+    # 修复：确保 author_id 是整数，以防止科学计数法问题
+    if "author_id" in filters and filters["author_id"] is not None:
+        try:
+            filters["author_id"] = int(filters["author_id"])
+        except (ValueError, TypeError) as e:
+            log.error(f"无法将 author_id '{filters['author_id']}' 转换为整数: {e}")
+            return ["错误：提供的作者ID格式不正确，无法处理。"]
 
     # 健壮性处理：应对 query 被错误地传入 filters 字典内的情况
     if query is None and "query" in filters:
         query = filters.pop("query")
 
-    # 最终检查 query 参数是否存在
-    if query is None:
-        log.error("工具 'search_forum_threads' 被调用，但缺少 'query' 参数。")
-        return "错误：搜索时必须提供查询内容。"
+    # 如果 query (去除首尾空格后) 为空且 filters 也为空，则返回错误
+    if not (query and query.strip()) and not filters:
+        log.error(
+            "工具 'search_forum_threads' 被调用，但缺少 'query' 和 'filters' 参数。"
+        )
+        return ["错误：你需要提供一个关键词或者至少一个筛选条件（比如频道名称）。"]
 
     log.info(f"工具 'search_forum_threads' 被调用，查询: {query}, 过滤器: {filters}")
 
     if not forum_search_service.is_ready():
-        return "论坛搜索服务当前不可用，请稍后再试。"
+        return ["论坛搜索服务当前不可用，请稍后再试。"]
 
     results = await forum_search_service.search(query, filters=filters)
-
-    # 诊断日志：打印从向量数据库返回的原始结果
     log.info(f"原始搜索结果: {results}")
 
-    # forum_search_service 现在返回一个字典列表
     if not results:
-        return "在论坛中没有找到相关的帖子。"
+        return []
 
-    # 使用集合来防止返回重复的帖子链接
     processed_thread_ids = set()
-    output_lines = ["找到了以下相关的论坛帖子:"]
+    output_list = []
 
     for result in results:
-        # 每个 result 现在是一个包含 'id', 'content', 'distance', 'metadata' 的字典
         metadata = result.get("metadata", {})
         thread_id = metadata.get("thread_id")
 
         if not thread_id or thread_id in processed_thread_ids:
             continue
 
-        thread_name = metadata.get("thread_name", "未知标题")
         category_name = metadata.get("category_name", "未知论坛")
         guild_id = metadata.get("guild_id")
 
-        # 确保我们拥有创建链接所需的所有信息
-        if guild_id and thread_name and category_name:
-            # 清理标题中的换行符
-            cleaned_thread_name = thread_name.replace("\n", " ").replace("\r", " ")
-
-            # 动态构建帖子链接 (服务器ID/帖子ID)
+        if guild_id:
             thread_url = f"https://discord.com/channels/{guild_id}/{thread_id}"
-
-            # 按照 “标题 面包屑导航格式” 进行渲染
-            output_lines.append(
-                f"- {category_name} > {cleaned_thread_name} {thread_url}"
-            )
-
-            # 成功添加后，再将 thread_id 计入“已处理”集合
+            # 构建 "分类 > 链接" 格式的字符串
+            output_string = f"{category_name} > {thread_url}"
+            output_list.append(output_string)
             processed_thread_ids.add(thread_id)
         else:
-            # 如果缺少信息，记录警告并继续处理下一个结果。
-            log.warning(
-                f"元数据不完整 (guild_id: {guild_id}, thread_name: {thread_name}, category_name: {category_name})，无法为帖子 {thread_id} 创建链接。"
-            )
+            log.warning(f"元数据缺少 guild_id，无法为帖子 {thread_id} 创建链接。")
 
-        # 限制最多返回5个结果，避免信息过载
         if len(processed_thread_ids) >= 5:
             break
 
-    return "\n".join(output_lines)
+    return output_list

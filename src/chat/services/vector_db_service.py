@@ -114,6 +114,39 @@ class VectorDBService:
         except Exception as e:
             log.error(f"从 ChromaDB 删除文档时出错: {e}", exc_info=True)
 
+    def update(self, ids: List[str], metadatas: List[Dict[str, Any]]):
+        """
+        更新现有文档的元数据。
+        """
+        if not self.is_available():
+            log.error("VectorDB 服务不可用，无法更新元数据。")
+            return
+        try:
+            collection = self.client.get_or_create_collection(name=self.collection_name)
+            collection.update(ids=ids, metadatas=metadatas)
+            log.info(f"成功更新了 {len(ids)} 个文档的元数据。")
+        except Exception as e:
+            log.error(f"更新 ChromaDB 元数据时出错: {e}", exc_info=True)
+
+    def get(
+        self,
+        ids: List[str] = None,
+        where: Dict[str, Any] = None,
+        include: List[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        从集合中获取文档。
+        """
+        if not self.is_available():
+            log.error("VectorDB 服务不可用，无法获取文档。")
+            return {}
+        try:
+            collection = self.client.get_or_create_collection(name=self.collection_name)
+            return collection.get(ids=ids, where=where, include=include)
+        except Exception as e:
+            log.error(f"从 ChromaDB 获取文档时出错: {e}", exc_info=True)
+            return {}
+
     def get_all_ids(self) -> List[str]:
         """获取集合中所有文档的ID。"""
         if not self.is_available():
@@ -154,6 +187,7 @@ class VectorDBService:
         query_embedding: List[float],
         n_results: int = 3,
         max_distance: float = 0.75,
+        where_filter: Dict[str, Any] = None,
     ) -> List[Dict[str, Any]]:
         """
         在集合中执行语义搜索，并根据距离阈值过滤结果。
@@ -181,6 +215,7 @@ class VectorDBService:
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=n_results,
+                where=where_filter,  # 添加元数据过滤器
                 include=["documents", "distances", "metadatas"],  # 明确请求返回元数据
             )
 

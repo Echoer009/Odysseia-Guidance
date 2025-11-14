@@ -393,7 +393,7 @@ WARMUP_MESSAGES = {
 CHANNEL_MUTE_CONFIG = {
     "VOTE_THRESHOLD": 5,  # 禁言投票通过所需的票数 (方便测试设为2)
     "VOTE_DURATION_MINUTES": 3,  # 投票的有效持续时间（分钟）
-    "MUTE_DURATION_MINUTES": 10,  # 禁言的持续时间（分钟）
+    "MUTE_DURATION_MINUTES": 30,  # 禁言的持续时间（分钟）
 }
 
 # --- 调试配置 ---
