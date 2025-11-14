@@ -85,7 +85,7 @@ class ForumSearchService:
 
             # 提取论坛频道的名称作为分类
             category_name = thread.parent.name if thread.parent else "未知分类"
-            document_text = f"标题: {title}\n内容: {content}"
+            document_text = content
 
             # 3. 文本分块
             chunks = create_text_chunks(document_text, max_chars=1000)

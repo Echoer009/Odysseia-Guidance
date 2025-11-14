@@ -931,19 +931,35 @@ class SearchVectorDBModal(discord.ui.Modal):
                 name=forum_vector_db_service.collection_name
             )
 
-            # 在 'title' 元数据字段中进行关键词搜索
-            results = collection.get(
-                where={"title": {"$contains": keyword}},
-                include=["metadatas", "documents"],
-            )
+            # 性能优化：ChromaDB 不支持模糊搜索，我们先只获取元数据进行过滤
+            all_items = collection.get(include=["metadatas"])
 
-            if not results or not results["ids"]:
+            if not all_items or not all_items["ids"]:
+                await interaction.followup.send(
+                    "❌ 向量数据库中没有任何帖子。", ephemeral=True
+                )
+                return
+
+            # 在 Python 中对元数据进行不区分大小写的“包含”过滤
+            keyword_lower = keyword.lower()
+            matching_ids = []
+            for i, metadata in enumerate(all_items["metadatas"]):
+                thread_name = metadata.get("thread_name", "").lower()
+                if keyword_lower in thread_name:
+                    matching_ids.append(all_items["ids"][i])
+
+            if not matching_ids:
                 await interaction.followup.send(
                     f"❌ 未在元数据中找到包含 `{keyword}` 的帖子。", ephemeral=True
                 )
                 return
 
-            # 格式化结果
+            # 仅获取匹配到的条目的完整数据
+            results = collection.get(
+                ids=matching_ids, include=["metadatas", "documents"]
+            )
+
+            # 格式化结果 (因为后续代码期望一个字典列表)
             formatted_results = []
             for i in range(len(results["ids"])):
                 formatted_results.append(
@@ -1483,7 +1499,7 @@ class DBView(discord.ui.View):
             if self.current_table == "vector_db_metadata":
                 # 对于向量数据库，我们从 metadata 中获取标题和作者
                 metadata = entry.get("metadata", {})
-                title = metadata.get("title", "无标题")
+                title = metadata.get("thread_name", "无标题")
                 author_name = metadata.get("author_name", "未知作者")
                 return f"标题: {title} - 作者: {author_name}"
 
@@ -1937,11 +1953,26 @@ class DBView(discord.ui.View):
 
             # 显示文档内容
             if item["document"]:
-                # 从 document 中提取标题和内容
-                document_content = item["document"]
-                parts = document_content.split("\n内容: ", 1)
-                doc_title = parts[0].replace("标题: ", "")
-                doc_body = parts[1] if len(parts) > 1 else ""
+                # 健壮地解析 document 文本，分离标题和内容，兼容新旧格式
+                document_content = item["document"].strip()
+                doc_title = "_(无标题)_"
+                doc_body = "_(无内容)_"
+
+                # 以 "\n内容: " 为分隔符，将文档分为头部和内容两部分
+                content_parts = document_content.split("\n内容: ", 1)
+                header_block = content_parts[0]
+                if len(content_parts) == 2:
+                    doc_body = content_parts[1].strip()
+
+                # 从头部块中解析标题
+                title_tag = "标题: "
+                if header_block.strip().startswith(title_tag):
+                    # 提取 "标题: " 所在行的内容作为标题
+                    title_line = header_block.strip().split("\n")[0]
+                    doc_title = title_line[len(title_tag) :].strip()
+                else:
+                    # 如果没有 "标题: " 标签，将头部块的第一行作为备用标题
+                    doc_title = header_block.strip().split("\n")[0]
 
                 embed.add_field(
                     name="向量化文本 (RAG Data)",
