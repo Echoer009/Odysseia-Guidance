@@ -152,6 +152,12 @@ class FeedingCog(commands.Cog):
             file = discord.File(fp=io.BytesIO(image_bytes), filename=image.filename)
             embed.set_thumbnail(url=f"attachment://{image.filename}")
 
+            # 检查是否在豁免频道，如果是，则显示大图
+            if interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS:
+                sticker_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
+                if sticker_url:
+                    embed.set_image(url=sticker_url)
+
             # 添加页脚用于上下文识别
             embed.set_footer(text="类脑娘对你的投喂做出回应...")
 
