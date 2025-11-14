@@ -824,30 +824,30 @@ class ChatDatabaseManager:
             f"用户 {user_id} 在服务器 {guild_id} 的警告次数更新为: {current_warnings}"
         )
 
-        # --- 扣除好感度 ---
-        penalty = chat_config.AFFECTION_CONFIG["BLACKLIST_PENALTY"]
-        if penalty != 0:
-            query_affection = """
-                INSERT INTO ai_affection (user_id, guild_id, affection_points)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_id, guild_id) DO UPDATE SET
-                    affection_points = affection_points + excluded.affection_points;
-            """
-            await self._execute(
-                self._db_transaction,
-                query_affection,
-                (user_id, guild_id, penalty),
-                commit=True,
-            )
-            log.info(
-                f"用户 {user_id} 在服务器 {guild_id} 因收到警告被扣除好感度: {penalty}"
-            )
-
         # 检查是否达到拉黑阈值
         if current_warnings >= 3:
             log.info(
                 f"用户 {user_id} 在服务器 {guild_id} 达到3次警告，将被加入黑名单。"
             )
+            # --- 扣除好感度 ---
+            penalty = chat_config.AFFECTION_CONFIG["BLACKLIST_PENALTY"]
+            if penalty != 0:
+                query_affection = """
+                    INSERT INTO ai_affection (user_id, guild_id, affection_points)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id, guild_id) DO UPDATE SET
+                        affection_points = affection_points + excluded.affection_points;
+                """
+                await self._execute(
+                    self._db_transaction,
+                    query_affection,
+                    (user_id, guild_id, penalty),
+                    commit=True,
+                )
+                log.info(
+                    f"用户 {user_id} 在服务器 {guild_id} 因被禁言被扣除好感度: {penalty}"
+                )
+
             # 加入黑名单
             await self.add_to_blacklist(user_id, guild_id, expires_at)
 
