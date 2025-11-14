@@ -16,6 +16,9 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
 )
 from src.chat.features.admin_panel.ui.coin_management_view import CoinManagementView
 from src.chat.utils.database import DB_PATH as CHAT_DB_PATH
+from src.chat.features.forum_search.services.forum_vector_db_service import (
+    forum_vector_db_service,
+)
 
 log = logging.getLogger(__name__)
 
@@ -898,7 +901,76 @@ class SearchCommunityMemberModal(discord.ui.Modal):
         finally:
             if conn:
                 conn.close()
-                conn.close()
+
+
+# --- 新增：搜索向量数据库的模态窗口 ---
+class SearchVectorDBModal(discord.ui.Modal):
+    def __init__(self, db_view: "DBView"):
+        super().__init__(title="搜索向量数据库 (帖子)")
+        self.db_view = db_view
+        self.keyword_input = discord.ui.TextInput(
+            label="输入元数据搜索关键词",
+            placeholder="在帖子标题等元数据中搜索...",
+            required=True,
+            max_length=100,
+        )
+        self.add_item(self.keyword_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        keyword = self.keyword_input.value.strip()
+        if not keyword:
+            await interaction.followup.send("请输入有效的搜索关键词。", ephemeral=True)
+            return
+
+        try:
+            if not forum_vector_db_service or not forum_vector_db_service.client:
+                raise ConnectionError("未能连接到向量数据库服务。")
+
+            collection = forum_vector_db_service.client.get_collection(
+                name=forum_vector_db_service.collection_name
+            )
+
+            # 在 'title' 元数据字段中进行关键词搜索
+            results = collection.get(
+                where={"title": {"$contains": keyword}},
+                include=["metadatas", "documents"],
+            )
+
+            if not results or not results["ids"]:
+                await interaction.followup.send(
+                    f"❌ 未在元数据中找到包含 `{keyword}` 的帖子。", ephemeral=True
+                )
+                return
+
+            # 格式化结果
+            formatted_results = []
+            for i in range(len(results["ids"])):
+                formatted_results.append(
+                    {
+                        "id": results["ids"][i],
+                        "metadata": results["metadatas"][i],
+                        "document": results["documents"][i],
+                    }
+                )
+
+            self.db_view.current_list_items = formatted_results
+            self.db_view.current_page = 0
+            self.db_view.total_pages = (
+                len(formatted_results) + self.db_view.items_per_page - 1
+            ) // self.db_view.items_per_page
+            self.db_view.search_mode = True
+            self.db_view.search_keyword = keyword
+
+            await self.db_view.update_view()
+            await interaction.followup.send(
+                f"✅ 找到 {len(formatted_results)} 条元数据包含 `{keyword}` 的帖子。",
+                ephemeral=True,
+            )
+
+        except Exception as e:
+            log.error(f"搜索向量数据库时发生错误: {e}", exc_info=True)
+            await interaction.followup.send(f"搜索时发生错误: {e}", ephemeral=True)
 
 
 # --- 数据库浏览器视图 ---
@@ -1039,6 +1111,17 @@ class DBView(discord.ui.View):
                 self.search_work_event_button.callback = self.search_work_event
                 self.add_item(self.search_work_event_button)
 
+            # 向量库：关键词搜索
+            elif self.current_table == "vector_db_metadata" and not self.search_mode:
+                self.search_vector_db_button = discord.ui.Button(
+                    label="关键词搜索",
+                    emoji="🔍",
+                    style=discord.ButtonStyle.primary,
+                    row=button_row,
+                )
+                self.search_vector_db_button.callback = self.search_vector_db
+                self.add_item(self.search_vector_db_button)
+
             # 通用：退出搜索模式的按钮
             if self.search_mode:
                 self.exit_search_button = discord.ui.Button(
@@ -1060,17 +1143,19 @@ class DBView(discord.ui.View):
             self.back_button.callback = self.go_to_list_view
             self.add_item(self.back_button)
 
-            self.edit_button = discord.ui.Button(
-                label="修改", emoji="✏️", style=discord.ButtonStyle.primary
-            )
-            self.edit_button.callback = self.edit_item
-            self.add_item(self.edit_button)
+            # 向量数据库条目不可编辑或删除
+            if self.current_table != "vector_db_metadata":
+                self.edit_button = discord.ui.Button(
+                    label="修改", emoji="✏️", style=discord.ButtonStyle.primary
+                )
+                self.edit_button.callback = self.edit_item
+                self.add_item(self.edit_button)
 
-            self.delete_button = discord.ui.Button(
-                label="删除", emoji="🗑️", style=discord.ButtonStyle.danger
-            )
-            self.delete_button.callback = self.delete_item
-            self.add_item(self.delete_button)
+                self.delete_button = discord.ui.Button(
+                    label="删除", emoji="🗑️", style=discord.ButtonStyle.danger
+                )
+                self.delete_button.callback = self.delete_item
+                self.add_item(self.delete_button)
 
             # --- 新增：仅在查看社区成员时显示“查看记忆”按钮 ---
             if self.current_table == "community_members":
@@ -1093,6 +1178,9 @@ class DBView(discord.ui.View):
                 label="类脑币管理", value="coin_management", emoji="🪙"
             ),
             discord.SelectOption(label="工作管理", value="work_events", emoji="💼"),
+            discord.SelectOption(
+                label="向量库元数据", value="vector_db_metadata", emoji="🧠"
+            ),
         ]
         for option in options:
             if option.value == self.current_table:
@@ -1107,14 +1195,26 @@ class DBView(discord.ui.View):
     def _create_item_select(self) -> discord.ui.Select:
         """根据当前列表页的条目创建选择菜单"""
         options = []
-        pk = self._get_primary_key_column()
-        for item in self.current_list_items:
-            title = self._get_entry_title(item)
-            item_id = item[pk]
-            label = f"#{item_id}. {title}"
-            if len(label) > 100:
-                label = label[:97] + "..."
-            options.append(discord.SelectOption(label=label, value=str(item_id)))
+        if self.current_table == "vector_db_metadata":
+            for item in self.current_list_items:
+                title = self._get_entry_title(item)
+                item_id = item["id"]
+                label = f"#{item_id}"
+                # 只有在标题有效时才添加
+                if title and title != item_id:
+                    label += f" - {title}"
+                if len(label) > 100:
+                    label = label[:97] + "..."
+                options.append(discord.SelectOption(label=label, value=str(item_id)))
+        else:
+            pk = self._get_primary_key_column()
+            for item in self.current_list_items:
+                title = self._get_entry_title(item)
+                item_id = item[pk]
+                label = f"#{item_id}. {title}"
+                if len(label) > 100:
+                    label = label[:97] + "..."
+                options.append(discord.SelectOption(label=label, value=str(item_id)))
 
         select = discord.ui.Select(
             placeholder="选择一个条目查看详情...", options=options
@@ -1191,6 +1291,11 @@ class DBView(discord.ui.View):
     async def search_community_member(self, interaction: discord.Interaction):
         """显示一个模态窗口让用户输入关键词搜索社区成员"""
         modal = SearchCommunityMemberModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def search_vector_db(self, interaction: discord.Interaction):
+        """显示一个模态窗口让用户输入关键词搜索向量数据库"""
+        modal = SearchVectorDBModal(self)
         await interaction.response.send_modal(modal)
 
     async def exit_search(self, interaction: discord.Interaction):
@@ -1375,7 +1480,13 @@ class DBView(discord.ui.View):
         根据表名和数据结构，为数据库条目获取最合适的标题。
         """
         try:
-            # 1. 待审核条目：标题信息在 data_json 内部
+            if self.current_table == "vector_db_metadata":
+                # 对于向量数据库，我们从 metadata 中获取标题和作者
+                metadata = entry.get("metadata", {})
+                title = metadata.get("title", "无标题")
+                author_name = metadata.get("author_name", "未知作者")
+                return f"标题: {title} - 作者: {author_name}"
+
             # 1. 社区成员档案：直接使用 title 字段
             if self.current_table == "community_members":
                 return entry["title"]
@@ -1390,13 +1501,13 @@ class DBView(discord.ui.View):
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             pk = self._get_primary_key_column()
-            item_id = entry[pk]
+            item_id = entry.get(pk, entry.get("id", "N/A"))
             log.warning(f"解析条目 #{item_id} 标题时出错: {e}")
             return f"ID: #{item_id} (解析错误)"
 
         # 3. 回退机制：以防未来有其他表
         pk = self._get_primary_key_column()
-        return f"ID: #{entry[pk]}"
+        return f"ID: #{entry.get(pk, entry.get('id', 'N/A'))}"
 
     def _truncate_field_value(self, value: any) -> str:
         """将值截断以符合 Discord embed 字段值的长度限制。"""
@@ -1526,7 +1637,12 @@ class DBView(discord.ui.View):
             log.warning("DBView 尝试更新视图，但没有关联的 message 对象。")
             return
 
-        if self.view_mode == "list":
+        if self.current_table == "vector_db_metadata":
+            if self.view_mode == "list":
+                embed = await self._build_vector_db_list_embed()
+            else:
+                embed = await self._build_vector_db_detail_embed()
+        elif self.view_mode == "list":
             embed = await self._build_list_embed()
         else:
             embed = await self._build_detail_embed()
@@ -1697,6 +1813,150 @@ class DBView(discord.ui.View):
             log.error(f"获取条目详情时出错: {e}", exc_info=True)
             return discord.Embed(
                 title="数据库错误",
+                description=f"加载 ID 为 {self.current_item_id} 的条目时发生错误: {e}",
+                color=discord.Color.red(),
+            )
+
+    async def _build_vector_db_list_embed(self) -> discord.Embed:
+        """构建向量数据库的列表视图"""
+        table_display_name = "向量库元数据 (帖子搜索)"
+        try:
+            if not forum_vector_db_service or not forum_vector_db_service.client:
+                raise ConnectionError("未能连接到向量数据库服务。")
+
+            collection = forum_vector_db_service.client.get_collection(
+                name=forum_vector_db_service.collection_name
+            )
+
+            if self.search_mode:
+                total_items = len(self.current_list_items)
+                start_idx = self.current_page * self.items_per_page
+                end_idx = start_idx + self.items_per_page
+                page_items = self.current_list_items[start_idx:end_idx]
+                embed = discord.Embed(
+                    title=f"搜索: {table_display_name} (关键词: '{self.search_keyword}')",
+                    color=discord.Color.gold(),
+                )
+            else:
+                total_items = collection.count()
+                offset = self.current_page * self.items_per_page
+                results = collection.get(
+                    limit=self.items_per_page,
+                    offset=offset,
+                    include=["metadatas", "documents"],
+                )
+                # 格式化为字典列表
+                page_items = []
+                for i in range(len(results["ids"])):
+                    page_items.append(
+                        {
+                            "id": results["ids"][i],
+                            "metadata": results["metadatas"][i],
+                            "document": results["documents"][i],
+                        }
+                    )
+                self.current_list_items = page_items
+                embed = discord.Embed(
+                    title=f"浏览: {table_display_name}", color=discord.Color.purple()
+                )
+
+            self.total_pages = (
+                total_items + self.items_per_page - 1
+            ) // self.items_per_page
+
+            if not self.current_list_items:
+                embed.description = "数据库中没有找到任何条目。"
+            else:
+                list_text = "\n".join(
+                    [
+                        f"**`#{item['id']}`** - {self._get_entry_title(item)}"
+                        for item in self.current_list_items
+                    ]
+                )
+                embed.description = list_text
+
+            embed.set_footer(
+                text=f"第 {self.current_page + 1} / {self.total_pages or 1} 页 (共 {total_items} 条)"
+            )
+            return embed
+
+        except Exception as e:
+            log.error(f"构建向量数据库列表视图时出错: {e}", exc_info=True)
+            return discord.Embed(
+                title="错误",
+                description=f"加载向量数据库时发生错误: {e}",
+                color=discord.Color.red(),
+            )
+
+    async def _build_vector_db_detail_embed(self) -> discord.Embed:
+        """构建向量数据库的详情视图"""
+        if not self.current_item_id:
+            self.view_mode = "list"
+            return await self._build_vector_db_list_embed()
+
+        try:
+            if not forum_vector_db_service or not forum_vector_db_service.client:
+                raise ConnectionError("未能连接到向量数据库服务。")
+
+            collection = forum_vector_db_service.client.get_collection(
+                name=forum_vector_db_service.collection_name
+            )
+            results = collection.get(
+                ids=[self.current_item_id], include=["metadatas", "documents"]
+            )
+
+            if not results or not results["ids"]:
+                await self.go_to_list_view()
+                return discord.Embed(
+                    title="错误",
+                    description=f"找不到 ID 为 `{self.current_item_id}` 的条目。",
+                    color=discord.Color.red(),
+                )
+
+            item = {
+                "id": results["ids"][0],
+                "metadata": results["metadatas"][0],
+                "document": results["documents"][0],
+            }
+
+            title = self._get_entry_title(item)
+            embed = discord.Embed(
+                title=f"查看向量详情: {title}",
+                description=f"表: `向量数据库` | ID: `#{item['id']}`",
+                color=discord.Color.purple(),
+            )
+
+            # 显示所有元数据
+            if item["metadata"]:
+                for key, value in item["metadata"].items():
+                    embed.add_field(
+                        name=key.replace("_", " ").title(),
+                        value=self._truncate_field_value(value),
+                        inline=True,
+                    )
+
+            # 显示文档内容
+            if item["document"]:
+                # 从 document 中提取标题和内容
+                document_content = item["document"]
+                parts = document_content.split("\n内容: ", 1)
+                doc_title = parts[0].replace("标题: ", "")
+                doc_body = parts[1] if len(parts) > 1 else ""
+
+                embed.add_field(
+                    name="向量化文本 (RAG Data)",
+                    value=self._truncate_field_value(
+                        f"**标题:** {doc_title}\n**内容:** {doc_body}"
+                    ),
+                    inline=False,
+                )
+
+            return embed
+
+        except Exception as e:
+            log.error(f"获取向量数据库条目详情时出错: {e}", exc_info=True)
+            return discord.Embed(
+                title="错误",
                 description=f"加载 ID 为 {self.current_item_id} 的条目时发生错误: {e}",
                 color=discord.Color.red(),
             )
