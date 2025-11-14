@@ -51,7 +51,9 @@ def clean_channel_name(name: str) -> str:
     cleaned_name = emoji_pattern.sub("", name)
 
     # 移除常见的装饰性字符
-    cleaned_name = cleaned_name.replace("|", "")
+    # 使用 re.sub 替换多个字符，更高效
+    # 包括：'|', '｜' (全角), '🔨'
+    cleaned_name = re.sub(r"[|｜🔨]", "", cleaned_name)
 
     # 移除前后及中间多余的空格
     cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip()
@@ -227,18 +229,18 @@ def clean_category_names():
 async def main():
     parser = argparse.ArgumentParser(description="论坛元数据维护工具。")
     parser.add_argument(
-        "--clean-categories", action="store_true", help="清洗频道名称中的无效字符。"
+        "--clean-names", action="store_true", help="清洗频道名称中的无效字符。"
     )
     parser.add_argument(
         "--fix-authors", action="store_true", help="修复作者姓名为'未知作者'的记录。"
     )
     args = parser.parse_args()
 
-    if not args.clean_categories and not args.fix_authors:
-        log.info("请至少选择一个操作: --clean-categories 或 --fix-authors")
+    if not args.clean_names and not args.fix_authors:
+        log.info("请至少选择一个操作: --clean-names 或 --fix-authors")
         return
 
-    if args.clean_categories:
+    if args.clean_names:
         clean_category_names()
 
     if args.fix_authors:
