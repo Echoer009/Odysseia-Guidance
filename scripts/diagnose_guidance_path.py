@@ -18,16 +18,16 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-async def diagnose_single_tag(tag_name: str):
+async def diagnose_single_tag(guild_id: int, tag_name: str):
     """
     诊断单个兴趣标签的引导路径部署状态。
     """
-    log.info(f"--- 开始诊断标签: '{tag_name}' ---")
+    log.info(f"--- 开始诊断标签: '{tag_name}' (服务器 ID: {guild_id}) ---")
 
     # 1. 根据标签名称查找标签信息
-    tag = await db_manager.get_tag_by_name(tag_name)
+    tag = await db_manager.get_tag_by_name(guild_id, tag_name)
     if not tag:
-        log.error(f"错误: 找不到名为 '{tag_name}' 的标签。请检查名称是否正确。")
+        log.error(f"错误: 在服务器 {guild_id} 中找不到名为 '{tag_name}' 的标签。")
         print("-" * 50)
         return
 
@@ -94,25 +94,33 @@ async def main():
         action="store_true",
         help="诊断所有已配置的兴趣标签。",
     )
+    parser.add_argument(
+        "--guild-id",
+        type=int,
+        required=True,
+        help="需要进行诊断的服务器（Guild）的 ID。",
+    )
     args = parser.parse_args()
 
-    await db_manager.initialize()
+    await db_manager.init_async()
     try:
         if args.all:
-            log.info("--- 开始全面诊断所有兴趣标签 ---")
-            all_tags = await db_manager.get_all_tags()
+            log.info(f"--- 开始对服务器 {args.guild_id} 进行全面诊断 ---")
+            all_tags = await db_manager.get_all_tags(args.guild_id)
             if not all_tags:
-                log.warning("数据库中没有找到任何已配置的兴趣标签。")
+                log.warning(
+                    f"在服务器 {args.guild_id} 的数据库中没有找到任何已配置的兴趣标签。"
+                )
                 return
 
             log.info(f"共找到 {len(all_tags)} 个标签，将逐一进行诊断...")
             print("=" * 50)
 
             for tag in all_tags:
-                await diagnose_single_tag(tag["tag_name"])
+                await diagnose_single_tag(args.guild_id, tag["tag_name"])
 
         elif args.tag_name:
-            await diagnose_single_tag(args.tag_name)
+            await diagnose_single_tag(args.guild_id, args.tag_name)
     finally:
         await db_manager.close()
         log.info("数据库连接已关闭。")
