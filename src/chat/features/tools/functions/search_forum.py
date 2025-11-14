@@ -12,7 +12,7 @@ from typing import Dict, Any, List
 
 
 async def search_forum_threads(
-    query: str, filters: Dict[str, Any] = None, **kwargs
+    query: str = None, filters: Dict[str, Any] = None, **kwargs
 ) -> str:
     """
     根据用户提问进行语义搜索，并支持通过元数据进行精确过滤。
@@ -34,6 +34,18 @@ async def search_forum_threads(
     Returns:
         str: 一个Markdown格式的、包含帖子标题和链接的列表。
     """
+    if filters is None:
+        filters = {}
+
+    # 健壮性处理：应对 query 被错误地传入 filters 字典内的情况
+    if query is None and "query" in filters:
+        query = filters.pop("query")
+
+    # 最终检查 query 参数是否存在
+    if query is None:
+        log.error("工具 'search_forum_threads' 被调用，但缺少 'query' 参数。")
+        return "错误：搜索时必须提供查询内容。"
+
     log.info(f"工具 'search_forum_threads' 被调用，查询: {query}, 过滤器: {filters}")
 
     if not forum_search_service.is_ready():
