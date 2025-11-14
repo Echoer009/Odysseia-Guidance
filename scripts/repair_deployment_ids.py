@@ -6,6 +6,7 @@ import logging
 import argparse
 import sys
 import os
+from typing import Optional
 
 # --- 设置项目根路径 ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -38,11 +39,11 @@ async def redeploy_single_panel(
     guild: discord.Guild, channel: discord.TextChannel, config_item: dict
 ) -> bool:
     """为单个频道强制重新部署引导面板。"""
-    log.info(f"  [强制重部署模式] 开始为频道 #{channel.name} 部署...")
+    log.info(f"  [部署模式] 开始为频道 #{channel.name} 部署...")
     try:
         perm_data = config_item.get("permanent_message_data") or {}
         if not perm_data:
-            log.error(f"  ❌ 重部署失败: 频道 #{channel.name} 缺少永久消息配置。")
+            log.error(f"  ❌ 部署失败: 频道 #{channel.name} 缺少永久消息配置。")
             return False
 
         # 1. 清理旧面板
@@ -74,27 +75,34 @@ async def redeploy_single_panel(
 
         # 3. 更新数据库
         await db_manager.update_channel_deployment_id(channel.id, new_message.id)
-        log.info(f"  ✅ 重部署成功。新消息ID: {new_message.id}。数据库已更新。")
+        log.info(f"  ✅ 部署成功。新消息ID: {new_message.id}。数据库已更新。")
         return True
 
     except discord.Forbidden:
         log.error(
-            f"  ❌ 重部署失败: 权限不足，无法在 #{channel.name} 中发送消息或删除消息。"
+            f"  ❌ 部署失败: 权限不足，无法在 #{channel.name} 中发送消息或删除消息。"
         )
         return False
     except Exception as e:
-        log.error(f"  ❌ 重部署时发生未知错误: {e}", exc_info=True)
+        log.error(f"  ❌ 部署时发生未知错误: {e}", exc_info=True)
         return False
 
 
-async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
+async def repair_deployment_ids(
+    guild_id: int,
+    channel_id_to_force: Optional[int] = None,
+    deploy_all_missing: bool = False,
+):
     """
-    扫描或强制重部署引导面板以修复数据库记录。
+    扫描、强制重部署或批量部署引导面板以修复数据库记录。
     """
     log.info(f"--- 开始为服务器 {guild_id} 修复部署ID ---")
-    if force_redeploy:
-        log.warning("--- [警告] 已激活强制重部署模式 ---")
-        log.warning("脚本将为所有缺失ID的频道部署新面板，而不是搜索旧面板。")
+    if channel_id_to_force:
+        log.warning(
+            f"--- [警告] 已激活对频道 {channel_id_to_force} 的强制重部署模式 ---"
+        )
+    elif deploy_all_missing:
+        log.warning("--- [警告] 已激活一键部署所有缺失面板模式 ---")
 
     await db_manager.init_async()
     log.info("数据库连接成功。")
@@ -110,17 +118,27 @@ async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
 
     all_configs = await db_manager.get_all_channel_messages(guild.id)
 
-    targets_to_fix = [
-        c
-        for c in all_configs
-        if c.get("permanent_message_data") and not c.get("deployed_message_id")
-    ]
+    # 根据模式确定要处理的目标
+    if channel_id_to_force:
+        targets_to_fix = [
+            c for c in all_configs if c.get("channel_id") == channel_id_to_force
+        ]
+        if not targets_to_fix:
+            log.error(f"错误：在数据库中找不到频道ID为 {channel_id_to_force} 的配置。")
+            return
+    else:
+        # 默认模式（搜索）和批量部署模式都基于这个列表
+        targets_to_fix = [
+            c
+            for c in all_configs
+            if c.get("permanent_message_data") and not c.get("deployed_message_id")
+        ]
 
     if not targets_to_fix:
-        log.info("数据库中所有已配置的永久面板都已有部署ID，无需修复。")
+        log.info("数据库中所有已配置的永久面板都已有部署ID，无需操作。")
         return
 
-    log.info(f"共找到 {len(targets_to_fix)} 个需要修复或重部署的频道。")
+    log.info(f"共找到 {len(targets_to_fix)} 个需要处理的频道。")
 
     success_count = 0
     fail_count = 0
@@ -133,7 +151,8 @@ async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
             channel = await guild.fetch_channel(channel_id)
             channel_name = f"#{channel.name}"
 
-            if force_redeploy:
+            # 强制单频道重部署 或 一键部署所有
+            if channel_id_to_force or deploy_all_missing:
                 if await redeploy_single_panel(guild, channel, config_item):
                     success_count += 1
                 else:
@@ -179,7 +198,9 @@ async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
                 log.error(
                     f"  ❌ 在 {channel_name} 的最近1000条消息中未能找到匹配的面板。"
                 )
-                log.error(f"     请尝试使用 --force-redeploy 模式对此频道进行修复。")
+                log.error(
+                    f"     请尝试使用 --force-redeploy --channel-id {channel_id} 或 --deploy-all-missing 模式进行修复。"
+                )
                 fail_count += 1
 
         except discord.NotFound:
@@ -192,7 +213,7 @@ async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
             log.error(f"❌ 处理频道 {channel_name} 时发生未知错误: {e}", exc_info=True)
             fail_count += 1
 
-    log.info("--- 修复任务完成 ---")
+    log.info("--- 任务完成 ---")
     log.info(f"总计: {len(targets_to_fix)} 个频道")
     log.info(f"成功: {success_count} 个")
     log.info(f"失败/跳过: {fail_count} 个")
@@ -200,16 +221,27 @@ async def repair_deployment_ids(guild_id: int, force_redeploy: bool = False):
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="修复或强制重部署引导面板，以解决数据库中部署ID丢失的问题。"
+        description="修复、强制重部署或批量部署引导面板，以解决数据库中部署ID丢失的问题。"
     )
     parser.add_argument(
         "--guild-id", type=int, required=True, help="需要操作的服务器（Guild）的ID。"
     )
-    parser.add_argument(
+
+    # 创建一个互斥组，确保这些操作模式不会同时被激活
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--force-redeploy",
-        action="store_true",
-        help="激活此模式后，脚本将直接为缺失ID的频道部署新面板，而不是搜索旧面板。",
+        dest="channel_id_to_force",
+        type=int,
+        metavar="CHANNEL_ID",
+        help="为指定的单个频道ID强制部署新面板，而不是搜索旧面板。",
     )
+    mode_group.add_argument(
+        "--deploy-all-missing",
+        action="store_true",
+        help="一键为所有在数据库有配置但没有部署ID的频道部署新面板。",
+    )
+
     args = parser.parse_args()
 
     bot_token = os.getenv("DISCORD_TOKEN")
@@ -219,9 +251,11 @@ async def main():
 
     try:
         await client.login(bot_token)
-        await repair_deployment_ids(args.guild_id, args.force_redeploy)
+        await repair_deployment_ids(
+            args.guild_id, args.channel_id_to_force, args.deploy_all_missing
+        )
     except discord.LoginFailure:
-        log.error("Discord 登录失败，请检查你的 DISCORD_BOT_TOKEN 是否正确。")
+        log.error("Discord 登录失败，请检查你的 DISCORD_TOKEN 是否正确。")
     except Exception as e:
         log.error(f"发生未知错误: {e}", exc_info=True)
     finally:
