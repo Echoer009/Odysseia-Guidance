@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 import logging
 from typing import Optional
+import re
 
 # 导入新的 Service
 from src.chat.services.chat_service import chat_service
@@ -30,6 +31,13 @@ class AIChatCog(commands.Cog):
         # 将bot实例传递给需要它的服务
         context_service.set_bot_instance(bot)
         context_service_test.set_bot_instance(bot)  # 为测试服务也设置bot实例
+
+    def _get_text_length_without_emojis(self, text: str) -> int:
+        """计算移除Discord自定义表情后的文本长度。"""
+        # 匹配 <a:name:id> 或 <:name:id> 格式的表情
+        emoji_pattern = r"<a?:.+?:\d+>"
+        text_without_emojis = re.sub(emoji_pattern, "", text)
+        return len(text_without_emojis)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -91,7 +99,10 @@ class AIChatCog(commands.Cog):
                 # 检查是否在豁免频道，如果是，则直接回复；否则，检查长度
                 if message.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS:
                     await message.reply(response_text, mention_author=True)
-                elif len(response_text) > MESSAGE_SETTINGS["DM_THRESHOLD"]:
+                elif (
+                    self._get_text_length_without_emojis(response_text)
+                    > MESSAGE_SETTINGS["DM_THRESHOLD"]
+                ):
                     try:
                         await message.author.send(
                             f"刚刚在 {message.channel.mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
