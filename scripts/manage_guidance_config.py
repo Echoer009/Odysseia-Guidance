@@ -131,7 +131,7 @@ async def delete_channel(channel_id: int):
         log.error(f"错误：在数据库中找不到频道 {channel_id} 的配置。")
         return
 
-    await db_manager.delete_channel_message(channel_id)
+    await db_manager.remove_channel_message(channel_id)
     log.info(f"✅ 成功从数据库中删除了频道 {channel_id} 的所有相关配置。")
     log.warning("请注意：此操作不会删除Discord频道本身或频道内的任何消息。")
 
