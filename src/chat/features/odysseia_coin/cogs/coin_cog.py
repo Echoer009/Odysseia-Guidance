@@ -1,5 +1,6 @@
 import logging
 import discord
+import os
 from discord import app_commands
 from discord.ext import commands
 
@@ -103,6 +104,25 @@ class CoinCog(commands.Cog):
             view.interaction = interaction  # 提前设置，以便 EventPanelView 能访问
 
             embeds_to_send = []
+
+            # 0. 创建商店公告 Embed
+            try:
+                announcement_path = (
+                    "src/chat/features/odysseia_coin/shop_announcement.md"
+                )
+                if (
+                    os.path.exists(announcement_path)
+                    and os.path.getsize(announcement_path) > 0
+                ):
+                    with open(announcement_path, "r", encoding="utf-8") as f:
+                        announcement_content = f.read()
+                    announcement_embed = discord.Embed(
+                        description=announcement_content,
+                        color=discord.Color.from_rgb(255, 182, 193),  # Light Pink
+                    )
+                    embeds_to_send.append(announcement_embed)
+            except Exception as e:
+                log.error(f"读取或创建商店公告时出错: {e}")
 
             # 1. 检查是否有活动，如果有，创建活动推广 Embed
             active_event = event_service.get_active_event()
