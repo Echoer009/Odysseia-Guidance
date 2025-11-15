@@ -10,10 +10,13 @@ load_dotenv()
 
 # 从环境变量中获取机器人令牌
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+
+# 在退出服务器前发送的消息。留空字符串 ("") 则不发送任何消息。
+LEAVE_MESSAGE = "那个...大家再见啦,因为我太太太受欢迎啦!被大家邀请进了100个服务器呢,因为discord官方的限制,我不得不走啦...大家来类脑找我玩吧!以后也可以再邀请我哦,不过可能就有点小小的限制啦"
 # --- 配置区结束 ---
 
 
-class ManagementBot(discord.Client):
+class ManagementBot(discord.client):
     def __init__(self, mode, whitelist_ids=None, **options):
         super().__init__(**options)
         self.mode = mode
@@ -70,6 +73,31 @@ class ManagementBot(discord.Client):
 
         print("开始执行退出操作...")
         for guild in guilds_to_leave:
+            # 在退出前发送消息
+            if LEAVE_MESSAGE:
+                target_channel = guild.system_channel
+                # 如果没有系统频道，则寻找第一个能发言的文字频道
+                if not target_channel:
+                    for channel in guild.text_channels:
+                        if channel.permissions_for(guild.me).send_messages:
+                            target_channel = channel
+                            break
+
+                if target_channel:
+                    try:
+                        await target_channel.send(LEAVE_MESSAGE)
+                        print(f"向服务器 '{guild.name}' 发送了告别消息。")
+                        await asyncio.sleep(1)  # 短暂延迟以确保消息发送
+                    except discord.Forbidden:
+                        print(f"在服务器 '{guild.name}' 中没有发送消息的权限，已跳过。")
+                    except Exception as e:
+                        print(f"向服务器 '{guild.name}' 发送消息时出错: {e}")
+                else:
+                    print(
+                        f"在服务器 '{guild.name}' 中找不到可以发送消息的频道，已跳过。"
+                    )
+
+            # 退出服务器
             try:
                 await guild.leave()
                 print(f"成功退出服务器: {guild.name} ({guild.id})")
