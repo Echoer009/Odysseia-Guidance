@@ -638,8 +638,8 @@ onMounted(() => {
 </script>
 
 <template>
-    <div id="app-root" class="debug-mode">
-        <div id="screen-size-debug">{{ screenSize }}</div>
+    <div id="app-root">
+        <!-- <div id="screen-size-debug">{{ screenSize }}</div> -->
         <!-- Loading View -->
         <div v-if="currentView === 'loading'" id="loading-view">
             <div>
