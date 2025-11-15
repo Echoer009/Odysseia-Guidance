@@ -53,8 +53,24 @@ async def startup_event():
     )
 
     log.info("Application startup: Initializing services...")
+
+    # --- 新增：在初始化任何服务之前，首先连接数据库 ---
+    from src.chat.utils.database import chat_db_manager
+
+    await chat_db_manager.connect()
+    log.info("Database connected.")
+
     await blackjack_service.initialize()
     log.info("Blackjack service initialized.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """在应用关闭时断开数据库连接"""
+    from src.chat.utils.database import chat_db_manager
+
+    await chat_db_manager.disconnect()
+    log.info("Database disconnected.")
 
 
 # --- 中间件：添加详细的请求日志 ---
