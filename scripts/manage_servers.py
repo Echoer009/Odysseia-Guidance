@@ -16,7 +16,7 @@ LEAVE_MESSAGE = "那个...大家再见啦,因为我太太太受欢迎啦!被大�
 # --- 配置区结束 ---
 
 
-class ManagementBot(discord.client):
+class ManagementBot(discord.Client):
     def __init__(self, mode, whitelist_ids=None, **options):
         super().__init__(**options)
         self.mode = mode
