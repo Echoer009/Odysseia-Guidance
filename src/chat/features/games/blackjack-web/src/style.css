@@ -20,12 +20,21 @@
 
 html,
 body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
   font-family: 'Poppins', sans-serif;
   background:
     radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.4) 100%),
     var(--color-bg);
   color: var(--color-text-light);
   text-align: center;
+  overflow: hidden;
+  /* Prevents scrollbars from appearing */
+}
+
+#app {
+  height: 100%;
 }
 
 #app-container {
@@ -102,8 +111,7 @@ body {
   box-sizing: border-box;
   position: absolute;
   min-height: 40px;
-  display: none;
-  /* Default hidden */
+  /* Visibility is now controlled by v-if in Vue. */
   z-index: 11;
   top: -10px;
   left: 50%;
@@ -356,6 +364,28 @@ body {
   white-space: nowrap;
 }
 
+#loading-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#loading-view h1 {
+  animation: fadeIn 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0.7;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 #loading-view>div {
   width: 90%;
   max-width: 600px;
@@ -596,11 +626,11 @@ input[type="number"]:focus {
   /* 增强阴影 */
   display: block;
   line-height: 1;
-  transition: color 0.5s ease-in-out;
-  /* 添加颜色过渡动画 */
+  transition: color 0.5s ease-in-out, transform 0.2s ease-in-out;
+  /* 添加颜色和变换的过渡动画 */
 }
 
-#end-game-countdown.warning {
+#end-game-view.warning #end-game-countdown {
   color: rgba(255, 0, 0, 0.5);
   /* 醒目的红色 */
 }
@@ -689,48 +719,73 @@ input[type="number"]:focus {
 
   #betting-view,
   #game-view {
-    justify-content: space-between;
-    /* Push content to top and dealer to bottom */
+    display: grid;
+    grid-template-columns: 1fr;
+    /* Explicitly define a single, full-width column */
+    grid-template-rows: 1fr auto;
+    /* Main content area, dealer area */
+    height: 100dvh;
+    padding: 10px 10px 0;
+    box-sizing: border-box;
+    /* Removed gap to make dealer flush with bottom */
+  }
+
+  /* NEW: Unify content wrappers */
+  #betting-content-wrapper,
+  #game-table {
+    grid-row: 1 / 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+    box-sizing: border-box;
   }
 
   #betting-dealer-section,
   #game-dealer-section {
+    grid-row: 2 / 3;
+    /* Explicitly place dealer in the second row */
+    /* --- MOBILE LAYOUT (Grid solution) --- */
     position: relative;
-    width: 100%;
-    height: auto;
+    /* Re-integrate into the grid layout */
     bottom: auto;
-    right: auto;
+    left: auto;
+    width: 100%;
+    height: 200px;
+    /* MODIFIED: Reduced character height */
+    z-index: 10;
     display: flex;
     align-items: flex-end;
-    /* Align items to the bottom */
     justify-content: flex-start;
-    /* Align items to the left */
-    padding: 0 10px;
-    /* Add some padding */
-    box-sizing: border-box;
+    /* Align to the left */
+    gap: 8px;
+    transform: translateZ(0);
+    /* Promote to own layer to prevent flicker */
   }
 
-  #betting-dealer-image,
-  #game-dealer-image {
-    max-height: 220px;
-    /* Adjust size */
+  /* Correctly target the image within the betting/game dealer sections */
+  #betting-dealer-section .dealer-image,
+  #game-dealer-section .dealer-image {
+    height: 100%;
+    /* Image fills the container's height */
+    width: auto;
     flex-shrink: 0;
-    /* Prevent image from shrinking */
-    margin-right: 10px;
-    /* Space between image and bubble */
+    margin: 0;
   }
 
   .dialogue-box {
-    /* Override absolute positioning for mobile */
+    /* Make the dialogue box a flex item next to the image */
     position: relative;
     transform: none;
     top: auto;
     left: auto;
-    flex-grow: 1;
-    /* Allow bubble to take remaining space */
+    width: 180px;
+    /* Give it a specific width */
     margin-bottom: 10px;
-    /* Align with bottom of image */
+    /* Lift it up slightly */
     text-align: left;
+    /* Align text to the left */
   }
 
   /* --- Mobile Card Adjustments for Overflow --- */
@@ -913,14 +968,12 @@ input[type="number"]:focus {
     bottom: 40px;
     left: 0;
     width: 100%;
-    z-index: 15;
-    /* 3. 按钮图层 (看板娘之上, 气泡之下) */
+    z-index: 25;
+    /* 3. 按钮图层 (最顶层) */
     display: flex;
     justify-content: space-between;
     padding: 0 5vw;
     box-sizing: border-box;
-    pointer-events: none;
-    /* 父容器不捕获事件 */
   }
 
   #continue-game-button,
@@ -1038,4 +1091,19 @@ input[type="number"]:focus {
 
 .shake-strong {
   animation: shake-strong 0.4s ease-in-out;
+}
+
+#screen-size-debug {
+  position: fixed;
+  top: 5px;
+  left: 5px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #00ff00;
+  padding: 5px 10px;
+  border: 1px solid #00ff00;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 14px;
+  z-index: 9999;
+  pointer-events: none;
 }

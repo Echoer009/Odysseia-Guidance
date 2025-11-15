@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+
 export default defineConfig({
-    base: './',
+    base: '/',
     publicDir: 'public',
-    plugins: [],
+    plugins: [vue()],
     // 设置环境变量目录为项目的根目录 (修正路径)
     envDir: '../../../../../',
     server: {
@@ -14,6 +16,8 @@ export default defineConfig({
             '/api': {
                 target: 'http://127.0.0.1:8000', // 您的FastAPI服务器地址
                 changeOrigin: true,
+                // The rewrite rule has been removed to ensure the /api prefix is forwarded to the backend,
+                // matching the FastAPI router definition (e.g., @app.get("/api/user")).
             },
         },
     },

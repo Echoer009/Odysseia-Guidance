@@ -1,18 +1,62 @@
 import logging
-from typing import Optional
+import json
+import random
+from typing import Optional, List, Dict, Any
 
 from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
 
+# --- Constants ---
+SUITS = ["Club", "Diamond", "Heart", "Spade"]
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+
 
 class BlackjackGame:
-    """Represents a single game of blackjack."""
+    """Represents the full state of a single blackjack game."""
 
-    def __init__(self, user_id: int, bet_amount: int, game_state: str):
+    def __init__(
+        self,
+        user_id: int,
+        bet_amount: int,
+        game_state: str,
+        deck: List[str],
+        player_hand: List[str],
+        dealer_hand: List[str],
+    ):
         self.user_id = user_id
         self.bet_amount = bet_amount
         self.game_state = game_state
+        self.deck = deck
+        self.player_hand = player_hand
+        self.dealer_hand = dealer_hand
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializes the game state to a dictionary for API responses."""
+        is_player_turn = self.game_state == "player_turn"
+
+        # Correctly prepare dealer's hand for the UI
+        if is_player_turn:
+            # Show only the first card and a hidden card
+            ui_dealer_hand = [self.dealer_hand[0], "Hidden"]
+            # Calculate score based only on the visible card
+            ui_dealer_score = BlackjackService._calculate_hand_score(
+                [self.dealer_hand[0]]
+            )
+        else:
+            # Show all cards once the player's turn is over
+            ui_dealer_hand = self.dealer_hand
+            ui_dealer_score = BlackjackService._calculate_hand_score(self.dealer_hand)
+
+        return {
+            "user_id": self.user_id,
+            "bet_amount": self.bet_amount,
+            "game_state": self.game_state,
+            "player_hand": self.player_hand,
+            "dealer_hand": ui_dealer_hand,
+            "player_score": BlackjackService._calculate_hand_score(self.player_hand),
+            "dealer_score": ui_dealer_score,
+        }
 
 
 class BlackjackService:
@@ -20,23 +64,261 @@ class BlackjackService:
         self._db_manager = db_manager
 
     async def initialize(self):
-        """Initializes database table for blackjack games and cleans up stale games."""
-        # 首先在主数据库逻辑中创建表
+        """
+        初始化数据库表（仅在应用启动时执行一次）
+        这个函数只在FastAPI应用启动时调用，不是每次游戏都调用
+        """
         await self._db_manager._execute(self._db_manager._init_database_logic)
-        log.info("Blackjack games table initialized.")
-        # --- 新增：在启动时清理过期游戏 ---
+        log.info(
+            "Blackjack games table initialized (only once at application startup)."
+        )
         await self.cleanup_stale_games()
 
+    # --- Core Game Logic ---
+    @staticmethod
+    def _create_deck() -> List[str]:
+        """Creates a standard 52-card deck."""
+        return [f"{suit}{rank}" for suit in SUITS for rank in RANKS]
+
+    @staticmethod
+    def _shuffle_deck(deck: List[str]) -> None:
+        """Shuffles the deck in place."""
+        random.shuffle(deck)
+
+    @staticmethod
+    def _deal_card(deck: List[str]) -> str:
+        """Deals one card from the deck."""
+        return deck.pop()
+
+    @staticmethod
+    def _get_card_value(card: str) -> int:
+        """Gets the numerical value of a card."""
+        # Check for "10" first, as it's two characters
+        if card.endswith("10"):
+            return 10
+
+        # Then check for single-character ranks
+        rank_char = card[-1]
+        if rank_char in ["J", "Q", "K"]:
+            return 10
+        if rank_char == "A":
+            return 11
+
+        # Otherwise, it's a number card
+        return int(rank_char)
+
+    @staticmethod
+    def _calculate_hand_score(hand: List[str]) -> int:
+        """Calculates the score of a hand."""
+        score = 0
+        ace_count = 0
+        for card in hand:
+            if card == "Hidden":
+                continue
+            score += BlackjackService._get_card_value(card)
+            if "A" in card:
+                ace_count += 1
+
+        while score > 21 and ace_count > 0:
+            score -= 10
+            ace_count -= 1
+        return score
+
+    @staticmethod
+    def _is_soft_hand(hand: List[str]) -> bool:
+        """Checks if a hand is 'soft' (contains an Ace counted as 11)."""
+        score = BlackjackService._calculate_hand_score(hand)
+
+        non_ace_score = 0
+        ace_count = 0
+        for card in hand:
+            if "A" in card:
+                ace_count += 1
+            else:
+                if card == "Hidden":
+                    continue
+                non_ace_score += BlackjackService._get_card_value(card)
+
+        hard_score = non_ace_score + ace_count
+
+        # If the calculated score is greater than the hard score, it means
+        # at least one Ace was counted as 11, making the hand soft.
+        return ace_count > 0 and score > hard_score
+
+    # --- Database Interaction ---
+    async def _save_game_state(self, game: BlackjackGame):
+        """Saves the entire game state to the database."""
+        query = """
+            REPLACE INTO blackjack_games (user_id, bet_amount, game_state, deck, player_hand, dealer_hand)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            game.user_id,
+            game.bet_amount,
+            game.game_state,
+            json.dumps(game.deck),
+            json.dumps(game.player_hand),
+            json.dumps(game.dealer_hand),
+        )
+        await self._db_manager._execute(
+            self._db_manager._db_transaction, query, params, commit=True
+        )
+
+    async def get_active_game(self, user_id: int) -> Optional[BlackjackGame]:
+        """Retrieves the current active game for a user from the database."""
+        query = "SELECT * FROM blackjack_games WHERE user_id = ?"
+        row = await self._db_manager._execute(
+            self._db_manager._db_transaction, query, (user_id,), fetch="one"
+        )
+        if row:
+            return BlackjackGame(
+                user_id=row["user_id"],
+                bet_amount=row["bet_amount"],
+                game_state=row["game_state"],
+                deck=json.loads(row["deck"]),
+                player_hand=json.loads(row["player_hand"]),
+                dealer_hand=json.loads(row["dealer_hand"]),
+            )
+        return None
+
+    async def delete_game(self, user_id: int):
+        """Deletes a game record for a user."""
+        query = "DELETE FROM blackjack_games WHERE user_id = ?"
+        await self._db_manager._execute(
+            self._db_manager._db_transaction, query, (user_id,), commit=True
+        )
+        log.info(f"Deleted game for user {user_id}.")
+
+    # --- Public Service Methods ---
+    async def start_game(self, user_id: int, bet_amount: int) -> BlackjackGame:
+        """Starts a new game of blackjack, checking for immediate win/loss conditions."""
+        deck = self._create_deck()
+        self._shuffle_deck(deck)
+
+        player_hand = [self._deal_card(deck), self._deal_card(deck)]
+        dealer_hand = [self._deal_card(deck), self._deal_card(deck)]
+
+        player_score = self._calculate_hand_score(player_hand)
+        dealer_score = self._calculate_hand_score(dealer_hand)
+
+        game_state = "player_turn"  # Default state
+
+        # Check for immediate Blackjack scenarios
+        if player_score == 21:
+            if dealer_score == 21:
+                game_state = "finished_push"  # Both have Blackjack
+            else:
+                game_state = "finished_blackjack"  # Player has Blackjack
+        elif dealer_score == 21:
+            game_state = "finished_loss"  # Dealer has Blackjack, player does not
+
+        game = BlackjackGame(
+            user_id=user_id,
+            bet_amount=bet_amount,
+            game_state=game_state,  # Use the newly determined state
+            deck=deck,
+            player_hand=player_hand,
+            dealer_hand=dealer_hand,
+        )
+
+        await self._save_game_state(game)
+        log.info(
+            f"Started new game for user {user_id} with bet {bet_amount}. Initial state: {game_state}"
+        )
+        return game
+
+    async def player_hit(self, user_id: int) -> BlackjackGame:
+        """Handles the player's 'hit' action."""
+        game = await self.get_active_game(user_id)
+        if not game or game.game_state != "player_turn":
+            raise ValueError("It's not your turn to hit.")
+
+        game.player_hand.append(self._deal_card(game.deck))
+
+        player_score = self._calculate_hand_score(game.player_hand)
+        if player_score > 21:
+            game.game_state = "finished_loss"
+
+        await self._save_game_state(game)
+        return game
+
+    async def player_stand(
+        self, user_id: int, is_double_down: bool = False
+    ) -> BlackjackGame:
+        """Handles the player's 'stand' action and completes the dealer's turn."""
+        game = await self.get_active_game(user_id)
+        if not game:
+            raise ValueError("No active game found.")
+
+        if not is_double_down and game.game_state != "player_turn":
+            raise ValueError("It's not your turn to stand.")
+
+        game.game_state = "dealer_turn"
+
+        dealer_score = self._calculate_hand_score(game.dealer_hand)
+        while dealer_score < 17 or (
+            dealer_score == 17 and BlackjackService._is_soft_hand(game.dealer_hand)
+        ):
+            game.dealer_hand.append(self._deal_card(game.deck))
+            dealer_score = self._calculate_hand_score(game.dealer_hand)
+
+        player_score = self._calculate_hand_score(game.player_hand)
+
+        # --- 调试日志 ---
+        log.info(
+            f"结算判断: UserID={game.user_id}, PlayerHand={game.player_hand} ({player_score}), "
+            f"DealerHand={game.dealer_hand} ({dealer_score})"
+        )
+
+        if dealer_score > 21 or player_score > dealer_score:
+            game.game_state = "finished_win"
+        elif dealer_score > player_score:
+            game.game_state = "finished_loss"
+        else:
+            game.game_state = "finished_push"
+
+        log.info(f"最终结果: UserID={game.user_id}, Result={game.game_state}")
+        # --- 日志结束 ---
+
+        await self._save_game_state(game)
+        return game
+
+    async def double_down(self, user_id: int, double_amount: int) -> BlackjackGame:
+        """Handles the player's 'double down' action."""
+        game = await self.get_active_game(user_id)
+        if not game or game.game_state != "player_turn":
+            raise ValueError("It's not your turn to double down.")
+
+        if len(game.player_hand) != 2:
+            raise ValueError("You can only double down on your initial two cards.")
+
+        # Double the bet
+        game.bet_amount += double_amount
+
+        # Player hits once
+        game.player_hand.append(self._deal_card(game.deck))
+        player_score = self._calculate_hand_score(game.player_hand)
+
+        if player_score > 21:
+            game.game_state = "finished_loss"
+            # Save the final state when player busts
+            await self._save_game_state(game)
+        else:
+            # Save state with the player's new card before the dealer plays.
+            await self._save_game_state(game)
+            # Automatically stand after doubling down
+            game = await self.player_stand(user_id, is_double_down=True)
+
+        return game
+
     async def cleanup_stale_games(self):
-        """在服务启动时清理所有未完成的游戏并退还赌注。"""
-        # 延迟导入以避免循环依赖问题
+        """Cleans up all unfinished games on startup and refunds the bets."""
         coin_service = __import__(
             "src.chat.features.odysseia_coin.service.coin_service",
             fromlist=["coin_service"],
         ).coin_service
 
-        log.info("正在清理所有未完成的21点游戏...")
-        # 查找所有存在的游戏
+        log.info("Cleaning up all unfinished blackjack games...")
         rows = await self._db_manager._execute(
             self._db_manager._db_transaction,
             "SELECT user_id, bet_amount FROM blackjack_games",
@@ -44,151 +326,31 @@ class BlackjackService:
             fetch="all",
         )
         if not rows:
-            log.info("未发现需要清理的21点游戏。")
+            log.info("No stale blackjack games found to clean up.")
             return
 
         cleaned_count = 0
         for user_id, bet_amount in rows:
             try:
                 log.warning(
-                    f"正在为用户 {user_id} 清理未完成的游戏，赌注为 {bet_amount}。"
+                    f"Cleaning up stale game for user {user_id} with bet {bet_amount}."
                 )
-                # 退还赌注
                 await coin_service.add_coins(
-                    user_id, bet_amount, "21点游戏因服务重启退款"
+                    user_id, bet_amount, "Blackjack game refund due to service restart"
                 )
-                # 删除游戏记录
                 await self.delete_game(user_id)
                 log.info(
-                    f"已成功为用户 {user_id} 退款 {bet_amount} 并删除未完成的游戏。"
+                    f"Successfully refunded {bet_amount} to user {user_id} and deleted stale game."
                 )
                 cleaned_count += 1
             except Exception as e:
                 log.error(
-                    f"为用户 {user_id} 清理未完成的游戏失败。错误: {e}",
+                    f"Failed to clean up stale game for user {user_id}. Error: {e}",
                     exc_info=True,
                 )
+
         if cleaned_count > 0:
-            log.info(f"已完成对 {cleaned_count} 个未完成的21点游戏的清理。")
-
-    async def create_game(
-        self, user_id: int, bet_amount: int
-    ) -> Optional[BlackjackGame]:
-        """
-        为用户创建新的游戏记录。如果游戏已存在，则替换它。
-        如果创建成功，则返回新游戏，否则返回None。
-        """
-        # 使用 "REPLACE INTO" 原子地处理游戏的创建/替换
-        # 这可以防止在删除旧游戏和创建新游戏之间出现竞态条件
-        await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "REPLACE INTO blackjack_games (user_id, bet_amount, game_state) VALUES (?, ?, ?)",
-            (user_id, bet_amount, "active"),
-            commit=True,
-        )
-        log.info(f"为用户 {user_id} 创建/替换了21点游戏，新赌注为 {bet_amount}。")
-        return BlackjackGame(user_id, bet_amount, "active")
-
-    async def get_active_game(self, user_id: int) -> Optional[BlackjackGame]:
-        """Retrievis current active game for a user."""
-        row = await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "SELECT user_id, bet_amount, game_state FROM blackjack_games WHERE user_id = ? AND game_state IN ('active', 'doubled')",
-            (user_id,),
-            fetch="one",
-        )
-        if row:
-            return BlackjackGame(user_id=row[0], bet_amount=row[1], game_state=row[2])
-        return None
-
-    async def double_down(
-        self, user_id: int, double_cost: int
-    ) -> Optional[BlackjackGame]:
-        """
-        Doubles down bet for an active game.
-        """
-        game = await self.get_active_game(user_id)
-        if not game or game.game_state != "active":
-            log.warning(f"用户 {user_id} 无法双倍下注，游戏状态不是 'active'。")
-            return None
-
-        new_bet_amount = game.bet_amount + double_cost
-        await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "UPDATE blackjack_games SET bet_amount = ?, game_state = ? WHERE user_id = ?",
-            (new_bet_amount, "doubled", user_id),
-            commit=True,
-        )
-        log.info(f"用户 {user_id} 双倍下注成功。新赌注: {new_bet_amount}。")
-        game.bet_amount = new_bet_amount
-        game.game_state = "doubled"
-        return game
-
-    async def finish_game(self, user_id: int) -> bool:
-        """
-        Marks a game as finished.
-        Returns True if a record was updated, False otherwise.
-        """
-        result = await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "UPDATE blackjack_games SET game_state = 'finished' WHERE user_id = ?",
-            (user_id,),
-            fetch="rowcount",
-            commit=True,
-        )
-        if result > 0:
-            log.info(f"Marked game as finished for user {user_id}.")
-            return True
-        log.warning(
-            f"Tried to mark game as finished for user {user_id}, but no game was found to update."
-        )
-        return False
-
-    async def delete_game(self, user_id: int) -> bool:
-        """
-        Deletes a game record for a user.
-        Returns True if a record was deleted, False otherwise.
-        """
-        result = await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "DELETE FROM blackjack_games WHERE user_id = ?",
-            (user_id,),
-            fetch="rowcount",
-            commit=True,
-        )
-        # result will be > 0 if a row was deleted
-        if result > 0:
-            log.info(f"已删除用户 {user_id} 的游戏。")
-            return True
-        log.warning(f"尝试为用户 {user_id} 删除游戏，但未找到活跃游戏。")
-        return False
-
-    async def cleanup_legacy_game(self, user_id: int):
-        """在用户开始新游戏前，清理该用户任何未完成的旧游戏并没收赌注。"""
-        # 查找用户的所有现有游戏记录
-        row = await self._db_manager._execute(
-            self._db_manager._db_transaction,
-            "SELECT bet_amount FROM blackjack_games WHERE user_id = ?",
-            (user_id,),
-            fetch="one",
-        )
-
-        if row:
-            log.info(f"正在为用户 {user_id} 清理遗留游戏...")
-            bet_amount = row[0]
-            log.warning(
-                f"检测到用户 {user_id} 有一个赌注为 {bet_amount} 的遗留游戏。该赌注将被没收。"
-            )
-            try:
-                # 删除游戏记录，赌注不予退还
-                await self.delete_game(user_id)
-                log.info(
-                    f"已成功为用户 {user_id} 清理遗留游戏，赌注 {bet_amount} 已被没收。"
-                )
-            except Exception as e:
-                log.error(
-                    f"为用户 {user_id} 清理遗留游戏失败。错误: {e}", exc_info=True
-                )
+            log.info(f"Finished cleaning up {cleaned_count} stale blackjack games.")
 
 
 # --- Singleton Instance ---

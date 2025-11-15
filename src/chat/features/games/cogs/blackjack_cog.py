@@ -62,14 +62,42 @@ class BlackjackCog(commands.Cog):
             log.warning(
                 f"Attempted to launch activity for {interaction.user.id}, but interaction was already responded to."
             )
+        except discord.errors.NotFound as e:
+            log.error(f"Discord API未找到错误 (可能是网络或配置问题): {e}")
+            # 使用followup而不是response，因为interaction可能已经过期
+            try:
+                await interaction.followup.send(
+                    "启动游戏失败：无法连接到Discord服务。请检查网络连接或稍后再试。",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                log.error("无法发送错误消息，交互已过期")
+        except discord.errors.HTTPException as e:
+            log.error(f"Discord HTTP错误 (可能是网络问题): {e}")
+            try:
+                await interaction.followup.send(
+                    "启动游戏失败：网络连接问题。请稍后再试。", ephemeral=True
+                )
+            except discord.errors.NotFound:
+                log.error("无法发送错误消息，交互已过期")
         except Exception as e:
             log.error(
                 f"使用 interaction.response.launch_activity() 启动21点时出错: {e}"
             )
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "抱歉，启动游戏时遇到了一个未知错误。", ephemeral=True
-                )
+                try:
+                    await interaction.response.send_message(
+                        "抱歉，启动游戏时遇到了一个未知错误。", ephemeral=True
+                    )
+                except discord.errors.NotFound:
+                    log.error("无法发送错误消息，交互已过期")
+            else:
+                try:
+                    await interaction.followup.send(
+                        "抱歉，启动游戏时遇到了一个未知错误。", ephemeral=True
+                    )
+                except discord.errors.NotFound:
+                    log.error("无法发送错误消息，交互已过期")
 
 
 async def setup(bot: commands.Bot):

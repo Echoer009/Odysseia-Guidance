@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@discord/embedded-app-sdk": "^2.4.0"
+    "@discord/embedded-app-sdk": "^2.4.0",
+    "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue": "latest",
     "typescript": "~5.9.3",
     "vite": "^7.1.7"
   }

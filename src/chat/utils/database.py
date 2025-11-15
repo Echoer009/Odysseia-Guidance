@@ -93,9 +93,29 @@ class ChatDatabaseManager:
                     user_id INTEGER PRIMARY KEY,
                     bet_amount INTEGER NOT NULL,
                     game_state TEXT NOT NULL,
+                    deck TEXT,
+                    player_hand TEXT,
+                    dealer_hand TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+
+            # --- 迁移：为 blackjack_games 添加新列 ---
+            cursor.execute("PRAGMA table_info(blackjack_games);")
+            blackjack_columns = [info[1] for info in cursor.fetchall()]
+            if "deck" not in blackjack_columns:
+                cursor.execute("ALTER TABLE blackjack_games ADD COLUMN deck TEXT;")
+                log.info("已向 blackjack_games 表添加 deck 列。")
+            if "player_hand" not in blackjack_columns:
+                cursor.execute(
+                    "ALTER TABLE blackjack_games ADD COLUMN player_hand TEXT;"
+                )
+                log.info("已向 blackjack_games 表添加 player_hand 列。")
+            if "dealer_hand" not in blackjack_columns:
+                cursor.execute(
+                    "ALTER TABLE blackjack_games ADD COLUMN dealer_hand TEXT;"
+                )
+                log.info("已向 blackjack_games 表添加 dealer_hand 列。")
 
             # --- AI提示词配置表 ---
             cursor.execute("""
