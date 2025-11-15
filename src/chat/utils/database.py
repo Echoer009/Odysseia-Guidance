@@ -25,7 +25,6 @@ class ChatDatabaseManager:
         """初始化数据库管理器。"""
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
-        # 在 WAL 模式下，为每个进程/连接维护一个游标是安全的
         self.cursor: Optional[sqlite3.Cursor] = None
 
     async def connect(self):
@@ -40,12 +39,12 @@ class ChatDatabaseManager:
         # 启用 WAL 模式以提高并发性能
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.row_factory = sqlite3.Row
-        self.cursor = self.conn.cursor()
+        # self.cursor = self.conn.cursor() # 移除共享游标
         log.info("数据库连接成功并已启用 WAL 模式。")
 
     async def init_async(self):
         """异步初始化数据库，在事件循环中运行同步的建表逻辑。"""
-        if not self.conn or not self.cursor:
+        if not self.conn:
             await self.connect()
         log.info("开始异步 Chat 数据库初始化...")
         await self._execute(self._init_database_logic)
@@ -53,12 +52,11 @@ class ChatDatabaseManager:
 
     def _init_database_logic(self):
         """包含所有同步数据库初始化逻辑的方法。"""
-        if not self.conn or not self.cursor:
+        if not self.conn:
             raise ConnectionError("数据库未连接。请先调用 connect()。")
-        try:
-            # 使用共享的游标
-            cursor = self.cursor
 
+        cursor = self.conn.cursor()
+        try:
             # --- AI对话上下文表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ai_conversation_contexts (
@@ -517,6 +515,8 @@ class ChatDatabaseManager:
             log.error(f"同步初始化数据库表时出错: {e}")
             self.conn.rollback()  # 如果初始化失败则回滚
             raise
+        finally:
+            cursor.close()
 
     async def _execute(self, func: Callable, *args, **kwargs) -> Any:
         """在线程池中执行一个同步的数据库操作。"""
@@ -538,20 +538,22 @@ class ChatDatabaseManager:
         fetch: str = "none",
         commit: bool = False,
     ):
-        """一个通用的同步事务函数，现在使用共享连接。"""
-        if not self.conn or not self.cursor:
+        """一个通用的同步事务函数，现在使用独立的游标以保证线程安全。"""
+        if not self.conn:
             raise ConnectionError("数据库未连接。请先调用 connect()。")
+
+        cursor = self.conn.cursor()
         try:
-            self.cursor.execute(query, params)
+            cursor.execute(query, params)
 
             if fetch == "one":
-                result = self.cursor.fetchone()
+                result = cursor.fetchone()
             elif fetch == "all":
-                result = self.cursor.fetchall()
+                result = cursor.fetchall()
             elif fetch == "lastrowid":
-                result = self.cursor.lastrowid
+                result = cursor.lastrowid
             elif fetch == "rowcount":
-                result = self.cursor.rowcount
+                result = cursor.rowcount
             else:
                 result = None
 
@@ -560,18 +562,18 @@ class ChatDatabaseManager:
 
             return result
         except sqlite3.Error as e:
-            # 在共享连接模式下，回滚非常重要
             self.conn.rollback()
             log.error(f"数据库事务失败，已回滚: {e} | Query: {query}")
             raise
+        finally:
+            cursor.close()
 
-    async def close(self):
+    async def disconnect(self):
         """关闭数据库连接。"""
         if self.conn:
             log.info("正在关闭数据库连接...")
             await asyncio.get_running_loop().run_in_executor(None, self.conn.close)
             self.conn = None
-            self.cursor = None
             log.info("数据库连接已关闭。")
 
     # --- AI对话上下文管理 ---
