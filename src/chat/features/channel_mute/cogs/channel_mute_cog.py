@@ -107,20 +107,26 @@ class ChannelMuteCog(commands.Cog):
                     # 5. 检查票数是否达到阈值
                     threshold = CHANNEL_MUTE_CONFIG["VOTE_THRESHOLD"]
                     if reaction.count >= threshold:
-                        # 6. 禁言频道并发送通知
-                        mute_duration = CHANNEL_MUTE_CONFIG["MUTE_DURATION_MINUTES"]
-                        await chat_db_manager.add_muted_channel(
-                            channel_id, mute_duration
-                        )
-                        await channel.send(
-                            f"呜…好吧，那人家就在这里不说话了，{mute_duration} 分钟后再理你们。<伤心>"
-                        )
-                        log.info(
-                            f"频道 {channel_id} 已被投票禁言 {mute_duration} 分钟。"
+                        # 尝试以原子方式移除投票消息。如果消息已被移除，
+                        # 这意味着另一个并发事件已经处理了它。
+                        vote_info_popped = self.vote_messages.pop(
+                            payload.message_id, None
                         )
 
-                        # 7. 从追踪列表中移除
-                        del self.vote_messages[payload.message_id]
+                        if vote_info_popped:
+                            # 如果我们成功地弹出了消息，那么就由我们来执行禁言操作。
+                            mute_duration = CHANNEL_MUTE_CONFIG["MUTE_DURATION_MINUTES"]
+                            await chat_db_manager.add_muted_channel(
+                                channel_id, mute_duration
+                            )
+                            await channel.send(
+                                f"呜…好吧，那人家就在这里不说话了，{mute_duration} 分钟后再理你们。<伤心>"
+                            )
+                            log.info(
+                                f"频道 {channel_id} 已被投票禁言 {mute_duration} 分钟。"
+                            )
+
+                        # 无论我们是否执行了禁言，投票都已经结束。
                         break
         except discord.NotFound:
             log.warning(f"无法找到投票消息 {payload.message_id}，可能已被删除。")

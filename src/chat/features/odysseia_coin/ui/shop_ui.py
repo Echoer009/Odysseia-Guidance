@@ -341,6 +341,26 @@ class SimpleShopView(discord.ui.View):
         embed.set_footer(text=f"你的余额: {self.balance} 类脑币")
         return embed
 
+    async def _update_shop_embed(self, interaction: discord.Interaction):
+        """Helper to update the shop embed while preserving other embeds."""
+        new_shop_embed = self.create_shop_embed()
+
+        current_embeds = interaction.message.embeds
+        new_embeds_list = []
+        shop_embed_found = False
+
+        for embed in current_embeds:
+            if embed.title == "类脑商店":
+                new_embeds_list.append(new_shop_embed)
+                shop_embed_found = True
+            else:
+                new_embeds_list.append(embed)
+
+        if not shop_embed_found:
+            await interaction.edit_original_response(embed=new_shop_embed, view=self)
+        else:
+            await interaction.edit_original_response(embeds=new_embeds_list, view=self)
+
 
 class CategorySelect(discord.ui.Select):
     """类别选择下拉菜单"""
@@ -364,7 +384,7 @@ class CategorySelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_category = self.values[0]
+        selected_category = self.values
         # 创建商品选择下拉菜单
         item_select = ItemSelect(
             selected_category, self.view.grouped_items[selected_category]
@@ -408,7 +428,7 @@ class ItemSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_value = self.values[0]
+        selected_value = self.values
         self.view.selected_item_id = int(selected_value)
         await interaction.response.defer()  # 延迟响应，避免"此互动失败"
 
@@ -721,10 +741,7 @@ class PurchaseButton(discord.ui.Button):
 
             if success:
                 self.view.balance = new_balance
-                new_embed = self.view.create_shop_embed()
-                await interaction.edit_original_response(
-                    embed=new_embed, view=self.view
-                )
+                await self.view._update_shop_embed(interaction)
 
                 if (
                     should_show_modal
@@ -833,11 +850,4 @@ class RefreshBalanceButton(discord.ui.Button):
         new_balance = await coin_service.get_balance(interaction.user.id)
         self.view.balance = new_balance
 
-        # 创建一个新的 embed 来更新余额显示
-        # 注意：我们不会改变视图（view），只更新嵌入消息（embed）
-        # 我们需要确定当前所在的 embed 是哪个
-        current_embed = interaction.message.embeds[0]
-        current_embed.set_footer(text=f"你的余额: {self.view.balance} 类脑币")
-
-        # 编辑原始消息，只更新 embed
-        await interaction.edit_original_response(embed=current_embed, view=self.view)
+        await self.view._update_shop_embed(interaction)
