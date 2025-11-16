@@ -153,7 +153,11 @@ class FeedingCog(commands.Cog):
             embed.set_thumbnail(url=f"attachment://{image.filename}")
 
             # 检查是否在豁免频道，如果是，则显示大图
-            if interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS:
+            is_unrestricted = (
+                interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
+                or isinstance(interaction.channel, discord.Thread)
+            )
+            if is_unrestricted:
                 sticker_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
                 if sticker_url:
                     embed.set_image(url=sticker_url)

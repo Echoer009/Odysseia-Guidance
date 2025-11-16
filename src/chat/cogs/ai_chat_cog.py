@@ -97,7 +97,12 @@ class AIChatCog(commands.Cog):
         if response_text:
             try:
                 # 检查是否在豁免频道，如果是，则直接回复；否则，检查长度
-                if message.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS:
+                # 检查是否在豁免频道，或当前频道是否为帖子
+                is_unrestricted = (
+                    message.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
+                    or isinstance(message.channel, discord.Thread)
+                )
+                if is_unrestricted:
                     await message.reply(response_text, mention_author=True)
                 elif (
                     self._get_text_length_without_emojis(response_text)

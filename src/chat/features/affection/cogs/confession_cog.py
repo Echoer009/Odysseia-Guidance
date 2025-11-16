@@ -71,7 +71,10 @@ class ConfessionCog(commands.Cog):
                 return
 
         # 检查是否在豁免频道，以决定回复是否公开
-        is_unrestricted = interaction.channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+        is_unrestricted = (
+            interaction.channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+            or isinstance(interaction.channel, discord.Thread)
+        )
         await interaction.response.defer(ephemeral=not is_unrestricted)
 
         try:

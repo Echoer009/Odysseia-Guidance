@@ -30,7 +30,12 @@ class ChannelMuteCog(commands.Cog):
         channel_id = interaction.channel_id
 
         # 0. 检查是否在豁免频道
-        if channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS:
+        # 检查是否在豁免频道，或当前频道是否为帖子
+        is_unrestricted = (
+            channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+            or isinstance(interaction.channel, discord.Thread)
+        )
+        if is_unrestricted:
             await interaction.response.send_message(
                 "在这个频道里，我可是有豁免权的哦，不能让我闭嘴！", ephemeral=True
             )
