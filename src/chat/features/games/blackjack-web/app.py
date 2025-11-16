@@ -274,11 +274,38 @@ async def start_game(
         try:
             # 创建游戏
             game = await blackjack_service.start_game(user_id, bet_amount)
+
+            # --- 新增：如果游戏在发牌时就已结束（例如21点），立即处理派彩 ---
+            final_balance = new_balance
+            if game.game_state.startswith("finished"):
+                payout_amount = 0
+                reason = "21点游戏结算"
+
+                if game.game_state == "finished_blackjack":
+                    payout_amount = int(game.bet_amount * 2.5)  # Blackjack 3:2赔率
+                    reason = "21点游戏Blackjack获胜"
+                elif game.game_state == "finished_push":
+                    payout_amount = game.bet_amount  # 平局，退还赌注
+                    reason = "21点游戏平局"
+                # 注意: 'finished_loss' (庄家21点) 的派彩为0
+
+                if payout_amount > 0:
+                    final_balance = await coin_service.add_coins(
+                        user_id, payout_amount, reason
+                    )
+
+                log.info(
+                    f"用户 {user_id} 在发牌时结束游戏。结果: {game.game_state}。赌注: {game.bet_amount}。派彩: {payout_amount}。"
+                )
+
+                # 游戏已结束，立即删除记录
+                await blackjack_service.delete_game(user_id)
+
             return JSONResponse(
                 content={
                     "success": True,
                     "game": game.to_dict(),
-                    "new_balance": new_balance,
+                    "new_balance": final_balance,  # 返回更新后的余额
                 }
             )
         except Exception as e:
