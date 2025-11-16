@@ -384,7 +384,7 @@ class CategorySelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_category = self.values
+        selected_category = self.values[0]
         # 创建商品选择下拉菜单
         item_select = ItemSelect(
             selected_category, self.view.grouped_items[selected_category]
@@ -428,8 +428,7 @@ class ItemSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_value = self.values
-        self.view.selected_item_id = int(selected_value)
+        self.view.selected_item_id = int(self.values[0])
         await interaction.response.defer()  # 延迟响应，避免"此互动失败"
 
 

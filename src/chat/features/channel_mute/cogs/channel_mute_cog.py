@@ -125,7 +125,7 @@ class ChannelMuteCog(commands.Cog):
                                 channel_id, mute_duration
                             )
                             await channel.send(
-                                f"呜…好吧，那人家就在这里不说话了，{mute_duration} 分钟后再理你们。<伤心>"
+                                f"呜…好吧，那人家就在这里不说话了，{mute_duration} 分钟后再理你们。"
                             )
                             log.info(
                                 f"频道 {channel_id} 已被投票禁言 {mute_duration} 分钟。"
