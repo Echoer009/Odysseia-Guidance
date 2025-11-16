@@ -87,7 +87,7 @@ GEMINI_CHAT_CONFIG = {
 
 # --- 消息设置 ---
 MESSAGE_SETTINGS = {
-    "DM_THRESHOLD": 400,  # 当消息长度超过此值时，通过私信发送
+    "DM_THRESHOLD": 300,  # 当消息长度超过此值时，通过私信发送
 }
 
 GEMINI_TEXT_GEN_CONFIG = {
