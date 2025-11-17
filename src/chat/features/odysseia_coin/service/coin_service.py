@@ -162,12 +162,12 @@ class CoinService:
         # 记录交易
         transaction_query = """
             INSERT INTO coin_transactions (user_id, amount, reason)
-            VALUES (?, ?, '每日首次与AI对话奖励');
+            VALUES (?, ?, ?);
         """
         await chat_db_manager._execute(
             chat_db_manager._db_transaction,
             transaction_query,
-            (user_id, reward_amount),
+            (user_id, reward_amount, "每日首次与AI对话奖励"),
             commit=True,
         )
 

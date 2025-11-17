@@ -478,8 +478,8 @@ async def main():
         log.critical(f"启动机器人时发生未知错误: {e}", exc_info=True)
     finally:
         # 在机器人关闭时，确保数据库连接被关闭
-        await guidance_db_manager.close()
-        await chat_db_manager.close()
+        await guidance_db_manager.disconnect()
+        await chat_db_manager.disconnect()
         log.info("机器人已下线，数据库连接已关闭。")
 
 
