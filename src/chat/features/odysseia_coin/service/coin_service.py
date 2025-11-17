@@ -266,7 +266,7 @@ class CoinService:
                 gift_success,
                 gift_message,
             ) = await affection_service.increase_affection_for_gift(
-                user_id, guild_id, points_to_add
+                user_id, points_to_add
             )
 
             if gift_success:
