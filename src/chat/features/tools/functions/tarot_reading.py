@@ -13,15 +13,15 @@ async def tarot_reading(
     question: str = "关于我最近的整体运势", spread_type: str = "three_card", **kwargs
 ) -> Dict[str, Any]:
     """
-    为用户执行塔罗牌占卜，并发送一张包含牌阵的图片。
-    重要: 每个用户请求只能调用此工具一次。不要为单个问题多次调用。
+    为用户执行一次塔罗牌占卜。
+    当用户请求占卜、算命或想看未来运势时调用此工具。工具会生成并自动发送一张包含牌阵的图片，然后返回牌面的信息供你解读。
 
     Args:
-        question (str): 用户提出的具体问题。如果用户没有提供，则默认为“关于我最近的整体运势”。这个问题将帮助AI更好地解读牌意。
+        question (str): 用户提出的具体问题。如果用户没有提供，则默认为“关于我最近的整体运势”。
         spread_type (str): 使用的牌阵类型。默认为 'three_card'（三张牌）。也可以是 'single_card'（单张牌）。
 
     Returns:
-        一个字典，其中包含抽到的牌的详细信息，供AI进行解读。如果成功，AI会说图片已发送；如果失败，则返回错误信息。
+        一个字典，其中包含抽到的牌的详细信息，供你进行解读。
     """
     log.info(
         f"--- [工具执行]: tarot_reading, 参数: question='{question}', spread_type='{spread_type}' ---"

@@ -15,10 +15,9 @@ async def search_forum_threads(
     query: str = None, filters: Dict[str, Any] = None, **kwargs
 ) -> List[str]:
     """
-    根据用户提问在论坛中进行语义搜索或按条件浏览。
-    - 如果提供了 `query`，则执行语义搜索。
-    - 如果 `query` 未提供但提供了 `filters`，则按条件列出最新的帖子。
-    此工具返回一个字符串列表，每个字符串都结合了帖子的分类和其URL。你应该将列表中的每个字符串作为新的一行直接展示给用户。
+    在社区论坛中搜索帖子。这个工具有两种模式：
+    1. **语义搜索**: 当用户提供具体的关键词时，使用 `query` 参数进行搜索。
+    2. **条件浏览**: 当用户想按特定条件筛选帖子时，使用 `filters` 参数。
 
     Args:
         query (str, optional): 用于语义搜索的核心查询内容。如果省略或为空字符串，则变为按 `filters` 浏览模式。
@@ -26,13 +25,6 @@ async def search_forum_threads(
             - `category_name` (str): 按指定的论坛频道名称进行过滤。
             - `author_id` (int): 按作者的Discord ID进行过滤。
             - `author_name` (str): 按作者的显示名称进行过滤。
-            - `start_date` (str): 筛选发布日期在此日期之后的帖子 (格式: YYYY-MM-DD)。
-            - `end_date` (str): 筛选发布日期在此日期之前的帖子 (格式: YYYY-MM-DD)。
-            示例:
-            {
-                "category_name": "男性向",
-                "author_name": "张三"
-            }
 
     Returns:
         List[str]: 一个字符串列表，每个字符串格式为 '分类名 > https://discord.com/channels/...'。
