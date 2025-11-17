@@ -1,6 +1,7 @@
 import sqlite3
+import os
 
-DB_PATH = "data/chat.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "chat.db")
 
 
 def check_multi_guild_affection():

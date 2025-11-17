@@ -56,8 +56,7 @@ class ConfessionCog(commands.Cog):
             )
             return
 
-        user_id = str(interaction.user.id)
-        guild_id = str(interaction.guild.id)
+        user_id = interaction.user.id
 
         # 检查用户是否为开发者，如果是，则绕过冷却时间检查
         if interaction.user.id not in DEVELOPER_USER_IDS:
@@ -79,7 +78,7 @@ class ConfessionCog(commands.Cog):
 
         try:
             affection_status = await self.affection_service.get_affection_status(
-                user_id, guild_id
+                user_id
             )
             current_affection = affection_status["points"]
             level_name = affection_status["level_name"]
@@ -147,7 +146,7 @@ class ConfessionCog(commands.Cog):
             new_affection = current_affection
             if affection_change > 0:
                 new_affection = await self.affection_service.add_affection_points(
-                    user_id, guild_id, affection_change
+                    user_id, affection_change
                 )
 
             await self.confession_service.record_confession(user_id)

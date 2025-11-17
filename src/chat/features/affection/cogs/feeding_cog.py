@@ -55,8 +55,7 @@ class FeedingCog(commands.Cog):
             )
             return
 
-        user_id = str(interaction.user.id)
-        guild_id = str(interaction.guild.id)
+        user_id = interaction.user.id
 
         # 检查用户是否为开发者，如果是，则绕过冷却时间检查
         if interaction.user.id not in DEVELOPER_USER_IDS:
@@ -113,9 +112,7 @@ class FeedingCog(commands.Cog):
                 affection_gain = int(match.group(2))
                 coin_gain = int(match.group(3))
 
-            await self.affection_service.add_affection_points(
-                user_id, guild_id, affection_gain
-            )
+            await self.affection_service.add_affection_points(user_id, affection_gain)
 
             # 只有当 coin_gain 是正数时才增加类脑币
             if coin_gain > 0:

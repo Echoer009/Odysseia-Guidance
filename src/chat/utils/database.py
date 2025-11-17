@@ -163,13 +163,11 @@ class ChatDatabaseManager:
             # --- AI好感度表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ai_affection (
-                    user_id INTEGER NOT NULL,
-                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER PRIMARY KEY NOT NULL,
                     affection_points INTEGER NOT NULL DEFAULT 0,
                     daily_affection_gain INTEGER NOT NULL DEFAULT 0,
                     last_update_date TEXT,
-                    last_interaction_date TEXT,
-                    PRIMARY KEY (user_id, guild_id)
+                    last_interaction_date TEXT
                 );
             """)
 
@@ -864,20 +862,18 @@ class ChatDatabaseManager:
             penalty = chat_config.AFFECTION_CONFIG["BLACKLIST_PENALTY"]
             if penalty != 0:
                 query_affection = """
-                    INSERT INTO ai_affection (user_id, guild_id, affection_points)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(user_id, guild_id) DO UPDATE SET
+                    INSERT INTO ai_affection (user_id, affection_points)
+                    VALUES (?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
                         affection_points = affection_points + excluded.affection_points;
                 """
                 await self._execute(
                     self._db_transaction,
                     query_affection,
-                    (user_id, guild_id, penalty),
+                    (user_id, penalty),
                     commit=True,
                 )
-                log.info(
-                    f"用户 {user_id} 在服务器 {guild_id} 因被禁言被扣除好感度: {penalty}"
-                )
+                log.info(f"用户 {user_id} 因被禁言被扣除好感度: {penalty}")
 
             # 加入黑名单
             await self.add_to_blacklist(user_id, guild_id, expires_at)
@@ -893,18 +889,16 @@ class ChatDatabaseManager:
         return {"was_blacklisted": False, "new_warning_count": current_warnings}
 
     # --- 好感度管理 ---
-    async def get_affection(self, user_id: int, guild_id: int) -> Optional[sqlite3.Row]:
-        query = "SELECT * FROM ai_affection WHERE user_id = ? AND guild_id = ?"
-        return await self._execute(
-            self._db_transaction, query, (user_id, guild_id), fetch="one"
-        )
+    async def get_affection(self, user_id: int) -> Optional[sqlite3.Row]:
+        query = "SELECT * FROM ai_affection WHERE user_id = ?"
+        return await self._execute(self._db_transaction, query, (user_id,), fetch="one")
 
-    async def update_affection(self, user_id: int, guild_id: int, **kwargs) -> None:
+    async def update_affection(self, user_id: int, **kwargs) -> None:
         updates = {key: value for key, value in kwargs.items() if value is not None}
         if not updates:
             return
 
-        current_affection = await self.get_affection(user_id, guild_id)
+        current_affection = await self.get_affection(user_id)
         if not current_affection:
             defaults = {
                 "affection_points": 0,
@@ -914,15 +908,14 @@ class ChatDatabaseManager:
             }
             defaults.update(updates)
             insert_query = """
-                INSERT INTO ai_affection (user_id, guild_id, affection_points, daily_affection_gain, last_update_date, last_interaction_date)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO ai_affection (user_id, affection_points, daily_affection_gain, last_update_date, last_interaction_date)
+                VALUES (?, ?, ?, ?, ?)
             """
             await self._execute(
                 self._db_transaction,
                 insert_query,
                 (
                     user_id,
-                    guild_id,
                     defaults["affection_points"],
                     defaults["daily_affection_gain"],
                     defaults["last_update_date"],
@@ -930,37 +923,29 @@ class ChatDatabaseManager:
                 ),
                 commit=True,
             )
-            log.info(
-                f"为用户 {user_id} 在服务器 {guild_id} 创建了好感度记录: {defaults}"
-            )
+            log.info(f"为用户 {user_id} 创建了好感度记录: {defaults}")
             return
 
         set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
-        values = list(updates.values()) + [user_id, guild_id]
-        query = (
-            f"UPDATE ai_affection SET {set_clause} WHERE user_id = ? AND guild_id = ?"
-        )
+        values = list(updates.values()) + [user_id]
+        query = f"UPDATE ai_affection SET {set_clause} WHERE user_id = ?"
         await self._execute(self._db_transaction, query, tuple(values), commit=True)
 
-    async def get_all_affections_for_guild(self, guild_id: int) -> List[sqlite3.Row]:
-        query = "SELECT * FROM ai_affection WHERE guild_id = ?"
-        return await self._execute(
-            self._db_transaction, query, (guild_id,), fetch="all"
-        )
+    async def get_all_affections(self) -> List[sqlite3.Row]:
+        query = "SELECT * FROM ai_affection"
+        return await self._execute(self._db_transaction, query, fetch="all")
 
-    async def reset_daily_affection_gain(self, guild_id: int, new_date: str) -> None:
-        query = "UPDATE ai_affection SET daily_affection_gain = 0, last_update_date = ? WHERE guild_id = ?"
-        await self._execute(
-            self._db_transaction, query, (new_date, guild_id), commit=True
-        )
-        log.info(f"已重置服务器 {guild_id} 的每日好感度获得量，日期更新为 {new_date}")
+    async def reset_daily_affection_gain(self, new_date: str) -> None:
+        query = "UPDATE ai_affection SET daily_affection_gain = 0, last_update_date = ?"
+        await self._execute(self._db_transaction, query, (new_date,), commit=True)
+        log.info(f"已重置所有用户的每日好感度获得量，日期更新为 {new_date}")
 
-    async def reset_all_affection_points(self, guild_id: int) -> int:
-        query = "UPDATE ai_affection SET affection_points = 0 WHERE guild_id = ?"
+    async def reset_all_affection_points(self) -> int:
+        query = "UPDATE ai_affection SET affection_points = 0"
         rowcount = await self._execute(
-            self._db_transaction, query, (guild_id,), commit=True, fetch="rowcount"
+            self._db_transaction, query, commit=True, fetch="rowcount"
         )
-        log.info(f"已将服务器 {guild_id} 中 {rowcount} 名用户的好感度重置为 0。")
+        log.info(f"已将 {rowcount} 名用户的好感度重置为 0。")
         return rowcount
 
     # --- 用户档案管理 ---

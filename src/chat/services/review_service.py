@@ -2,7 +2,11 @@
 import discord
 from discord.ext import tasks
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
+import weakref
+
+if TYPE_CHECKING:
+    from src.chat.features.work_game.services.work_db_service import WorkDBService
 import os
 import json
 import sqlite3
@@ -30,9 +34,11 @@ REJECT_EMOJI = REVIEW_SETTINGS["reject_emoji"]
 class ReviewService:
     """管理所有待审项目生命周期的服务"""
 
-    def __init__(self, bot: discord.Client):
+    def __init__(self, bot: discord.Client, work_db_service: "WorkDBService"):
         self.bot = bot
         self.db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
+        self.work_db_service = work_db_service
+        self.background_tasks = weakref.WeakSet()
         self.check_expired_entries.start()
 
     def _get_db_connection(self):
@@ -507,8 +513,7 @@ class ReviewService:
                 )
 
             elif entry_type == "work_event":
-                work_db_service = WorkDBService()
-                success = await work_db_service.add_custom_event(data)
+                success = await self.work_db_service.add_custom_event(data)
                 if success:
                     new_entry_id = (
                         f"work_event_{data['name']}"  # 模拟一个ID用于后续流程
@@ -531,14 +536,18 @@ class ReviewService:
 
                 if entry_type == "general_knowledge":
                     log.info(f"为新通用知识 {new_entry_id} 创建向量...")
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         incremental_rag_service.process_general_knowledge(new_entry_id)
                     )
+                    self.background_tasks.add(task)
+                    task.add_done_callback(self._handle_task_result)
                 elif entry_type == "community_member":
                     log.info(f"为新社区成员档案 {new_entry_id} 创建向量...")
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         incremental_rag_service.process_community_member(new_entry_id)
                     )
+                    self.background_tasks.add(task)
+                    task.add_done_callback(self._handle_task_result)
 
                 original_embed = message.embeds[0]
                 new_embed = original_embed.copy()
@@ -554,6 +563,14 @@ class ReviewService:
         except Exception as e:
             log.error(f"批准条目 #{pending_id} 时出错: {e}", exc_info=True)
             conn.rollback()
+
+    def _handle_task_result(self, task: asyncio.Task) -> None:
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass  # 任务被取消是正常情况
+        except Exception as e:
+            log.error(f"后台RAG任务执行失败: {e}", exc_info=True)
 
     async def _handle_refund(self, entry: sqlite3.Row):
         """处理审核失败的退款逻辑"""
@@ -731,10 +748,10 @@ class ReviewService:
 review_service: Optional["ReviewService"] = None
 
 
-def initialize_review_service(bot: discord.Client):
+def initialize_review_service(bot: discord.Client, work_db_service: "WorkDBService"):
     """初始化并设置全局的 ReviewService 实例"""
     global review_service
     if review_service is None:
-        review_service = ReviewService(bot)
+        review_service = ReviewService(bot, work_db_service)
         log.info("ReviewService 已成功初始化并启动定时任务。")
     return review_service

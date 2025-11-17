@@ -30,20 +30,14 @@ class AffectionCog(commands.Cog):
         log.info("开始执行每日好感度定时任务...")
         today_str = datetime.now(self.beijing_tz).date().isoformat()
 
-        for guild in self.bot.guilds:
-            try:
-                # 1. 重置每日好感度获得量
-                await chat_db_manager.reset_daily_affection_gain(guild.id, today_str)
-                log.info(f"已为服务器 {guild.id} 重置每日好感度上限。")
-
-                # 2. 应用每日随机浮动
-                await self.affection_service.apply_daily_fluctuation(guild.id)
-                log.info(f"已为服务器 {guild.id} 应用每日好感度浮动。")
-
-            except Exception as e:
-                log.error(
-                    f"为服务器 {guild.id} 执行每日好感度任务时出错: {e}", exc_info=True
-                )
+        # 每日任务现在是全局的，不再需要遍历服务器
+        try:
+            await chat_db_manager.reset_daily_affection_gain(today_str)
+            log.info("已重置所有用户的每日好感度上限。")
+            await self.affection_service.apply_daily_fluctuation()
+            log.info("已应用全局每日好感度浮动。")
+        except Exception as e:
+            log.error(f"执行全局每日好感度任务时出错: {e}", exc_info=True)
 
         log.info("每日好感度定时任务执行完毕。")
 
@@ -62,9 +56,7 @@ class AffectionCog(commands.Cog):
             return
 
         try:
-            status = await self.affection_service.get_affection_status(
-                user.id, guild.id
-            )
+            status = await self.affection_service.get_affection_status(user.id)
 
             embed = discord.Embed(
                 title=f"{user.display_name} 与类脑娘的好感度",

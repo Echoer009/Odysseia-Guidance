@@ -38,11 +38,9 @@ class AffectionService:
             log.error(f"解析好感度等级配置文件时出错: {e}")
             return []
 
-    async def _get_or_create_affection(
-        self, user_id: int, guild_id: int
-    ) -> Dict[str, Any]:
+    async def _get_or_create_affection(self, user_id: int) -> Dict[str, Any]:
         """获取或创建用户的好感度记录，并处理每日重置。"""
-        affection_record = await self.db.get_affection(user_id, guild_id)
+        affection_record = await self.db.get_affection(user_id)
         today = datetime.now(BEIJING_TZ).date().isoformat()
 
         if affection_record:
@@ -54,12 +52,12 @@ class AffectionService:
                 affection_data["daily_affection_gain"] = 0
                 affection_data["last_update_date"] = today
                 await self.db.update_affection(
-                    user_id, guild_id, daily_affection_gain=0, last_update_date=today
+                    user_id, daily_affection_gain=0, last_update_date=today
                 )
                 log.info(f"用户 {user_id} 的每日聊天好感度上限已于 {today} 重置。")
 
                 # 重新获取记录以确保数据一致性
-                refreshed_record = await self.db.get_affection(user_id, guild_id)
+                refreshed_record = await self.db.get_affection(user_id)
                 if refreshed_record:
                     affection_data = dict(refreshed_record)
                 # 如果获取失败，继续使用当前数据，但记录一个警告
@@ -82,15 +80,13 @@ class AffectionService:
                 "last_interaction_date": today,
                 "last_gift_date": None,  # 新增字段
             }
-            await self.db.update_affection(user_id, guild_id, **initial_data)
-            log.info(f"为用户 {user_id} 在服务器 {guild_id} 创建了新的好感度记录。")
+            await self.db.update_affection(user_id, **initial_data)
+            log.info(f"为用户 {user_id} 创建了新的好感度记录。")
 
-            new_record = await self.db.get_affection(user_id, guild_id)
+            new_record = await self.db.get_affection(user_id)
             return dict(new_record)
 
-    async def increase_affection_on_message(
-        self, user_id: int, guild_id: int
-    ) -> Optional[int]:
+    async def increase_affection_on_message(self, user_id: int) -> Optional[int]:
         """
         在用户发送消息后，根据几率增加好感度。
         返回增加的好感度点数，如果未增加则返回 None。
@@ -98,7 +94,7 @@ class AffectionService:
         if random.random() > AFFECTION_CONFIG["INCREASE_CHANCE"]:
             return None
 
-        affection_data = await self._get_or_create_affection(user_id, guild_id)
+        affection_data = await self._get_or_create_affection(user_id)
 
         # 检查每日聊天上限
         if (
@@ -120,7 +116,6 @@ class AffectionService:
 
         await self.db.update_affection(
             user_id,
-            guild_id,
             affection_points=new_points,
             daily_affection_gain=new_daily_gain,
             last_interaction_date=datetime.now(BEIJING_TZ).date().isoformat(),
@@ -128,31 +123,31 @@ class AffectionService:
         log.info(f"用户 {user_id} 的好感度增加了 {points_to_add} 点。")
         return points_to_add
 
-    async def decrease_affection_on_blacklist(self, user_id: int, guild_id: int) -> int:
+    async def decrease_affection_on_blacklist(self, user_id: int) -> int:
         """
         当用户被列入黑名单时，扣除好感度。
         返回扣除后的总好感度点数。
         """
-        affection_data = await self._get_or_create_affection(user_id, guild_id)
+        affection_data = await self._get_or_create_affection(user_id)
 
         new_points = (
             affection_data["affection_points"] + AFFECTION_CONFIG["BLACKLIST_PENALTY"]
         )
 
-        await self.db.update_affection(user_id, guild_id, affection_points=new_points)
+        await self.db.update_affection(user_id, affection_points=new_points)
         log.warning(
             f"用户 {user_id} 因被列入黑名单，好感度扣除了 {abs(AFFECTION_CONFIG['BLACKLIST_PENALTY'])} 点。"
         )
         return new_points
 
     async def increase_affection_for_gift(
-        self, user_id: int, guild_id: int, points_to_add: int
+        self, user_id: int, points_to_add: int
     ) -> (bool, str):
         """
         当用户赠送礼物时增加好感度。礼物每天只能送一次。
         返回一个元组 (success: bool, message: str)。
         """
-        affection_data = await self._get_or_create_affection(user_id, guild_id)
+        affection_data = await self._get_or_create_affection(user_id)
         today = datetime.now(BEIJING_TZ).date().isoformat()
 
         # 检查今天是否已经送过礼物，但开发者不受此限制
@@ -170,7 +165,6 @@ class AffectionService:
 
         await self.db.update_affection(
             user_id,
-            guild_id,
             affection_points=new_points,
             last_gift_date=today,  # 更新送礼日期
             last_interaction_date=today,
@@ -178,20 +172,17 @@ class AffectionService:
         log.info(f"用户 {user_id} 通过送礼增加了 {points_to_add} 点好感度。")
         return True, f"你送的礼物类脑娘很喜欢！好感度增加了 {points_to_add} 点。"
 
-    async def add_affection_points(
-        self, user_id: int, guild_id: int, points_to_add: int
-    ) -> int:
+    async def add_affection_points(self, user_id: int, points_to_add: int) -> int:
         """
         直接为用户增加指定数量的好感度点数，不包含任何业务逻辑限制。
         返回新的好感度总点数。
         """
-        affection_data = await self._get_or_create_affection(user_id, guild_id)
+        affection_data = await self._get_or_create_affection(user_id)
 
         new_points = affection_data["affection_points"] + points_to_add
 
         await self.db.update_affection(
             user_id,
-            guild_id,
             affection_points=new_points,
             last_interaction_date=datetime.now(BEIJING_TZ).date().isoformat(),
         )
@@ -200,11 +191,11 @@ class AffectionService:
         )
         return new_points
 
-    async def get_affection_status(self, user_id: int, guild_id: int) -> Dict[str, Any]:
+    async def get_affection_status(self, user_id: int) -> Dict[str, Any]:
         """
         获取用户当前的好感度状态，包括点数和等级。
         """
-        affection_data = await self._get_or_create_affection(user_id, guild_id)
+        affection_data = await self._get_or_create_affection(user_id)
 
         points = affection_data["affection_points"]
         level_info = self.get_affection_level_info(points)
@@ -241,9 +232,9 @@ class AffectionService:
         log.warning(f"好感度点数 {points} 低于所有定义的最低标准，返回最低等级。")
         return sorted_levels[0]
 
-    async def apply_daily_fluctuation(self, guild_id: int):
-        """为服务器中的所有用户应用每日好感度随机浮动。"""
-        all_affections = await self.db.get_all_affections_for_guild(guild_id)
+    async def apply_daily_fluctuation(self):
+        """为所有用户应用每日好感度随机浮动。"""
+        all_affections = await self.db.get_all_affections()
 
         for record in all_affections:
             user_id = record["user_id"]
@@ -252,9 +243,7 @@ class AffectionService:
             fluctuation = random.randint(*AFFECTION_CONFIG["DAILY_FLUCTUATION"])
             new_points = current_points + fluctuation
 
-            await self.db.update_affection(
-                user_id, guild_id, affection_points=new_points
-            )
+            await self.db.update_affection(user_id, affection_points=new_points)
             log.info(
                 f"用户 {user_id} 的好感度每日浮动: {fluctuation}，新点数: {new_points}"
             )

@@ -193,9 +193,7 @@ class ChatService:
             )
 
             # --- 新增：集中获取所有上下文数据 ---
-            affection_status = await affection_service.get_affection_status(
-                author.id, guild_id
-            )
+            affection_status = await affection_service.get_affection_status(author.id)
             user_profile_data = world_book_service.get_profile_by_discord_id(
                 str(author.id)
             )
@@ -203,9 +201,7 @@ class ChatService:
             # 3. --- 好感度与奖励更新（前置） ---
             try:
                 # 在生成回复前更新好感度，以确保日志顺序正确
-                await affection_service.increase_affection_on_message(
-                    author.id, guild_id
-                )
+                await affection_service.increase_affection_on_message(author.id)
             except Exception as aff_e:
                 log.error(f"增加用户 {author.id} 的好感度时出错: {aff_e}")
 
