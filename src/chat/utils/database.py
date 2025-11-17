@@ -24,39 +24,23 @@ class ChatDatabaseManager:
     def __init__(self, db_path: str = DB_PATH):
         """初始化数据库管理器。"""
         self.db_path = db_path
-        self.conn: Optional[sqlite3.Connection] = None
-        self.cursor: Optional[sqlite3.Cursor] = None
-
-    async def connect(self):
-        """创建并初始化数据库连接。"""
-        log.info(f"正在连接到数据库: {self.db_path}")
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        # run_in_executor 用于在异步事件循环中运行同步的 connect 调用
-        # check_same_thread=False 允许多个 FastAPI worker/线程复用此连接
-        self.conn = await asyncio.get_running_loop().run_in_executor(
-            None, partial(sqlite3.connect, self.db_path, check_same_thread=False)
-        )
-        # 启用 WAL 模式以提高并发性能
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.row_factory = sqlite3.Row
-        # self.cursor = self.conn.cursor() # 移除共享游标
-        log.info("数据库连接成功并已启用 WAL 模式。")
+        # 不再需要 self.conn 和 self.cursor 实例变量
 
     async def init_async(self):
         """异步初始化数据库，在事件循环中运行同步的建表逻辑。"""
-        if not self.conn:
-            await self.connect()
         log.info("开始异步 Chat 数据库初始化...")
+        # 确保 data 目录存在
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         await self._execute(self._init_database_logic)
         log.info("异步 Chat 数据库初始化完成。")
 
     def _init_database_logic(self):
         """包含所有同步数据库初始化逻辑的方法。"""
-        if not self.conn:
-            raise ConnectionError("数据库未连接。请先调用 connect()。")
-
-        cursor = self.conn.cursor()
+        conn = None
         try:
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            cursor = conn.cursor()
             # --- AI对话上下文表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ai_conversation_contexts (
@@ -509,14 +493,16 @@ class ChatDatabaseManager:
                 """)
                 log.info("已向 muted_channels 表添加 muted_until 列。")
 
-            self.conn.commit()
+            conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
             log.error(f"同步初始化数据库表时出错: {e}")
-            self.conn.rollback()  # 如果初始化失败则回滚
+            if conn:
+                conn.rollback()  # 如果初始化失败则回滚
             raise
         finally:
-            cursor.close()
+            if conn:
+                conn.close()
 
     async def _execute(self, func: Callable, *args, **kwargs) -> Any:
         """在线程池中执行一个同步的数据库操作。"""
@@ -538,12 +524,18 @@ class ChatDatabaseManager:
         fetch: str = "none",
         commit: bool = False,
     ):
-        """一个通用的同步事务函数，现在使用独立的游标以保证线程安全。"""
-        if not self.conn:
-            raise ConnectionError("数据库未连接。请先调用 connect()。")
-
-        cursor = self.conn.cursor()
+        """
+        一个完全线程安全的同步事务函数。
+        它为每个操作创建一个新的数据库连接，以确保完全隔离。
+        """
+        conn = None
         try:
+            # 为此操作创建一个新的、独立的连接
+            conn = sqlite3.connect(self.db_path, timeout=15)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
             cursor.execute(query, params)
 
             if fetch == "one":
@@ -558,23 +550,22 @@ class ChatDatabaseManager:
                 result = None
 
             if commit:
-                self.conn.commit()
+                conn.commit()
 
             return result
         except sqlite3.Error as e:
-            self.conn.rollback()
+            if conn:
+                conn.rollback()
             log.error(f"数据库事务失败，已回滚: {e} | Query: {query}")
             raise
         finally:
-            cursor.close()
+            if conn:
+                conn.close()
 
     async def disconnect(self):
-        """关闭数据库连接。"""
-        if self.conn:
-            log.info("正在关闭数据库连接...")
-            await asyncio.get_running_loop().run_in_executor(None, self.conn.close)
-            self.conn = None
-            log.info("数据库连接已关闭。")
+        """关闭数据库连接（在新模式下无需操作）。"""
+        log.info("数据库管理器现在是无状态的，无需显式断开连接。")
+        pass
 
     # --- AI对话上下文管理 ---
     async def get_ai_conversation_context(
