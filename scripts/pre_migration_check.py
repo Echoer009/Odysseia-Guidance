@@ -14,7 +14,7 @@ def check_multi_guild_affection():
             query = """
                 SELECT 
                     user_id, 
-                    GROUP_CONCAT(guild_id || ':' || points, ', ') as records 
+                    GROUP_CONCAT(guild_id || ':' || affection_points, ', ') as records
                 FROM 
                     ai_affection 
                 GROUP BY 
