@@ -155,17 +155,17 @@ def setup_logging():
     )
     logging.Formatter.converter = time.gmtime
 
-    queue_handler = QueueHandler(log_queue)
-    queue_handler.setLevel(
-        logging.DEBUG
-    )  # 这里如果想在WebUI看到仅INFO以上日志，请在这里修改
-    queue_handler.setFormatter(web_log_formatter)
+    # queue_handler = QueueHandler(log_queue)
+    # queue_handler.setLevel(
+    #     logging.DEBUG
+    # )  # 这里如果想在WebUI看到仅INFO以上日志，请在这里修改
+    # queue_handler.setFormatter(web_log_formatter)
 
     # 6. 为根 logger 添加所有处理器
     root_logger.addHandler(stdout_handler)
     root_logger.addHandler(stderr_handler)
     root_logger.addHandler(file_handler)
-    root_logger.addHandler(queue_handler)
+    # root_logger.addHandler(queue_handler) # 禁用未使用的WebUI日志队列处理器，防止内存泄漏
 
     # 5. 调整特定库的日志级别，以减少不必要的输出
     #    例如，google-generativeai 库在 INFO 级别会打印很多网络请求相关的日志
