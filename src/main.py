@@ -481,13 +481,6 @@ async def main():
         log.critical(f"启动机器人时发生未知错误: {e}", exc_info=True)
     finally:
         # 在机器人关闭时，确保数据库连接被关闭
-        log.info("正在关闭数据库连接...")
-        if "guidance_db_manager" in locals():
-            await guidance_db_manager.close()
-        if "chat_db_manager" in locals():
-            await chat_db_manager.disconnect()
-        # world_book_db_manager 不需要显式关闭，因为它使用 aiosqlite 的上下文管理器
-
         log.info("机器人已下线。")
 
 
