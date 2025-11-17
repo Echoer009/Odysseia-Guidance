@@ -70,7 +70,7 @@ class PersonalMemoryCog(commands.Cog):
                 try:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "SELECT id FROM community_members WHERE discord_number_id = ? AND status = 'approved'",
+                        "SELECT id FROM community_members WHERE discord_number_id = ?",
                         (str(interaction.user.id),),
                     )
                     if cursor.fetchone():
