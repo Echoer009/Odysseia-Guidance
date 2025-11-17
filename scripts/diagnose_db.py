@@ -1,74 +1,95 @@
-# -*- coding: utf-8 -*-
+import asyncio
 import os
-import sys
 import sqlite3
-import json
+import sys
+import logging
 
-# --- Project Root Configuration ---
-current_script_path = os.path.abspath(__file__)
-script_dir = os.path.dirname(current_script_path)
-project_root = os.path.dirname(script_dir)
-sys.path.insert(0, project_root)
-# --- Path Configuration End ---
+# 配置日志记录
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-# Define the path to the World Book database
-WORLD_BOOK_DB_PATH = os.path.join(project_root, "data", "world_book.sqlite3")
+# 将项目根目录添加到 sys.path
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, _PROJECT_ROOT)
+
+from src.chat.utils.database import ChatDatabaseManager
 
 
-def diagnose_community_members():
+async def main():
     """
-    Connects to the SQLite database and prints the raw data from the
-    community_members table to identify potentially corrupt or empty entries.
+    诊断数据库连接和完整性，并尝试复现 a bug。
     """
-    print(f"--- 开始诊断 community_members 表 ---")
-    print(f"数据库路径: {WORLD_BOOK_DB_PATH}")
+    log = logging.getLogger(__name__)
+    log.info("--- 开始数据库诊断 ---")
 
-    if not os.path.exists(WORLD_BOOK_DB_PATH):
-        print(f"错误: 数据库文件未找到 at '{WORLD_BOOK_DB_PATH}'")
-        return
+    # 1. 打印环境信息
+    log.info(f"Python 版本: {sys.version}")
+    log.info(f"SQLite3 模块版本: {sqlite3.version}")
+    log.info(f"SQLite 库版本: {sqlite3.sqlite_version}")
+
+    db_manager = ChatDatabaseManager()
+    test_channel_id = 1234567890  # 使用一个虚拟的频道ID进行测试
 
     try:
-        with sqlite3.connect(WORLD_BOOK_DB_PATH) as conn:
-            conn.row_factory = sqlite3.Row  # Allows accessing columns by name
-            cursor = conn.cursor()
+        # 2. 连接数据库
+        await db_manager.connect()
+        log.info("数据库连接成功。")
 
-            print("\n正在查询 community_members 表中的所有记录...")
-            cursor.execute("SELECT id, title, content_json FROM community_members")
-            rows = cursor.fetchall()
+        # 3. 检查数据库完整性
+        log.info("正在执行 PRAGMA integrity_check...")
+        try:
+            # integrity_check 需要在一个事务中执行
+            check_result = await db_manager._execute(
+                db_manager._db_transaction, "PRAGMA integrity_check;", (), fetch="one"
+            )
+            log.info(f"数据库完整性检查结果: {check_result}")
+            if check_result and check_result != "ok":
+                log.error(
+                    f"数据库完整性检查失败！结果: {check_result}。这可能是问题根源。"
+                )
+            else:
+                log.info("数据库完整性检查通过。")
+        except Exception as e:
+            log.error(f"执行 integrity_check 时出错: {e}", exc_info=True)
 
-            if not rows:
-                print("表中没有找到任何记录。")
-                return
+        # 4. 尝试调用一个已知在您本地成功的函数
+        log.info(f"正在尝试调用 is_channel_muted(channel_id={test_channel_id})...")
+        try:
+            is_muted = await db_manager.is_channel_muted(test_channel_id)
+            log.info(
+                f"is_channel_muted 调用成功。频道 {test_channel_id} 的禁言状态是: {is_muted}"
+            )
+        except Exception as e:
+            log.error(f"调用 is_channel_muted 时捕获到异常: {e}", exc_info=True)
 
-            print(f"共找到 {len(rows)} 条记录。正在逐条打印详细信息：")
-            print("-" * 40)
+        # 5. 尝试精确复现生产环境中 coin_service 的失败查询
+        log.info("--- 开始精确复现生产环境错误 ---")
+        # 使用您日志中失败的用户ID
+        test_user_id = 1262067786432385164
+        failing_query = (
+            "SELECT last_daily_message_date FROM user_coins WHERE user_id = ?"
+        )
+        log.info(f"正在尝试执行查询: '{failing_query}' with user_id: {test_user_id}")
+        try:
+            result = await db_manager._execute(
+                db_manager._db_transaction, failing_query, (test_user_id,), fetch="one"
+            )
+            log.info(f"生产环境的特定查询成功。结果: {result}")
+        except Exception as e:
+            log.error(f"执行生产环境的特定查询时捕获到异常: {e}", exc_info=True)
+            log.error(
+                "!!! 如果此处出现 'bad parameter or other API misuse'，则说明已精确复现生产环境的 bug。"
+            )
 
-            for i, row in enumerate(rows):
-                entry_id = row["id"]
-                title = row["title"]
-                content_json = row["content_json"]
-
-                print(f"记录 #{i + 1}:")
-                print(f"  - ID: {entry_id}")
-                print(f"  - Title: {title}")
-
-                # Try to parse and inspect content_json
-                if content_json:
-                    try:
-                        content = json.loads(content_json)
-                        print(f"  - Content JSON (解析成功): {content}")
-                    except json.JSONDecodeError:
-                        print(f"  - Content JSON (解析失败): {content_json}")
-                else:
-                    print(f"  - Content JSON: (空)")
-
-                print("-" * 40)
-
-    except sqlite3.Error as e:
-        print(f"\n访问数据库时发生 SQLite 错误: {e}")
     except Exception as e:
-        print(f"\n处理数据时发生未知错误: {e}")
+        log.error(f"诊断脚本执行过程中发生意外错误: {e}", exc_info=True)
+    finally:
+        if db_manager.conn:
+            await db_manager.disconnect()
+            log.info("数据库连接已关闭。")
+        log.info("--- 数据库诊断结束 ---")
 
 
 if __name__ == "__main__":
-    diagnose_community_members()
+    asyncio.run(main())
