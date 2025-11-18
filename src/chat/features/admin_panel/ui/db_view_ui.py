@@ -1362,12 +1362,18 @@ class DBView(discord.ui.View):
                 channel = bot.get_channel(channel_id)
                 if isinstance(channel, discord.ForumChannel):
                     total_channels_queried += 1
-                    # 获取活跃帖子
-                    for thread in channel.threads:
-                        all_forum_thread_ids.add(thread.id)
-                    # 获取归档帖子
-                    async for thread in channel.archived_threads(limit=None):
-                        all_forum_thread_ids.add(thread.id)
+                    try:
+                        # 获取活跃帖子
+                        for thread in channel.threads:
+                            all_forum_thread_ids.add(thread.id)
+                        # 获取归档帖子
+                        async for thread in channel.archived_threads(limit=None):
+                            all_forum_thread_ids.add(thread.id)
+                    except discord.errors.Forbidden:
+                        log.warning(
+                            f"机器人缺少访问频道 {channel.name} ({channel.id}) 中帖子的权限。已跳过此频道。"
+                        )
+                        continue
 
             log.info(f"从 Discord API 获取到 {len(all_forum_thread_ids)} 个总帖子 ID。")
 
@@ -1415,10 +1421,16 @@ class DBView(discord.ui.View):
             for channel_id in chat_config.FORUM_SEARCH_CHANNEL_IDS:
                 channel = bot.get_channel(channel_id)
                 if isinstance(channel, discord.ForumChannel):
-                    for thread in channel.threads:
-                        all_forum_thread_ids.add(thread.id)
-                    async for thread in channel.archived_threads(limit=None):
-                        all_forum_thread_ids.add(thread.id)
+                    try:
+                        for thread in channel.threads:
+                            all_forum_thread_ids.add(thread.id)
+                        async for thread in channel.archived_threads(limit=None):
+                            all_forum_thread_ids.add(thread.id)
+                    except discord.errors.Forbidden:
+                        log.warning(
+                            f"后台索引任务：机器人缺少访问频道 {channel.name} ({channel.id}) 中帖子的权限。已跳过此频道。"
+                        )
+                        continue
 
             indexed_thread_ids = set(
                 forum_vector_db_service.get_all_indexed_thread_ids()
