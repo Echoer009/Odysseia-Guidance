@@ -72,7 +72,7 @@ TAROT_CONFIG = {
 QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"
 
 # RAG 搜索返回的结果数量
-RAG_N_RESULTS_DEFAULT = 3  # 普通聊天的默认值
+RAG_N_RESULTS_DEFAULT = 5  # 普通聊天的默认值
 RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
 
 
