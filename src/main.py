@@ -36,6 +36,7 @@ from src.chat.services.review_service import initialize_review_service
 from src.chat.features.work_game.services.work_db_service import WorkDBService
 from src.chat.utils.command_sync import sync_commands
 from src.chat.config import chat_config
+from src.core.logging_config import setup_logging
 
 current_script_path = os.path.abspath(__file__)
 current_dir = os.path.dirname(current_script_path)
@@ -99,83 +100,6 @@ if sys.platform != "win32":
         logging.info("已成功启用 uvloop 作为 asyncio 事件循环")
     except ImportError:
         logging.warning("尝试启用 uvloop 失败，将使用默认事件循环")
-
-
-def setup_logging():
-    """
-    配置日志记录器，实现双通道输出：
-    - 控制台 (stdout/stderr): 默认只显示 INFO 及以上级别的日志。
-    - 日志文件 (bot_debug.log): 记录 DEBUG 及以上级别的所有日志，用于问题排查。
-    """
-    # 1. 创建一个统一的格式化器
-    log_formatter = logging.Formatter(config.LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
-
-    # 2. 配置根 logger
-    #    为了让文件能记录 DEBUG 信息，根 logger 的级别必须是 DEBUG。
-    #    控制台输出的级别将在各自的 handler 中单独控制。
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)  # 设置根 logger 的最低响应级别为 DEBUG
-    root_logger.handlers.clear()  # 清除任何可能由其他库（如 discord.py）添加的旧处理器
-
-    # 3. 创建控制台处理器 (stdout)，只显示 INFO 和 DEBUG
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(log_formatter)
-    # 从 config 文件读取控制台的日志级别
-    console_log_level = getattr(logging, config.LOG_LEVEL.upper(), logging.INFO)
-    stdout_handler.setLevel(console_log_level)
-    # 添加过滤器，确保 WARNING 及以上级别不会在这里输出
-    stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
-
-    # 4. 创建控制台处理器 (stderr)，只显示 WARNING 及以上
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.WARNING)
-    stderr_handler.setFormatter(log_formatter)
-
-    # 5. 创建文件处理器，记录所有 DEBUG 及以上级别的日志
-    #    使用 RotatingFileHandler 来自动管理日志文件大小
-    from logging.handlers import RotatingFileHandler
-
-    # 确保日志文件所在的目录存在
-    log_dir = os.path.dirname(config.LOG_FILE_PATH)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    file_handler = RotatingFileHandler(
-        config.LOG_FILE_PATH,
-        maxBytes=5 * 1024 * 1024,  # 5 MB
-        backupCount=2,
-        encoding="utf-8",
-    )
-    file_handler.setLevel(logging.DEBUG)  # 文件记录 DEBUG 级别
-    file_handler.setFormatter(log_formatter)
-
-    # --- webui ---
-    web_log_formatter = logging.Formatter(
-        "[%(asctime)s.%(msecs)03dZ] [%(levelname)s] [%(name)s] %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
-    logging.Formatter.converter = time.gmtime
-
-    # queue_handler = QueueHandler(log_queue)
-    # queue_handler.setLevel(
-    #     logging.DEBUG
-    # )  # 这里如果想在WebUI看到仅INFO以上日志，请在这里修改
-    # queue_handler.setFormatter(web_log_formatter)
-
-    # 6. 为根 logger 添加所有处理器
-    root_logger.addHandler(stdout_handler)
-    root_logger.addHandler(stderr_handler)
-    root_logger.addHandler(file_handler)
-    # root_logger.addHandler(queue_handler) # 禁用未使用的WebUI日志队列处理器，防止内存泄漏
-
-    # 5. 调整特定库的日志级别，以减少不必要的输出
-    #    例如，google-generativeai 库在 INFO 级别会打印很多网络请求相关的日志
-    #    将所有 google.*, httpx, urllib3 等库的日志级别设为 WARNING，
-    #    这样可以屏蔽掉它们所有 INFO 和 DEBUG 级别的冗余日志。
-    logging.getLogger("google_genai").setLevel(logging.WARNING)
-    logging.getLogger("chromadb").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 class GuidanceBot(commands.Bot):
