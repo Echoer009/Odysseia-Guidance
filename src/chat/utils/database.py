@@ -2,11 +2,10 @@ import sqlite3
 import json
 import logging
 import os
-import asyncio
-from functools import partial
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 from src.chat.config import chat_config
+from src.core.database import AsyncDatabaseManager
 
 # --- 常量定义 ---
 _PROJECT_ROOT = os.path.abspath(
@@ -18,21 +17,12 @@ DB_PATH = os.path.join(_PROJECT_ROOT, "data", "chat.db")
 log = logging.getLogger(__name__)
 
 
-class ChatDatabaseManager:
+class ChatDatabaseManager(AsyncDatabaseManager):
     """管理所有与聊天模块相关的 SQLite 数据库的异步交互。"""
 
     def __init__(self, db_path: str = DB_PATH):
         """初始化数据库管理器。"""
-        self.db_path = db_path
-        # 不再需要 self.conn 和 self.cursor 实例变量
-
-    async def init_async(self):
-        """异步初始化数据库，在事件循环中运行同步的建表逻辑。"""
-        log.info("开始异步 Chat 数据库初始化...")
-        # 确保 data 目录存在
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        await self._execute(self._init_database_logic)
-        log.info("异步 Chat 数据库初始化完成。")
+        super().__init__(db_path)
 
     def _init_database_logic(self):
         """包含所有同步数据库初始化逻辑的方法。"""
@@ -501,69 +491,6 @@ class ChatDatabaseManager:
         finally:
             if conn:
                 conn.close()
-
-    async def _execute(self, func: Callable, *args, **kwargs) -> Any:
-        """在线程池中执行一个同步的数据库操作。"""
-        try:
-            blocking_task = partial(func, *args, **kwargs)
-            result = await asyncio.get_running_loop().run_in_executor(
-                None, blocking_task
-            )
-            return result
-        except Exception as e:
-            log.error(f"数据库执行器出错: {e}", exc_info=True)
-            raise
-
-    def _db_transaction(
-        self,
-        query: str,
-        params: tuple = (),
-        *,
-        fetch: str = "none",
-        commit: bool = False,
-    ):
-        """
-        一个完全线程安全的同步事务函数。
-        它为每个操作创建一个新的数据库连接，以确保完全隔离。
-        """
-        conn = None
-        try:
-            # 为此操作创建一个新的、独立的连接
-            conn = sqlite3.connect(self.db_path, timeout=15)
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            cursor.execute(query, params)
-
-            if fetch == "one":
-                result = cursor.fetchone()
-            elif fetch == "all":
-                result = cursor.fetchall()
-            elif fetch == "lastrowid":
-                result = cursor.lastrowid
-            elif fetch == "rowcount":
-                result = cursor.rowcount
-            else:
-                result = None
-
-            if commit:
-                conn.commit()
-
-            return result
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            log.error(f"数据库事务失败，已回滚: {e} | Query: {query}")
-            raise
-        finally:
-            if conn:
-                conn.close()
-
-    async def disconnect(self):
-        """关闭数据库连接（在新模式下无需操作）。"""
-        log.info("数据库管理器现在是无状态的，无需显式断开连接。")
-        pass
 
     # --- AI对话上下文管理 ---
     async def get_ai_conversation_context(

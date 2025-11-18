@@ -2,9 +2,8 @@ import sqlite3
 import json
 import logging
 import os
-import asyncio
-from functools import partial
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any
+from src.core.database import AsyncDatabaseManager
 
 # --- 常量定义 ---
 _PROJECT_ROOT = os.path.abspath(
@@ -16,24 +15,15 @@ DB_PATH = os.path.join(_PROJECT_ROOT, "data", "guidance.db")
 log = logging.getLogger(__name__)
 
 
-class GuidanceDatabaseManager:
+class GuidanceDatabaseManager(AsyncDatabaseManager):
     """管理所有与引导模块相关的 SQLite 数据库的异步交互。"""
 
     def __init__(self, db_path: str = DB_PATH):
         """
         初始化数据库管理器。
-        连接将在需要时在执行器中创建。
         """
+        super().__init__(db_path)
         self.bot = None
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        # 初始化现在是一个异步方法，需要在 main.py 中显式调用
-
-    async def init_async(self):
-        """异步初始化数据库，在事件循环中运行同步的建表逻辑。"""
-        log.info("开始异步数据库初始化...")
-        await self._execute(self._init_database_logic)
-        log.info("异步数据库初始化完成。")
 
     def set_bot_instance(self, bot):
         """设置 bot 实例以便在数据库模块中使用。"""
@@ -174,91 +164,6 @@ class GuidanceDatabaseManager:
         finally:
             if "conn" in locals() and conn:
                 conn.close()
-
-    async def _execute(self, func: Callable, *args, **kwargs) -> Any:
-        """在线程池中执行一个同步的数据库操作。"""
-        try:
-            # 使用 functools.partial 将函数和参数绑定在一起
-            blocking_task = partial(func, *args, **kwargs)
-            # 在默认的执行器（线程池）中运行该任务
-            result = await asyncio.get_running_loop().run_in_executor(
-                None, blocking_task
-            )
-            return result
-        except Exception as e:
-            log.error(f"数据库执行器出错: {e}", exc_info=True)
-            raise
-
-    def _db_transaction(
-        self,
-        query: str,
-        params: tuple = (),
-        *,
-        fetch: str = "none",
-        commit: bool = False,
-    ):
-        """
-        一个通用的同步事务函数，用于被 _execute 调用。
-        :param query: SQL 查询语句。
-        :param params: 查询参数。
-        :param fetch: 'one', 'all', or 'none'。
-        :param commit: 是否提交事务。
-        """
-        conn = None
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-
-            if fetch == "one":
-                result = cursor.fetchone()
-            elif fetch == "all":
-                result = cursor.fetchall()
-            elif fetch == "lastrowid":
-                result = cursor.lastrowid
-            elif fetch == "rowcount":
-                result = cursor.rowcount
-            else:
-                result = None
-
-            if commit:
-                conn.commit()
-
-            return result
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            log.error(f"数据库事务失败: {e} | Query: {query}")
-            raise
-        finally:
-            if conn:
-                conn.close()
-
-    def _db_executemany(self, query: str, params_list: List[tuple]):
-        """
-        一个同步的 executemany 函数。
-        """
-        conn = None
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.executemany(query, params_list)
-            conn.commit()
-            return cursor.rowcount
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            log.error(f"数据库 executemany 失败: {e} | Query: {query}")
-            raise
-        finally:
-            if conn:
-                conn.close()
-
-    async def close(self):
-        """关闭数据库连接（在异步模型中通常不需要）。"""
-        log.info("数据库管理器正在关闭（异步模式下无操作）。")
-        pass
 
     # --- Guild Configs ---
     async def get_guild_config(self, guild_id: int) -> Optional[sqlite3.Row]:
