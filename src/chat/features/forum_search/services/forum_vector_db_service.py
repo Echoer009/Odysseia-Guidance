@@ -31,6 +31,36 @@ class ForumVectorDBService(VectorDBService):
             self.client = None
             self.collection_name = None
 
+    def get_all_indexed_thread_ids(self) -> list[int]:
+        """
+        从向量数据库中获取所有已索引的帖子的唯一 thread_id。
+
+        Returns:
+            list[int]: 一个包含所有唯一 thread_id 的列表。
+        """
+        if not self.is_available():
+            log.error("向量数据库服务不可用，无法获取已索引的帖子ID。")
+            return []
+        try:
+            collection = self.client.get_collection(name=self.collection_name)
+            # 只获取元数据以提高效率
+            results = collection.get(include=["metadatas"])
+
+            if not results or not results["metadatas"]:
+                return []
+
+            # 从元数据中提取 thread_id 并去重
+            thread_ids = {
+                meta["thread_id"]
+                for meta in results["metadatas"]
+                if "thread_id" in meta
+            }
+            return list(thread_ids)
+
+        except Exception as e:
+            log.error(f"获取所有已索引的帖子ID时出错: {e}", exc_info=True)
+            return []
+
 
 # 全局实例
 forum_vector_db_service = ForumVectorDBService()

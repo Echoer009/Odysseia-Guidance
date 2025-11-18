@@ -19,6 +19,11 @@ from src.chat.utils.database import DB_PATH as CHAT_DB_PATH
 from src.chat.features.forum_search.services.forum_vector_db_service import (
     forum_vector_db_service,
 )
+from src.chat.config import chat_config
+from src.chat.features.forum_search.services.forum_search_service import (
+    forum_search_service,
+)
+import asyncio
 
 log = logging.getLogger(__name__)
 
@@ -1127,16 +1132,36 @@ class DBView(discord.ui.View):
                 self.search_work_event_button.callback = self.search_work_event
                 self.add_item(self.search_work_event_button)
 
-            # 向量库：关键词搜索
-            elif self.current_table == "vector_db_metadata" and not self.search_mode:
-                self.search_vector_db_button = discord.ui.Button(
-                    label="关键词搜索",
-                    emoji="🔍",
-                    style=discord.ButtonStyle.primary,
-                    row=button_row,
+            # 向量库：关键词搜索及管理功能
+            elif self.current_table == "vector_db_metadata":
+                if not self.search_mode:
+                    self.search_vector_db_button = discord.ui.Button(
+                        label="关键词搜索",
+                        emoji="🔍",
+                        style=discord.ButtonStyle.primary,
+                        row=button_row,
+                    )
+                    self.search_vector_db_button.callback = self.search_vector_db
+                    self.add_item(self.search_vector_db_button)
+
+                # 新增：查询和索引缺失帖子的按钮
+                self.query_missing_button = discord.ui.Button(
+                    label="查询缺失帖子",
+                    emoji="🔎",
+                    style=discord.ButtonStyle.success,
+                    row=button_row + 1,
                 )
-                self.search_vector_db_button.callback = self.search_vector_db
-                self.add_item(self.search_vector_db_button)
+                self.query_missing_button.callback = self.query_missing_threads
+                self.add_item(self.query_missing_button)
+
+                self.index_missing_button = discord.ui.Button(
+                    label="索引缺失帖子",
+                    emoji="➕",
+                    style=discord.ButtonStyle.danger,
+                    row=button_row + 1,
+                )
+                self.index_missing_button.callback = self.index_missing_threads
+                self.add_item(self.index_missing_button)
 
             # 通用：退出搜索模式的按钮
             if self.search_mode:
@@ -1321,6 +1346,122 @@ class DBView(discord.ui.View):
         self.search_keyword = None
         self.current_page = 0
         await self.update_view()
+
+    async def query_missing_threads(self, interaction: discord.Interaction):
+        """查询并报告在向量数据库中缺失的帖子"""
+        await interaction.response.send_message(
+            "⏳ 正在开始查询，这可能需要几分钟时间，请稍候...", ephemeral=True
+        )
+
+        try:
+            bot = interaction.client
+            all_forum_thread_ids = set()
+            total_channels_queried = 0
+
+            for channel_id in chat_config.FORUM_SEARCH_CHANNEL_IDS:
+                channel = bot.get_channel(channel_id)
+                if isinstance(channel, discord.ForumChannel):
+                    total_channels_queried += 1
+                    # 获取活跃帖子
+                    for thread in channel.threads:
+                        all_forum_thread_ids.add(thread.id)
+                    # 获取归档帖子
+                    async for thread in channel.archived_threads(limit=None):
+                        all_forum_thread_ids.add(thread.id)
+
+            log.info(f"从 Discord API 获取到 {len(all_forum_thread_ids)} 个总帖子 ID。")
+
+            # 从向量数据库获取所有已索引的帖子ID
+            indexed_thread_ids = set(
+                forum_vector_db_service.get_all_indexed_thread_ids()
+            )
+            log.info(f"从向量数据库获取到 {len(indexed_thread_ids)} 个已索引帖子 ID。")
+
+            missing_thread_ids = all_forum_thread_ids - indexed_thread_ids
+            missing_count = len(missing_thread_ids)
+
+            if missing_count == 0:
+                await interaction.followup.send(
+                    f"✅ **查询完成**\n\n在查询的 **{total_channels_queried}** 个频道中，所有帖子均已成功索引，没有发现缺失。",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"⚠️ **查询完成**\n\n在查询的 **{total_channels_queried}** 个频道中，共发现 **{missing_count}** 个帖子尚未被索引。\n"
+                    "你可以点击“索引缺失帖子”按钮来处理它们。",
+                    ephemeral=True,
+                )
+
+        except Exception as e:
+            log.error(f"查询缺失帖子时出错: {e}", exc_info=True)
+            await interaction.followup.send(f"查询时发生错误: {e}", ephemeral=True)
+
+    async def index_missing_threads(self, interaction: discord.Interaction):
+        """在一个后台任务中索引所有缺失的帖子"""
+        await interaction.response.send_message(
+            "⏳ **任务已启动**\n\n正在后台开始索引所有缺失的帖子。这个过程可能需要很长时间。\n"
+            "完成后会在此频道发送一条消息通知你。",
+            ephemeral=True,
+        )
+
+        # 创建一个后台任务来执行耗时的索引操作
+        asyncio.create_task(self._background_index_task(interaction))
+
+    async def _background_index_task(self, interaction: discord.Interaction):
+        """实际执行索引的后台函数"""
+        try:
+            bot = interaction.client
+            all_forum_thread_ids = set()
+            for channel_id in chat_config.FORUM_SEARCH_CHANNEL_IDS:
+                channel = bot.get_channel(channel_id)
+                if isinstance(channel, discord.ForumChannel):
+                    for thread in channel.threads:
+                        all_forum_thread_ids.add(thread.id)
+                    async for thread in channel.archived_threads(limit=None):
+                        all_forum_thread_ids.add(thread.id)
+
+            indexed_thread_ids = set(
+                forum_vector_db_service.get_all_indexed_thread_ids()
+            )
+            missing_thread_ids = list(all_forum_thread_ids - indexed_thread_ids)
+            missing_count = len(missing_thread_ids)
+
+            if missing_count == 0:
+                await interaction.followup.send(
+                    "✅ **索引任务完成**\n\n没有发现需要索引的帖子。", ephemeral=True
+                )
+                return
+
+            log.info(f"开始后台索引 {missing_count} 个缺失的帖子...")
+            processed_count = 0
+            for thread_id in missing_thread_ids:
+                try:
+                    thread = await bot.fetch_channel(thread_id)
+                    if isinstance(thread, discord.Thread):
+                        await forum_search_service.process_thread(thread)
+                        processed_count += 1
+                        # 每处理10个帖子就短暂休息一下，避免API过载
+                        if processed_count % 10 == 0:
+                            log.info(
+                                f"已处理 {processed_count}/{missing_count} 个帖子，暂停2秒..."
+                            )
+                            await asyncio.sleep(2)
+                except discord.NotFound:
+                    log.warning(f"无法找到帖子 ID {thread_id}，可能已被删除。")
+                except Exception as e:
+                    log.error(f"处理帖子 ID {thread_id} 时出错: {e}", exc_info=True)
+
+            log.info("后台索引任务完成。")
+            await interaction.followup.send(
+                f"✅ **索引任务完成**\n\n成功处理了 **{processed_count} / {missing_count}** 个缺失的帖子。",
+                ephemeral=True,
+            )
+
+        except Exception as e:
+            log.error(f"后台索引任务发生严重错误: {e}", exc_info=True)
+            await interaction.followup.send(
+                f"❌ **索引任务失败**\n\n后台任务发生严重错误: {e}", ephemeral=True
+            )
 
     async def view_memory(self, interaction: discord.Interaction):
         """打开模态框以查看和编辑社区成员的个人记忆摘要"""
