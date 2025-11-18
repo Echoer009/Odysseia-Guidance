@@ -224,24 +224,29 @@ class ForumSyncCog(commands.Cog):
         """在任务开始前等待机器人准备就绪。"""
         await self.bot.wait_until_ready()
 
-    @commands.Cog.listener()
-    async def on_thread_create(self, thread: discord.Thread):
+    async def handle_new_thread(self, thread: discord.Thread):
         """
-        监听新帖子的创建事件。
+        由中央事件处理器调用的公共方法，用于处理新的帖子。
         """
-        if thread.parent_id not in chat_config.FORUM_SEARCH_CHANNEL_IDS:
-            return
-
-        log.info(f"检测到新帖子，准备处理: {thread.name} ({thread.id})")
-        await forum_search_service.process_thread(thread)
-        # 将新帖子ID添加到数据库，以防轮询任务重复处理
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute(
-                "INSERT OR IGNORE INTO processed_threads (thread_id) VALUES (?)",
-                (thread.id,),
+        try:
+            log.info(
+                f"[ForumSyncCog] 接收到新帖子进行处理: {thread.name} ({thread.id})"
             )
-            await db.commit()
+            await forum_search_service.process_thread(thread)
+            # 将新帖子ID添加到数据库，以防轮询任务重复处理
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("PRAGMA journal_mode=WAL")
+                await db.execute(
+                    "INSERT OR IGNORE INTO processed_threads (thread_id) VALUES (?)",
+                    (thread.id,),
+                )
+                await db.commit()
+            log.info(f"[ForumSyncCog] 帖子 {thread.id} 已成功处理并记录。")
+        except Exception as e:
+            log.error(
+                f"[ForumSyncCog] 处理帖子 {thread.name} ({thread.id}) 时出错: {e}",
+                exc_info=True,
+            )
 
 
 async def setup(bot: commands.Bot):

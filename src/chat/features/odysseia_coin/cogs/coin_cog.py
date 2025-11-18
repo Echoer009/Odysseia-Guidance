@@ -44,39 +44,30 @@ class CoinCog(commands.Cog):
                 f"处理用户 {message.author.id} 的每日发言奖励时出错: {e}", exc_info=True
             )
 
-    @commands.Cog.listener()
-    async def on_thread_create(self, thread: discord.Thread):
-        """监听在论坛频道发帖的事件"""
+    async def handle_new_thread_reward(
+        self, thread: discord.Thread, first_message: discord.Message
+    ):
+        """
+        由中央事件处理器调用的公共方法，用于处理新帖子的发币奖励。
+        """
         try:
-            # on_thread_create 事件没有直接的发帖者信息，需要从审计日志或起始消息获取
-            # 为了简单起见，我们假设起始消息的作者就是发帖者
-            # 注意：这在缓存不足时可能不总是可靠
-            start_message = await thread.fetch_message(thread.id)
-            if start_message and start_message.author:
-                author = start_message.author
-                if author.bot:
-                    return
+            author = first_message.author
+            if author.bot:
+                return
 
-                # 检查是否在允许奖励的服务器
-                if thread.guild.id not in chat_config.COIN_REWARD_GUILD_IDS:
-                    log.info(
-                        f"帖子创建于非奖励服务器 {thread.guild.name} ({thread.guild.id})，不发放奖励。"
-                    )
-                    return
+            # 检查服务器是否在奖励列表中已由中央处理器完成，这里直接执行逻辑
+            log.info(f"[CoinCog] 接收到新帖子进行奖励处理: {thread.name} ({thread.id})")
+            reward_amount = chat_config.COIN_CONFIG["FORUM_POST_REWARD"]
+            reason = f"在频道 {thread.parent.name} 发布新帖"
+            new_balance = await coin_service.add_coins(author.id, reward_amount, reason)
+            log.info(
+                f"[CoinCog] 用户 {author.name} ({author.id}) 因发帖获得 {reward_amount} 类脑币。新余额: {new_balance}"
+            )
 
-                reward_amount = chat_config.COIN_CONFIG["FORUM_POST_REWARD"]
-                reason = f"在频道 {thread.parent.name} 发布新帖"
-                new_balance = await coin_service.add_coins(
-                    author.id, reward_amount, reason
-                )
-                log.info(
-                    f"用户 {author.name} ({author.id}) 因发帖获得 {reward_amount} 类脑币。新余额: {new_balance}"
-                )
-
-        except discord.NotFound:
-            log.warning(f"无法为帖子 {thread.id} 找到起始消息，无法发放奖励。")
         except Exception as e:
-            log.error(f"处理帖子 {thread.id} 的发帖奖励时出错: {e}", exc_info=True)
+            log.error(
+                f"[CoinCog] 处理帖子 {thread.id} 的发帖奖励时出错: {e}", exc_info=True
+            )
 
     @app_commands.command(name="类脑商店", description="打开商店，购买商品。")
     async def shop(self, interaction: discord.Interaction):

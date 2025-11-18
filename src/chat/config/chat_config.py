@@ -159,6 +159,15 @@ COIN_REWARD_FORUM_CHANNEL_IDS = _parse_ids("COIN_REWARD_FORUM_CHANNEL_IDS")
 # 在指定服务器发帖可获得奖励
 COIN_REWARD_GUILD_IDS = _parse_ids("COIN_REWARD_GUILD_IDS")
 
+# 新帖子创建后，延迟多久发放奖励（秒）
+COIN_REWARD_DELAY_SECONDS = 30
+# 新帖子创建后，延迟多久进行RAG索引（秒）
+FORUM_SYNC_DELAY_SECONDS = 30
+# --- 帖子评价功能 ---
+THREAD_COMMENTOR_CONFIG = {
+    "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）
+}
+
 # --- 好感度系统 ---
 AFFECTION_CONFIG = {
     "INCREASE_CHANCE": 0.5,  # 每次对话增加好感度的几率
@@ -363,10 +372,6 @@ CONFESSION_PROMPT = """
 **请直接开始输出你的回应:**
 """
 
-# --- 帖子评价功能 ---
-THREAD_COMMENTOR_CONFIG = {
-    "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）
-}
 
 WARMUP_MESSAGES = {
     "consent_prompts": [
