@@ -35,6 +35,7 @@ class ForumSyncCog(commands.Cog):
         """Cog加载时执行初始化，并从数据库恢复回溯书签。"""
         await self.initialize_db()
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")  # 开启 WAL 模式增强稳定性
             cursor = await db.execute(
                 "SELECT channel_id, oldest_known_timestamp, is_complete FROM backfill_status"
             )
@@ -52,6 +53,7 @@ class ForumSyncCog(commands.Cog):
     async def initialize_db(self):
         """初始化数据库，创建所需的数据表。"""
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
             # 表1: 存储已处理的帖子ID，用于避免重复处理
             await db.execute(
                 """
@@ -80,6 +82,7 @@ class ForumSyncCog(commands.Cog):
             try:
                 # 使用 aiosqlite 连接池来处理并发写入
                 async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute("PRAGMA journal_mode=WAL")
                     cursor = await db.execute(
                         "SELECT 1 FROM processed_threads WHERE thread_id = ?",
                         (thread.id,),
@@ -173,6 +176,7 @@ class ForumSyncCog(commands.Cog):
                         "is_complete": True,
                     }
                     async with aiosqlite.connect(self.db_path) as db:
+                        await db.execute("PRAGMA journal_mode=WAL")
                         await db.execute(
                             "INSERT OR REPLACE INTO backfill_status (channel_id, oldest_known_timestamp, is_complete) VALUES (?, ?, 1)",
                             (channel_id, bookmark.get("timestamp")),
@@ -196,6 +200,7 @@ class ForumSyncCog(commands.Cog):
                     "is_complete": False,
                 }
                 async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute("PRAGMA journal_mode=WAL")
                     await db.execute(
                         "INSERT OR REPLACE INTO backfill_status (channel_id, oldest_known_timestamp, is_complete) VALUES (?, ?, 0)",
                         (channel_id, new_bookmark_ts),
@@ -231,6 +236,7 @@ class ForumSyncCog(commands.Cog):
         await forum_search_service.process_thread(thread)
         # 将新帖子ID添加到数据库，以防轮询任务重复处理
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
             await db.execute(
                 "INSERT OR IGNORE INTO processed_threads (thread_id) VALUES (?)",
                 (thread.id,),
