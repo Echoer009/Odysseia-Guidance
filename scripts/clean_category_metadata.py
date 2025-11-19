@@ -224,9 +224,19 @@ def clean_category_names():
             log.info("所有频道名称元数据都已经是干净的，无需更新。")
             return
 
-        log.info(f"共发现 {len(ids_to_update)} 条记录需要更新。正在批量写回数据库...")
-        forum_vector_db_service.update(ids=ids_to_update, metadatas=metadatas_to_update)
-        log.info("批量更新成功！元数据清洗完成。")
+        log.info(f"共发现 {len(ids_to_update)} 条记录需要更新。正在分批写回数据库...")
+
+        batch_size = 1000  # 设置一个安全的批处理大小
+        for i in range(0, len(ids_to_update), batch_size):
+            batch_ids = ids_to_update[i : i + batch_size]
+            batch_metadatas = metadatas_to_update[i : i + batch_size]
+
+            log.info(
+                f"正在处理批次 {i // batch_size + 1}，包含 {len(batch_ids)} 条记录..."
+            )
+            forum_vector_db_service.update(ids=batch_ids, metadatas=batch_metadatas)
+
+        log.info("所有批次更新成功！元数据清洗完成。")
 
     except Exception as e:
         log.error(f"在执行清洗脚本时发生严重错误: {e}", exc_info=True)
