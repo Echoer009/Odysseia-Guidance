@@ -3,6 +3,8 @@
 import logging
 from typing import List, Dict, Any
 import discord
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 from src.chat.features.forum_search.services.forum_vector_db_service import (
     forum_vector_db_service,
@@ -13,6 +15,8 @@ from src.chat.features.world_book.services.incremental_rag_service import (
 from src.chat.services.regex_service import regex_service
 
 log = logging.getLogger(__name__)
+
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
 
 class ForumSearchService:
@@ -101,6 +105,8 @@ class ForumSearchService:
             embeddings_to_add = []
             metadatas_to_add = []
 
+            beijing_created_at = thread.created_at.astimezone(BEIJING_TZ)
+
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{thread.id}:{i}"
                 gemini_service = self._get_gemini_service()
@@ -120,7 +126,8 @@ class ForumSearchService:
                             "category_name": category_name,
                             "channel_id": thread.parent_id,
                             "guild_id": thread.guild.id,
-                            "created_at": thread.created_at.isoformat(),
+                            "created_at": beijing_created_at.isoformat(),
+                            "created_timestamp": beijing_created_at.timestamp(),
                         }
                     )
 
@@ -206,30 +213,38 @@ class ForumSearchService:
         Returns:
             List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
-        if not self.is_ready():
-            log.error("论坛搜索服务尚未准备就绪，无法执行搜索。")
-            return []
-
         try:
             # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
             where_filter = None
             if filters:
                 conditions = []
-                date_filters = {}
-
                 for key, value in filters.items():
                     if value is None:
                         continue
 
                     if key == "start_date":
-                        date_filters["$gte"] = f"{value}T00:00:00"
+                        start_dt_naive = datetime.strptime(value, "%Y-%m-%d")
+                        start_dt_aware = start_dt_naive.replace(tzinfo=BEIJING_TZ)
+                        start_timestamp = start_dt_aware.timestamp()
+                        conditions.append(
+                            {"created_timestamp": {"$gte": start_timestamp}}
+                        )
                     elif key == "end_date":
-                        date_filters["$lte"] = f"{value}T23:59:59"
+                        end_dt_naive = datetime.strptime(value, "%Y-%m-%d")
+                        end_dt_aware = datetime.combine(end_dt_naive, time.max).replace(
+                            tzinfo=BEIJING_TZ
+                        )
+                        end_timestamp = end_dt_aware.timestamp()
+                        conditions.append(
+                            {"created_timestamp": {"$lte": end_timestamp}}
+                        )
                     else:
-                        conditions.append({key: {"$eq": value}})
-
-                if date_filters:
-                    conditions.append({"created_at": date_filters})
+                        # 如果值是列表，使用 '$in' 进行 "或" 匹配
+                        if isinstance(value, list):
+                            conditions.append({key: {"$in": value}})
+                        # 否则，使用 '$eq' 进行精确匹配
+                        else:
+                            conditions.append({key: {"$eq": value}})
 
                 if len(conditions) > 1:
                     where_filter = {"$and": conditions}
@@ -240,7 +255,10 @@ class ForumSearchService:
 
             # 2. 根据是否有有效 query 决定执行语义搜索还是元数据浏览
             if query and query.strip():
-                # --- 语义搜索逻辑 ---
+                # --- 语义搜索逻辑 (需要 Gemini) ---
+                if not self.is_ready():
+                    log.error("论坛搜索服务（Gemini）尚未准备就绪，无法执行语义搜索。")
+                    return []
                 log.info(f"执行语义搜索，查询: '{query}'")
                 gemini_service = self._get_gemini_service()
                 query_embedding = await gemini_service.generate_embedding(

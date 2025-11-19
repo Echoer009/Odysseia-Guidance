@@ -22,8 +22,10 @@ async def search_forum_threads(
     Args:
         query (str, optional): 用于语义搜索的核心查询内容。如果省略或为空字符串，则变为按 `filters` 浏览模式。
         filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
-            - `category_name` (str): 按指定的论坛频道名称进行过滤。
-            - `author_id` (str): 按作者的Discord ID过滤。要获取此ID，你必须引导用户使用@mention功能。ID应为纯数字字符串。
+            - `category_name` (Union[str, List[str]]): 按一个或多个论坛频道名称进行过滤。
+            - `author_id` (Union[str, List[str]]): 按一个或多个作者的Discord ID过滤。要获取此ID，你必须引导用户使用@mention功能。ID应为纯数字字符串。
+            - `start_date` (str): 筛选发布日期在此日期或之后的帖子 (格式: YYYY-MM-DD)。
+            - `end_date` (str): 筛选发布日期在此日期或之前的帖子 (格式: YYYY-MM-DD)。
 
     Returns:
         List[str]: 一个字符串列表，每个字符串格式为 '分类名 > https://discord.com/channels/...'。
@@ -31,28 +33,35 @@ async def search_forum_threads(
     if filters is None:
         filters = {}
 
-    # 修复：确保 author_id 是整数，并能处理 @mention 格式
+    # 修复：确保 author_id 是整数或整数列表，并能处理 @mention 格式
     if "author_id" in filters and filters["author_id"] is not None:
-        author_id_val = filters["author_id"]
+        author_id_input = filters["author_id"]
+        is_single_item = not isinstance(author_id_input, list)
+        author_id_list = [author_id_input] if is_single_item else author_id_input
 
-        # 检查并从 <@...> mention 格式中提取数字 ID
-        if (
-            isinstance(author_id_val, str)
-            and author_id_val.startswith("<@")
-            and author_id_val.endswith(">")
-        ):
-            import re
+        processed_ids = []
+        for author_id_val in author_id_list:
+            # 检查并从 <@...> mention 格式中提取数字 ID
+            if (
+                isinstance(author_id_val, str)
+                and author_id_val.startswith("<@")
+                and author_id_val.endswith(">")
+            ):
+                import re
 
-            match = re.search(r"\d+", author_id_val)
-            if match:
-                author_id_val = match.group(0)
+                match = re.search(r"\d+", author_id_val)
+                if match:
+                    author_id_val = match.group(0)
 
-        try:
-            # 将最终处理过的值转换为整数
-            filters["author_id"] = int(author_id_val)
-        except (ValueError, TypeError) as e:
-            log.error(f"无法将 author_id '{author_id_val}' 转换为整数: {e}")
-            return ["错误：提供的作者ID格式不正确，无法处理。"]
+            try:
+                # 将最终处理过的值转换为整数
+                processed_ids.append(int(author_id_val))
+            except (ValueError, TypeError) as e:
+                log.error(f"无法将 author_id '{author_id_val}' 转换为整数: {e}")
+                return ["错误：提供的作者ID列表中包含无法处理的格式。"]
+
+        # 如果原来是单个条目，就还用单个整数；如果原来是列表，就用列表
+        filters["author_id"] = processed_ids[0] if is_single_item else processed_ids
 
     # 健壮性处理：应对 query 被错误地传入 filters 字典内的情况
     if query is None and "query" in filters:
