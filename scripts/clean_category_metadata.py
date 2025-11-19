@@ -11,6 +11,8 @@ from pathlib import Path
 import discord
 from dotenv import load_dotenv
 from tqdm.asyncio import tqdm_asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # 将src目录添加到Python路径中，以便可以导入项目模块
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -28,6 +30,85 @@ logging.basicConfig(
 )
 
 log = logging.getLogger(__name__)
+
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def backfill_timestamps():
+    """
+    遍历数据库中的所有记录，
+    将 created_at 转换为北京时间，并填充 created_timestamp。
+    """
+    log.info("--- 开始执行时间戳回填和时区校准任务 ---")
+    if not forum_vector_db_service.is_available():
+        log.error("论坛向量数据库服务不可用。")
+        return
+
+    try:
+        log.info("正在从数据库中拉取所有记录的元数据...")
+        results = forum_vector_db_service.get(include=["metadatas"])
+        ids, metadatas = results.get("ids"), results.get("metadatas")
+
+        if not ids or not metadatas:
+            log.warning("数据库为空，无需处理。")
+            return
+
+        log.info(f"成功拉取 {len(ids)} 条记录。开始检查和转换时间戳...")
+        ids_to_update = []
+        metadatas_to_update = []
+
+        for doc_id, metadata in zip(ids, metadatas):
+            created_at_str = metadata.get("created_at")
+            if not created_at_str:
+                log.warning(f"文档 {doc_id} 缺少 'created_at' 字段，跳过。")
+                continue
+
+            try:
+                # fromisoformat 可以处理带时区信息的 ISO 字符串
+                utc_dt = datetime.fromisoformat(created_at_str)
+                beijing_dt = utc_dt.astimezone(BEIJING_TZ)
+
+                new_timestamp = beijing_dt.timestamp()
+                new_iso_str = beijing_dt.isoformat()
+
+                # 检查是否需要更新
+                # 1. created_timestamp 不存在
+                # 2. created_timestamp 存在但值不正确
+                # 3. created_at 字符串不是北京时区格式
+                if (
+                    metadata.get("created_timestamp") != new_timestamp
+                    or metadata.get("created_at") != new_iso_str
+                ):
+                    updated_metadata = metadata.copy()
+                    updated_metadata["created_at"] = new_iso_str
+                    updated_metadata["created_timestamp"] = new_timestamp
+                    ids_to_update.append(doc_id)
+                    metadatas_to_update.append(updated_metadata)
+
+            except (ValueError, TypeError) as e:
+                log.error(f"处理文档 {doc_id} 的时间戳 '{created_at_str}' 时出错: {e}")
+
+        if not ids_to_update:
+            log.info("所有记录的时间戳都已是最新且正确的北京时间，无需更新。")
+            return
+
+        log.info(
+            f"共发现 {len(ids_to_update)} 条记录需要更新时间戳。正在分批写回数据库..."
+        )
+
+        batch_size = 1000
+        for i in range(0, len(ids_to_update), batch_size):
+            batch_ids = ids_to_update[i : i + batch_size]
+            batch_metadatas = metadatas_to_update[i : i + batch_size]
+            log.info(
+                f"正在处理批次 {i // batch_size + 1}，包含 {len(batch_ids)} 条记录..."
+            )
+            forum_vector_db_service.update(ids=batch_ids, metadatas=batch_metadatas)
+
+        log.info("所有批次更新成功！时间戳回填和时区校准完成。")
+
+    except Exception as e:
+        log.error(f"在执行时间戳回填脚本时发生严重错误: {e}", exc_info=True)
 
 
 def show_unique_category_names():
@@ -253,10 +334,19 @@ async def main():
     parser.add_argument(
         "--fix-authors", action="store_true", help="修复作者姓名为'未知作者'的记录。"
     )
+    parser.add_argument(
+        "--backfill-timestamps",
+        action="store_true",
+        help="将所有记录的UTC时间戳转换为北京时间并填充新字段。",
+    )
     args = parser.parse_args()
 
-    if not any([args.show_names, args.clean_names, args.fix_authors]):
-        log.info("请至少选择一个操作: --show-names, --clean-names, 或 --fix-authors")
+    if not any(
+        [args.show_names, args.clean_names, args.fix_authors, args.backfill_timestamps]
+    ):
+        log.info(
+            "请至少选择一个操作: --show-names, --clean-names, --fix-authors, 或 --backfill-timestamps"
+        )
         return
 
     if args.show_names:
@@ -264,6 +354,9 @@ async def main():
 
     if args.clean_names:
         clean_category_names()
+
+    if args.backfill_timestamps:
+        backfill_timestamps()
 
     if args.fix_authors:
         intents = discord.Intents.default()
