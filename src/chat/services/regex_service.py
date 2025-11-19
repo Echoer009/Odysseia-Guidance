@@ -10,27 +10,45 @@ class RegexService:
 
     def clean_channel_name(self, name: str) -> str:
         """
-        清洗频道名称，移除 emoji 和常见的装饰性符号。
+        清洗频道名称，移除 emoji 和常见的装饰性符号，并应用特定的重命名规则。
         """
         if not isinstance(name, str):
             return name
 
-        # 移除 emoji - 使用一个更安全、更精确的 Unicode 范围，避免误删 CJK 字符
+        # 特定的重命名规则
+        special_rules = {
+            "🪓︱预设ᴾʳᵉˢᵉᵗ＆破限ᴶᴮ": "预设",
+            "💟︱教程分享": "教程",
+            "👑｜酒馆美化": "美化",
+            "🔧︱酒馆插件": "插件",
+        }
+
+        # 1. 优先应用特定的重命名规则
+        # 为了精确匹配，先对输入名称进行初步的通用清理
+        temp_cleaned_name = re.sub(r"\s+", " ", name).strip()
+        for original, new_name in special_rules.items():
+            # 也对规则中的键进行同样的清理，以防空格不一致
+            cleaned_original = re.sub(r"\s+", " ", original).strip()
+            if cleaned_original in temp_cleaned_name:
+                return new_name
+
+        # 2. 如果没有匹配到特定规则，则执行通用清理
+        # 移除 emoji
         emoji_pattern = re.compile(
             "["
             "\U0001f600-\U0001f64f"  # emoticons
             "\U0001f300-\U0001f5ff"  # symbols & pictographs
             "\U0001f680-\U0001f6ff"  # transport & map symbols
             "\U0001f1e0-\U0001f1ff"  # flags (iOS)
-            "\U00002600-\U000027bf"  # Miscellaneous Symbols and Dingbats
-            "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
+            "\U00002600-\U000027bf"  # Miscellaneous Symbols
+            "\U0001f900-\U0001f9ff"  # Supplemental Symbols
             "]+",
             flags=re.UNICODE,
         )
         cleaned_name = emoji_pattern.sub("", name)
 
         # 移除常见的装饰性字符
-        cleaned_name = re.sub(r"[|｜︱🔨🪓]", "", cleaned_name)
+        cleaned_name = re.sub(r"[|｜︱🔨🪓👑💟🔧]", "", cleaned_name)
 
         # 移除前后及中间多余的空格
         cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip()
