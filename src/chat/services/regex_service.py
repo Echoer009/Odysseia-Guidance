@@ -8,6 +8,35 @@ class RegexService:
     一个专门用于处理和清理文本中特定模式的的服务。
     """
 
+    def clean_channel_name(self, name: str) -> str:
+        """
+        清洗频道名称，移除 emoji 和常见的装饰性符号。
+        """
+        if not isinstance(name, str):
+            return name
+
+        # 移除 emoji - 使用一个更安全、更精确的 Unicode 范围，避免误删 CJK 字符
+        emoji_pattern = re.compile(
+            "["
+            "\U0001f600-\U0001f64f"  # emoticons
+            "\U0001f300-\U0001f5ff"  # symbols & pictographs
+            "\U0001f680-\U0001f6ff"  # transport & map symbols
+            "\U0001f1e0-\U0001f1ff"  # flags (iOS)
+            "\U00002600-\U000027bf"  # Miscellaneous Symbols and Dingbats
+            "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
+            "]+",
+            flags=re.UNICODE,
+        )
+        cleaned_name = emoji_pattern.sub("", name)
+
+        # 移除常见的装饰性字符
+        cleaned_name = re.sub(r"[|｜︱🔨🪓]", "", cleaned_name)
+
+        # 移除前后及中间多余的空格
+        cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip()
+
+        return cleaned_name
+
     def clean_ai_output(self, text: str) -> str:
         """
         清理AI模型的输出文本。

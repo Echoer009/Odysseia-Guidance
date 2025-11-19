@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from src.chat.features.forum_search.services.forum_vector_db_service import (
     forum_vector_db_service,
 )
+from src.chat.services.regex_service import regex_service
 
 # 配置日志记录
 logging.basicConfig(
@@ -29,36 +30,40 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def clean_channel_name(name: str) -> str:
-    """
-    清洗频道名称，移除 emoji 和常见的装饰性符号。
-    """
-    if not isinstance(name, str):
-        return name
+def show_unique_category_names():
+    """显示数据库中所有不重复的 category_name 元数据。"""
+    log.info("--- 开始执行显示不重复频道名称任务 ---")
+    if not forum_vector_db_service.is_available():
+        log.error("论坛向量数据库服务不可用。")
+        return
 
-    # 移除 emoji - 使用一个更安全、更精确的 Unicode 范围，避免误删 CJK 字符
-    emoji_pattern = re.compile(
-        "["
-        "\U0001f600-\U0001f64f"  # emoticons
-        "\U0001f300-\U0001f5ff"  # symbols & pictographs
-        "\U0001f680-\U0001f6ff"  # transport & map symbols
-        "\U0001f1e0-\U0001f1ff"  # flags (iOS)
-        "\U00002600-\U000027bf"  # Miscellaneous Symbols and Dingbats
-        "\U0001f900-\U0001f9ff"  # Supplemental Symbols and Pictographs
-        "]+",
-        flags=re.UNICODE,
-    )
-    cleaned_name = emoji_pattern.sub("", name)
+    try:
+        results = forum_vector_db_service.get(include=["metadatas"])
+        metadatas = results.get("metadatas")
 
-    # 移除常见的装饰性字符
-    # 使用 re.sub 替换多个字符，更高效
-    # 包括：'|', '｜' (全角), '︱' (另一种全角), '🔨', '🪓'
-    cleaned_name = re.sub(r"[|｜︱🔨🪓]", "", cleaned_name)
+        if not metadatas:
+            log.warning("数据库中没有找到任何元数据。")
+            return
 
-    # 移除前后及中间多余的空格
-    cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip()
+        unique_names = set()
+        for metadata in metadatas:
+            category_name = metadata.get("category_name")
+            if category_name:
+                unique_names.add(category_name)
 
-    return cleaned_name
+        if not unique_names:
+            log.info("数据库中没有找到任何 'category_name' 元数据。")
+            return
+
+        log.info(f"发现 {len(unique_names)} 个不重复的频道名称:")
+        # 为了更好的可读性，排序后输出
+        for name in sorted(list(unique_names)):
+            print(f"- {name}")
+
+    except Exception as e:
+        log.error(f"在执行显示频道名称脚本时发生严重错误: {e}", exc_info=True)
+
+    log.info("--- 显示不重复频道名称任务完成 ---")
 
 
 async def fix_author_names(client):
@@ -204,7 +209,8 @@ def clean_category_names():
         for doc_id, metadata in zip(ids, metadatas):
             original_name = metadata.get("category_name")
             if original_name:
-                cleaned_name = clean_channel_name(original_name)
+                # 使用集中的 regex_service 进行清洗
+                cleaned_name = regex_service.clean_channel_name(original_name)
                 if original_name != cleaned_name:
                     log.info(
                         f"清洗频道名称: '{original_name}' -> '{cleaned_name}' (ID: {doc_id})"
@@ -229,6 +235,9 @@ def clean_category_names():
 async def main():
     parser = argparse.ArgumentParser(description="论坛元数据维护工具。")
     parser.add_argument(
+        "--show-names", action="store_true", help="显示数据库中所有不重复的频道名称。"
+    )
+    parser.add_argument(
         "--clean-names", action="store_true", help="清洗频道名称中的无效字符。"
     )
     parser.add_argument(
@@ -236,9 +245,12 @@ async def main():
     )
     args = parser.parse_args()
 
-    if not args.clean_names and not args.fix_authors:
-        log.info("请至少选择一个操作: --clean-names 或 --fix-authors")
+    if not any([args.show_names, args.clean_names, args.fix_authors]):
+        log.info("请至少选择一个操作: --show-names, --clean-names, 或 --fix-authors")
         return
+
+    if args.show_names:
+        show_unique_category_names()
 
     if args.clean_names:
         clean_category_names()

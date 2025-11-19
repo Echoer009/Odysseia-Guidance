@@ -10,6 +10,7 @@ from src.chat.features.forum_search.services.forum_vector_db_service import (
 from src.chat.features.world_book.services.incremental_rag_service import (
     create_text_chunks,
 )
+from src.chat.services.regex_service import regex_service
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +85,8 @@ class ForumSearchService:
                     author_name = author.display_name
 
             # 提取论坛频道的名称作为分类
-            category_name = thread.parent.name if thread.parent else "未知分类"
+            raw_category_name = thread.parent.name if thread.parent else "未知分类"
+            category_name = regex_service.clean_channel_name(raw_category_name)
             document_text = content
 
             # 3. 文本分块
