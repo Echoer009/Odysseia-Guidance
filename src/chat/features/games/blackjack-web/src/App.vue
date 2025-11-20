@@ -28,6 +28,15 @@ const gameEnded = ref(false);
 const optimisticCard = ref<string | null>(null);
 const screenSize = ref('');
  
+// --- Floating Text State ---
+interface FloatingText {
+    id: number;
+    text: string;
+    type: 'win' | 'loss';
+}
+const floatingTexts = ref<FloatingText[]>([]);
+let nextFloatingId = 0;
+
 let accessToken: string | null = null;
 let countdownInterval: number | null = null;
 let dialogueTimeout: number | null = null;
@@ -202,16 +211,36 @@ function updateUIFromGameState(game: any) {
     dealerScore.value = game.dealer_score;
 }
 
+function addFloatingText(text: string, type: 'win' | 'loss') {
+    const id = nextFloatingId++;
+    floatingTexts.value.push({ id, text, type });
+    setTimeout(() => {
+        floatingTexts.value = floatingTexts.value.filter(t => t.id !== id);
+    }, 1500);
+}
+
 function endGame(finalGameState: any, newBalance: number) {
     updateUIFromGameState(finalGameState);
+    
+    // Calculate payout for floating text
+    const oldBalance = balance.value;
     if (newBalance !== undefined) {
         balance.value = newBalance;
     }
+    const diff = newBalance - oldBalance;
 
     let gameResult: GameResult = 'loss';
     if (finalGameState.game_state === 'finished_win') gameResult = 'win';
     else if (finalGameState.game_state === 'finished_blackjack') gameResult = 'blackjack';
     else if (finalGameState.game_state === 'finished_push') gameResult = 'push';
+
+    if (diff > 0) {
+        addFloatingText(`+${diff}`, 'win');
+    } else if (gameResult === 'loss') {
+        // If balance didn't change (0 payout), but it's a loss, maybe show -Bet?
+        // The bet was already deducted.
+        addFloatingText(`-${currentBet.value}`, 'loss');
+    }
 
     dealerExpression.value = gameResult === 'win' || gameResult === 'blackjack' ? 'lose' : 'win';
     let dialogueKey: DialogueKey = gameResult;
@@ -337,6 +366,13 @@ async function handleBet() {
     try {
         const response = await apiCall('/api/game/start', 'POST', { amount });
         if (response.success) {
+            // Floating text for bet deduction
+            const oldBalance = balance.value;
+            const diff = response.new_balance - oldBalance;
+            if (diff < 0) {
+                addFloatingText(`${diff}`, 'loss');
+            }
+
             currentBet.value = amount;
             balance.value = response.new_balance;
             currentView.value = 'game';
@@ -656,7 +692,15 @@ onMounted(() => {
                 <h1>类脑娘的BlackJack</h1>
                 <div class="messages">{{ messages }}</div>
                 <div id="betting-area" data-debug-size>
-                    <p class="balance-text">你的余额: <span>{{ balance }}</span></p>
+                    <p class="balance-text">
+                        你的余额: <span>{{ balance }}</span>
+                        <!-- Floating Text Container -->
+                        <div class="floating-text-container">
+                            <div v-for="text in floatingTexts" :key="text.id" class="floating-text" :class="text.type">
+                                {{ text.text }}
+                            </div>
+                        </div>
+                    </p>
                     <div id="betting-controls">
                         <div id="manual-bet-container">
                             <input type="number" v-model="betAmount" placeholder="输入赌注" min="1" :disabled="isRequestInFlight">
@@ -683,16 +727,16 @@ onMounted(() => {
             <div id="game-table" data-debug-size>
                 <div class="game-area" data-debug-size>
                     <h2>类脑娘 (<span>{{ dealerScore }}</span>)</h2>
-                    <div class="hand" data-debug-size>
-                        <img v-for="(card, index) in dealerHand" :key="'dealer-' + index" :src="card === 'Hidden' ? '/cards/Background.webp' : `/cards/${card}.webp`" class="card">
-                    </div>
+                    <TransitionGroup name="card" tag="div" class="hand" data-debug-size>
+                        <img v-for="(card, index) in dealerHand" :key="'dealer-' + index + '-' + card" :src="card === 'Hidden' ? '/cards/Background.webp' : `/cards/${card}.webp`" class="card">
+                    </TransitionGroup>
                 </div>
                 <div class="game-area" data-debug-size>
                     <h2>玩家 (<span>{{ playerScore }}</span>)</h2>
-                    <div class="hand" data-debug-size>
-                        <img v-for="(card, index) in playerHand" :key="'player-' + index" :src="`/cards/${card}.webp`" class="card">
-                        <img v-if="optimisticCard" src="/cards/Background.webp" class="card">
-                    </div>
+                    <TransitionGroup name="card" tag="div" class="hand" data-debug-size>
+                        <img v-for="(card, index) in playerHand" :key="'player-' + index + '-' + card" :src="`/cards/${card}.webp`" class="card">
+                        <img v-if="optimisticCard" key="optimistic" src="/cards/Background.webp" class="card">
+                    </TransitionGroup>
                 </div>
                 <div class="messages">{{ messages }}</div>
                 <div id="controls" data-debug-size>

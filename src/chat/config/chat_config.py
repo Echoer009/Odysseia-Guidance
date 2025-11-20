@@ -78,6 +78,7 @@ RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
 # RAG 搜索结果的距离阈值。分数越低越相似。
 # 只有距离小于或等于此值的知识才会被采纳。
 RAG_MAX_DISTANCE = 0.65
+FORUM_RAG_MAX_DISTANCE = 1.0
 
 
 # --- Gemini Service 配置 ---

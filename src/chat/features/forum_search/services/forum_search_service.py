@@ -13,6 +13,7 @@ from src.chat.features.world_book.services.incremental_rag_service import (
     create_text_chunks,
 )
 from src.chat.services.regex_service import regex_service
+from src.chat.config import chat_config as config
 
 log = logging.getLogger(__name__)
 
@@ -272,7 +273,7 @@ class ForumSearchService:
                     query_embedding=query_embedding,
                     n_results=n_results,
                     where_filter=where_filter,
-                    max_distance=1.0,
+                    max_distance=config.FORUM_RAG_MAX_DISTANCE,
                 )
                 return search_results
             else:

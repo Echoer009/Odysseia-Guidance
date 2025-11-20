@@ -24,9 +24,19 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Poppins', sans-serif;
-  background:
-    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.4) 100%),
-    var(--color-bg);
+  /* 1. 地面 (Floor) 层 */
+  background-color: #0f0c08;
+  /* 深咖啡/黑金基调 */
+  background-image:
+    /* 金色微尘纹理 - 模拟高级地毯的细闪 */
+    radial-gradient(rgba(212, 175, 55, 0.15) 1px, transparent 1px),
+    /* 深色菱形格纹 - 经典赌场地毯图案 */
+    repeating-linear-gradient(45deg, rgba(255, 215, 0, 0.03) 0px, rgba(255, 215, 0, 0.03) 1px, transparent 1px, transparent 40px),
+    repeating-linear-gradient(-45deg, rgba(255, 215, 0, 0.03) 0px, rgba(255, 215, 0, 0.03) 1px, transparent 1px, transparent 40px),
+    /* 整体光影压暗 */
+    radial-gradient(circle at center, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.8) 100%);
+  background-size: 30px 30px, 100% 100%, 100% 100%, 100% 100%;
+  /* 控制斑点大小 */
   color: var(--color-text-light);
   text-align: center;
   overflow: hidden;
@@ -100,14 +110,26 @@ body {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+  /* 呼吸动画：让看板娘更有生气 */
+  animation: breathe 4s ease-in-out infinite;
+  transform-origin: bottom center;
 }
 
 .dialogue-box {
-  background-color: rgba(0, 0, 0, 0.75);
-  color: var(--color-text-light);
-  padding: 10px 15px;
-  border-radius: 8px;
-  border: 1px solid var(--color-primary);
+  /* 弹跳入场动画 */
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  background: linear-gradient(to bottom, #fdfbf7, #f2efe9);
+  /* 米白色纸质感 */
+  color: #333;
+  /* 深色文字 */
+  padding: 15px 25px;
+  border-radius: 15px;
+  /* 圆润气泡 */
+  border: 1px solid #dcd0c0;
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
   box-sizing: border-box;
   position: absolute;
   min-height: 40px;
@@ -117,6 +139,7 @@ body {
   left: 50%;
   transform: translate(-50%, -100%);
   max-width: 300px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
 }
 
 .dialogue-box p {
@@ -393,19 +416,32 @@ body {
 
 #progress-bar-container {
   width: 100%;
-  height: 20px;
-  border: 2px solid var(--color-primary);
-  border-radius: 10px;
+  height: 24px;
+  border: 2px solid #3e2723;
+  /* 深色边框 */
+  border-radius: 4px;
+  /* 小圆角 */
   margin-top: 20px;
   overflow: hidden;
   box-sizing: border-box;
+  background-color: rgba(0, 0, 0, 0.3);
+  position: relative;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+#progress-bar-container::after {
+  display: none;
 }
 
 #progress-bar {
   width: 0%;
   height: 100%;
-  background-color: var(--color-primary);
+  background: #4caf50;
+  /* 纯绿色进度条 */
   transition: width 0.2s ease-in-out;
+  box-shadow: none;
+  position: relative;
+  z-index: 1;
 }
 
 .hidden {
@@ -415,9 +451,97 @@ body {
 
 h1,
 h2 {
-  color: var(--color-primary);
+  color: #f0e6d2;
+  /* 亮米色中心 */
   font-family: 'Playfair Display', serif;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  /* 优雅的衬线阴影，非发光 */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  letter-spacing: 1px;
+}
+
+/* 针对游戏区域添加更精致的容器感 (PC端生效) */
+@media (min-width: 481px) {
+
+  #game-table,
+  #betting-content-wrapper {
+    /* 布局修复：使用 align-self 和百分比宽度防止溢出 */
+    align-self: center;
+    width: 94%;
+    max-width: 1400px;
+    margin: 20px auto;
+    /* 居中 */
+    padding: 30px;
+    position: relative;
+    box-sizing: border-box;
+
+    /* 2. 牌桌实体 (Physical Table) 层 */
+
+    /* 核心：绿色毛毡台面 */
+    background-color: #35654d;
+    /* 使用 background-clip 分层控制：内容层是毛毡，边框层是木纹 */
+    background-clip: padding-box, padding-box, padding-box, border-box, border-box;
+    background-origin: padding-box, padding-box, padding-box, border-box, border-box;
+
+    background-image:
+      /* [层1-3: 牌桌毛毡 (Padding Box)] */
+      /* 1. 顶部聚光灯 */
+      radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.2) 80%),
+      /* 2. 毛毡噪点 */
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.12'/%3E%3C/svg%3E"),
+      /* 3. 基础绿色渐变 */
+      linear-gradient(180deg, #35654d 0%, #244a36 100%),
+
+      /* [层4: 边框 (Border Box)] - 纯色深咖啡，去繁就简 */
+      linear-gradient(0deg, #2d1b15, #2d1b15);
+
+    /* 3. 牌桌边缘 (The Rail) */
+    border: 25px solid transparent;
+    /* 透明边框，透出下层的木纹背景 */
+    border-radius: 20px;
+
+    /* 复杂的阴影组合来模拟体积感 + 抛光木材质感 */
+    box-shadow:
+      /* [内部] 扶手内侧阴影，让毛毡有陷入感 */
+      inset 0 0 15px rgba(0, 0, 0, 0.9),
+
+      /* [木材质感] 模拟木头上的高光和暗部，营造抛光效果 */
+      inset 0 8px 6px -6px rgba(255, 255, 255, 0.15),
+      /* 顶部高光 */
+      inset 0 -8px 6px -6px rgba(0, 0, 0, 0.4),
+      /* 底部反光/暗部 */
+
+      /* [外部] 桌子投射在地上的巨大阴影 */
+      0 30px 50px rgba(0, 0, 0, 0.9),
+      0 10px 20px rgba(0, 0, 0, 0.6);
+
+    clip-path: none;
+  }
+
+  /* 装饰线 - 改为极简的白色/浅绿色印刷线，去除金边感 */
+  #game-table::after,
+  #betting-content-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 25px;
+    left: 25px;
+    right: 25px;
+    bottom: 25px;
+    border: 2px solid rgba(212, 175, 55, 0.4);
+    /* 恢复雅致金边 */
+    box-shadow: 0 0 5px rgba(212, 175, 55, 0.2);
+    /* 微弱发光 */
+    border-radius: 8px;
+    /* 配合外框 */
+    pointer-events: none;
+    z-index: 1;
+    clip-path: none;
+  }
+
+  /* 移除之前的铆钉装饰 */
+  #game-table::before,
+  #betting-content-wrapper::before {
+    display: none;
+  }
 }
 
 #betting-view>h1 {
@@ -426,7 +550,13 @@ h2 {
 }
 
 .game-area h2 {
-  margin-bottom: 5px;
+  margin-bottom: 10px;
+  font-size: 1.2em;
+  opacity: 0.9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 5px;
+  display: inline-block;
+  min-width: 150px;
 }
 
 .hand {
@@ -443,30 +573,162 @@ h2 {
   /* 减小最小高度以适应新布局 */
   max-width: 100%;
   box-sizing: border-box;
+  position: relative;
+  /* 为动画定位 */
 }
 
 .card {
   width: 90px;
   height: 135px;
-  background-color: var(--color-text-light);
-  color: var(--color-bg);
-  border: 1px solid #333;
-  border-radius: 5px;
+  background-color: #f4f4f4;
+  /* 增加细微的亚麻纹理，提升纸牌质感 */
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.02) 0px, rgba(0, 0, 0, 0.02) 2px, transparent 2px, transparent 4px);
+  color: #222;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  /*稍微减小圆角，更硬朗一点*/
   margin: 3px;
-  /* 减小外边距以节省空间 */
   display: flex;
   justify-content: center;
   align-items: center;
   font-size: 1.8em;
-  /* 调整字体以适应更大的牌面 */
   font-weight: bold;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  /* 优化：更自然的卡牌投影 */
+  /* 更细腻的阴影，模拟卡牌厚度 */
+  box-shadow:
+    1px 1px 0px rgba(0, 0, 0, 0.1),
+    /* 侧边厚度感 */
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* 弹性效果 */
+  transform-origin: center center;
+  backface-visibility: hidden;
+}
+
+/* --- Card Animations (Fly-in) --- */
+/* 初始状态：从屏幕上方飞入，透明，轻微旋转 */
+.card-enter-from {
+  opacity: 0;
+  transform: translateY(-200px) translateX(50px) rotate(45deg) scale(0.5);
+}
+
+/* 结束状态：归位 */
+.card-enter-to {
+  opacity: 1;
+  transform: translateY(0) translateX(0) rotate(0) scale(1);
+}
+
+/* 离开状态：直接消失或飞走 */
+.card-leave-active {
+  position: absolute;
+  /* 确保离开时不会占位，让其他卡片平滑移动 */
+}
+
+.card-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+/* 列表重排动画 */
+.card-move {
+  transition: transform 0.5s ease;
+}
+
+/* 新增动画关键帧 */
+
+/* 1. 呼吸动画 */
+@keyframes breathe {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-3px) scale(1.005);
+  }
+}
+
+/* 2. 对话框弹跳 */
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -80%) scale(0.5);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+/* 3. 按钮飞入 (配合 nth-child 使用) */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 给下注选项添加依次飞入的效果 */
+#bet-options-container .bet-option-button {
+  animation: slideInUp 0.5s ease-out backwards;
+}
+
+#bet-options-container .bet-option-button:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+#bet-options-container .bet-option-button:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+#bet-options-container .bet-option-button:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+#bet-options-container .bet-option-button:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+/* 4. 视图淡入 */
+#betting-view,
+#game-view,
+#end-game-view {
+  animation: fadeView 0.5s ease-out;
+}
+
+@keyframes fadeView {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* --- PC Card Stacking --- */
 .hand .card:not(:first-child) {
   margin-left: -45px;
 }
+
+/* Hover效果，增加互动感 */
+.card:hover {
+  transform: translateY(-10px) rotate(2deg);
+  z-index: 5;
+  /* 浮起时层级提高 */
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
 
 #controls,
 #betting-controls {
@@ -495,50 +757,184 @@ h2 {
 }
 
 button {
-  background-color: var(--color-button-bg);
-  color: var(--color-text);
-  border: 2px solid var(--color-primary);
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 1em;
-  font-weight: bold;
+  /* 沉稳商务风格：深灰/黑底 + 银灰字 */
+  background: #1a1a1a;
+  color: #ccc;
+  border: 1px solid #333;
+  padding: 10px 30px;
+  border-radius: 2px;
+  /* 微小圆角，近乎直角 */
+  clip-path: none;
+
+  font-size: 0.95em;
+  font-weight: 500;
   font-family: 'Poppins', sans-serif;
+  /* 改回无衬线，更现代简洁 */
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  filter: none;
+
   text-transform: uppercase;
   letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+  text-shadow: none;
+  margin: 8px;
+  min-width: 100px;
 }
 
 button:hover {
-  background-color: var(--color-button-hover-bg);
-  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
-  transform: translateY(-2px);
+  background: #2d2d2d;
+  border-color: #555;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
 }
 
 button:active {
-  background-color: var(--color-button-active-bg);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  transform: translateY(0);
+  transform: translateY(1px);
+  background: #111;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* 移除所有额外装饰线 */
+button::before,
+button::after {
+  display: none;
+}
+
+button:focus:not(:active)::after {
+  animation: ripple 1s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0, 0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(20, 20);
+    opacity: 0;
+  }
+}
+
+/* 统一 Hover/Active 状态，移除原本的红色突兀效果 */
+button:hover {
+  /* 这里的样式已在上方通用 button:hover 定义，此处只需确保不被红色覆盖 */
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* 绿色按钮变种 (Hit/Stay等主要操作) */
+/* 主要操作 (Hit/Double) - 略微提亮，使用冷色调 */
+button.primary,
+#hit-button,
+#double-button {
+  background: #263238;
+  /* 深蓝灰 */
+  border-color: #455a64;
+  color: #eceff1;
+}
+
+button.primary:hover,
+#hit-button:hover,
+#double-button:hover {
+  background: #37474f;
+  border-color: #607d8b;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+  /* 移除发光 */
+}
+
+/* 次要操作 (Stand) - 保持深沉 */
+#stand-button {
+  background: #1a1a1a;
 }
 
 button:disabled {
-  background-color: var(--color-disabled-bg);
-  border-color: var(--color-disabled-text);
-  color: var(--color-disabled-text);
+  opacity: 0.4;
   cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .balance-text {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Playfair Display', serif;
   font-size: 1.5em;
   font-weight: 700;
-  color: var(--color-primary);
-  text-shadow: none;
-  margin: 15px 0;
+  color: #eee;
+  /* 银灰 */
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px 30px;
+  border-radius: 4px;
+  /* 方形 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* 银边 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  margin: 20px 0;
+  position: relative;
+  display: inline-block;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
 }
+
+.balance-text span {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- Floating Text Feedback --- */
+.floating-text-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.floating-text {
+  position: absolute;
+  font-family: 'Playfair Display', serif;
+  font-weight: bold;
+  font-size: 2rem;
+  animation: floatUp 2s ease-out forwards;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.floating-text.win {
+  color: #4ade80;
+  /* Green */
+}
+
+.floating-text.loss {
+  color: #ef4444;
+  /* Red */
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5);
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.2);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-80px) scale(1);
+  }
+}
+
 
 .messages {
   min-height: 2em;
@@ -550,22 +946,27 @@ button:disabled {
 }
 
 input[type="number"] {
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 2px solid var(--color-primary);
-  color: var(--color-text-light);
-  padding: 8px 12px;
-  border-radius: 5px;
-  font-size: 1em;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 2px solid #bcaaa4;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+  color: #3e2723;
+  padding: 10px 15px;
+  border-radius: 8px;
+  clip-path: none;
+  font-size: 1.1em;
   margin: 5px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: bold;
 }
 
 input[type="number"]::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: #8d6e63;
 }
 
 input[type="number"]:focus {
   outline: none;
-  box-shadow: 0 0 8px var(--color-primary);
+  border-color: #5c4033;
+  box-shadow: 0 0 0 3px rgba(92, 64, 51, 0.3);
 }
 
 /* --- End Game View Styles --- */
@@ -616,13 +1017,13 @@ input[type="number"]:focus {
 }
 
 #end-game-countdown {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Playfair Display', serif;
   font-weight: 900;
   font-size: 100vh;
   /* 进一步放大数字 */
-  color: rgb(108, 102, 35);
-  /* 初始颜色设置为不透明的暗金色 */
-  text-shadow: 2px 2px 15px rgba(0, 0, 0, 0.7);
+  color: rgba(255, 255, 255, 0.2);
+  /* 半透明白 */
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
   /* 增强阴影 */
   display: block;
   line-height: 1;
@@ -740,6 +1141,12 @@ input[type="number"]:focus {
     align-items: center;
     overflow-y: auto;
     box-sizing: border-box;
+    /* 移动端不需要外边框，空间太宝贵 */
+    border: none;
+    background: none;
+    box-shadow: none;
+    width: 100%;
+    margin: 0;
   }
 
   #betting-dealer-section,
