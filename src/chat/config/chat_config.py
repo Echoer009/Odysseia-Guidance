@@ -75,6 +75,10 @@ QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"
 RAG_N_RESULTS_DEFAULT = 5  # 普通聊天的默认值
 RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
 
+# RAG 搜索结果的距离阈值。分数越低越相似。
+# 只有距离小于或等于此值的知识才会被采纳。
+RAG_MAX_DISTANCE = 0.65
+
 
 # --- Gemini Service 配置 ---
 GEMINI_CHAT_CONFIG = {

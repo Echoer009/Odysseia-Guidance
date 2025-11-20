@@ -186,7 +186,7 @@ class VectorDBService:
         self,
         query_embedding: List[float],
         n_results: int = 3,
-        max_distance: float = 0.75,
+        max_distance: float = config.RAG_MAX_DISTANCE,
         where_filter: Dict[str, Any] = None,
     ) -> List[Dict[str, Any]]:
         """
