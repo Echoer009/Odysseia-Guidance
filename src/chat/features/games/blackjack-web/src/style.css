@@ -90,8 +90,8 @@ body {
   display: grid;
   /* 终极修复 V2: 使用 minmax(0, auto) 防止行高贪婪扩展，确保内容优先 */
   grid-template-rows: minmax(0, auto) minmax(0, auto) 1fr auto;
-  gap: 5px;
-  /* 减小间距以节省空间 */
+  gap: 0;
+  /* 移除通用间距，改为手动控制，以便拉近手牌和按钮的距离 */
   padding: 10px;
   box-sizing: border-box;
   overflow: hidden;
@@ -135,7 +135,8 @@ body {
   min-height: 40px;
   /* Visibility is now controlled by v-if in Vue. */
   z-index: 11;
-  top: -10px;
+  top: 20px;
+  /* 将其向下移动，避免贴顶 */
   left: 50%;
   transform: translate(-50%, -100%);
   max-width: 300px;
@@ -470,7 +471,8 @@ h2 {
     max-width: 1400px;
     margin: 20px auto;
     /* 居中 */
-    padding: 30px;
+    padding: 20px;
+    /* 减小内边距，增加内容区域 */
     position: relative;
     box-sizing: border-box;
 
@@ -522,10 +524,11 @@ h2 {
   #betting-content-wrapper::after {
     content: '';
     position: absolute;
-    top: 25px;
-    left: 25px;
-    right: 25px;
-    bottom: 25px;
+    top: 15px;
+    left: 15px;
+    right: 15px;
+    bottom: 15px;
+    /* 减小金线距离，增加可视范围 */
     border: 2px solid rgba(212, 175, 55, 0.4);
     /* 恢复雅致金边 */
     box-shadow: 0 0 5px rgba(212, 175, 55, 0.2);
@@ -542,11 +545,63 @@ h2 {
   #betting-content-wrapper::before {
     display: none;
   }
+
+  /* PC端布局重构：横向排列标题和卡牌，解决垂直重叠问题 */
+  .game-area {
+    display: grid;
+    /* 使用Grid布局实现精确控制 */
+    grid-template-columns: 1fr auto 1fr;
+    /* 左(标题) 中(卡牌) 右(空) */
+    align-items: center;
+    /* 垂直居中对齐 */
+    min-height: 140px;
+    /* 稍微减小最小高度 */
+    position: relative;
+    margin-bottom: 10px;
+    /* 给两个游戏区域之间加一点间隔 */
+  }
+
+  .game-area h2 {
+    grid-column: 1 / 2;
+    /* 放在第一列 */
+    margin-bottom: 0;
+    border: none !important;
+    /* 强制移除所有边框 */
+    padding: 0 30px 0 0;
+    /* 改为右侧留出间距，让文字靠近卡牌 */
+    justify-self: end;
+    /* 在网格单元内靠右对齐 */
+    text-align: right;
+    /* 文字靠右对齐 */
+    font-size: 2em;
+    /* 字号加大 */
+    display: flex;
+    align-items: center;
+    height: 100px;
+    white-space: nowrap;
+    /* 防止换行 */
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  }
+
+  /* 调整手牌区域 */
+  .hand {
+    grid-column: 2 / 3;
+    /* 放在中间列 */
+    margin: 0;
+    min-height: auto;
+    justify-content: center;
+    /* 卡牌在自己的格子内居中 */
+  }
 }
 
 #betting-view>h1 {
-  margin-top: 12vh;
+  margin-top: 1vh;
+  /* Drastically reduce top margin on mobile */
   margin-bottom: 1vh;
+  font-size: 1.5em;
+  /* Smaller title */
+  z-index: 2;
 }
 
 .game-area h2 {
@@ -566,11 +621,12 @@ h2 {
   /* 移除背景、圆角和内边距，使其透明 */
   background-color: transparent;
   border-radius: 0;
-  margin: 5px 0;
+  margin: 0;
+  /* 移除垂直边距 */
   padding: 0;
   flex-wrap: wrap;
-  min-height: 120px;
-  /* 减小最小高度以适应新布局 */
+  min-height: 100px;
+  /* 进一步减小最小高度 */
   max-width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -649,7 +705,7 @@ h2 {
   }
 }
 
-/* 2. 对话框弹跳 */
+/* 2. 对话框弹跳 (PC端，带位移) */
 @keyframes popIn {
   0% {
     opacity: 0;
@@ -659,6 +715,19 @@ h2 {
   100% {
     opacity: 1;
     transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+/* 2.1 对话框弹跳 (移动端，无位移，仅缩放) */
+@keyframes popInMobile {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -732,7 +801,8 @@ h2 {
 
 #controls,
 #betting-controls {
-  margin-top: 10px;
+  margin-top: 0;
+  /* 彻底移除上方间距，让它紧贴玩家手牌 */
   flex-shrink: 0;
   /* 防止控制按钮区域被压缩 */
 }
@@ -757,10 +827,14 @@ h2 {
 }
 
 button {
-  /* 沉稳商务风格：深灰/黑底 + 银灰字 */
+  /* 沉稳商务风格：深灰/黑底 + 暗金边 */
   background: #1a1a1a;
-  color: #ccc;
-  border: 1px solid #333;
+  color: #c5a059;
+  /* 暗金色文字 (比之前暗一些) */
+  border: 1px solid rgba(184, 134, 11, 0.6);
+  /* 暗金色边框 (Dark Goldenrod) */
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  /* 改为深色阴影，突出边框质感而非发光 */
   padding: 10px 30px;
   border-radius: 2px;
   /* 微小圆角，近乎直角 */
@@ -787,10 +861,12 @@ button {
 
 button:hover {
   background: #2d2d2d;
-  border-color: #555;
+  border-color: #d4af37;
+  /* 悬停时稍微提亮 */
   color: #fff;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  /* 增强立体感阴影 */
 }
 
 button:active {
@@ -833,13 +909,14 @@ button:active {
 }
 
 /* 绿色按钮变种 (Hit/Stay等主要操作) */
-/* 主要操作 (Hit/Double) - 略微提亮，使用冷色调 */
+/* 主要操作 (Hit/Double) - 略微提亮，但保持金边风格 */
 button.primary,
 #hit-button,
 #double-button {
   background: #263238;
   /* 深蓝灰 */
-  border-color: #455a64;
+  border-color: rgba(184, 134, 11, 0.5);
+  /* 统一暗金边 */
   color: #eceff1;
 }
 
@@ -847,9 +924,10 @@ button.primary:hover,
 #hit-button:hover,
 #double-button:hover {
   background: #37474f;
-  border-color: #607d8b;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
-  /* 移除发光 */
+  border-color: #c5a059;
+  /* 悬停时稍微提亮 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  /* 统一立体阴影 */
 }
 
 /* 次要操作 (Stand) - 保持深沉 */
@@ -1139,36 +1217,82 @@ input[type="number"]:focus {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    overflow-y: auto;
+    /* Disable scrolling, force fit */
+    overflow-y: hidden;
     box-sizing: border-box;
-    /* 移动端不需要外边框，空间太宝贵 */
-    border: none;
-    background: none;
-    box-shadow: none;
-    width: 100%;
-    margin: 0;
+    /* Add margin to prevent edge clipping and show background */
+    width: 94%;
+    margin: 10px auto 0;
+    /* Top margin, auto x-margin, 0 bottom */
+    position: relative;
+
+    /* Restore Table Visuals for Mobile */
+    /* 核心：绿色毛毡台面 */
+    background-color: #35654d;
+    background-clip: padding-box, padding-box, padding-box, border-box, border-box;
+    background-origin: padding-box, padding-box, padding-box, border-box, border-box;
+    background-image:
+      /* 1. 顶部聚光灯 (Weakened for mobile) */
+      radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.1) 80%),
+      /* 2. 毛毡噪点 */
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.12'/%3E%3C/svg%3E"),
+      /* 3. 基础绿色渐变 */
+      linear-gradient(180deg, #35654d 0%, #244a36 100%),
+      /* 4. 边框 (Border Box) */
+      linear-gradient(0deg, #2d1b15, #2d1b15);
+
+    /* 3. 牌桌边缘 (The Rail) - Thinner for mobile */
+    border: 15px solid transparent;
+    border-radius: 20px;
+    /* Increased radius for smoother corners */
+
+    /* Simplified shadows */
+    box-shadow:
+      inset 0 0 10px rgba(0, 0, 0, 0.8),
+      inset 0 4px 3px -3px rgba(255, 255, 255, 0.15),
+      inset 0 -4px 3px -3px rgba(0, 0, 0, 0.3),
+      0 10px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Mobile Table Decor Line */
+  #betting-content-wrapper::after,
+  #game-table::after {
+    content: '';
+    position: absolute;
+    /* Position closely inside the border */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 5px;
+    /* 5px gap from the felt edge */
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    border-radius: 10px;
+    /* Match curvature */
+    pointer-events: none;
+    z-index: 1;
+    box-shadow: 0 0 3px rgba(212, 175, 55, 0.2);
   }
 
   #betting-dealer-section,
   #game-dealer-section {
     grid-row: 2 / 3;
-    /* Explicitly place dealer in the second row */
-    /* --- MOBILE LAYOUT (Grid solution) --- */
     position: relative;
-    /* Re-integrate into the grid layout */
     bottom: auto;
     left: auto;
     width: 100%;
-    height: 200px;
-    /* MODIFIED: Reduced character height */
+    height: 160px;
+    /* Further reduced to save space */
     z-index: 10;
     display: flex;
     align-items: flex-end;
     justify-content: flex-start;
-    /* Align to the left */
     gap: 8px;
     transform: translateZ(0);
-    /* Promote to own layer to prevent flicker */
+    /* Pull dealer up slightly to overlap table bottom */
+    margin-top: -25px;
+    pointer-events: none;
+    /* Allow clicks through transparent parts if any */
   }
 
   /* Correctly target the image within the betting/game dealer sections */
@@ -1185,6 +1309,10 @@ input[type="number"]:focus {
     /* Make the dialogue box a flex item next to the image */
     position: relative;
     transform: none;
+    /* 使用移动端专用动画，防止继承 PC 端的位移 */
+    animation: popInMobile 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform-origin: bottom left;
+    /* 从气泡左下角弹出，更自然 */
     top: auto;
     left: auto;
     width: 180px;

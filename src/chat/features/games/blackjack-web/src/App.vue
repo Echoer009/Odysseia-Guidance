@@ -692,7 +692,7 @@ onMounted(() => {
                 <h1>类脑娘的BlackJack</h1>
                 <div class="messages">{{ messages }}</div>
                 <div id="betting-area" data-debug-size>
-                    <p class="balance-text">
+                    <div class="balance-text">
                         你的余额: <span>{{ balance }}</span>
                         <!-- Floating Text Container -->
                         <div class="floating-text-container">
@@ -700,7 +700,7 @@ onMounted(() => {
                                 {{ text.text }}
                             </div>
                         </div>
-                    </p>
+                    </div>
                     <div id="betting-controls">
                         <div id="manual-bet-container">
                             <input type="number" v-model="betAmount" placeholder="输入赌注" min="1" :disabled="isRequestInFlight">
