@@ -1175,7 +1175,18 @@ class DBView(discord.ui.View):
                 self.add_item(self.exit_search_button)
 
             if self.current_list_items:
-                self.add_item(self._create_item_select())
+                items_for_select = self.current_list_items
+                # 在搜索模式下，self.current_list_items 是 *完整* 的结果列表。
+                # 我们需要对其进行切片，以仅获取当前页面的项目用于下拉菜单。
+                # 在正常模式下，self.current_list_items 已经是分页的，因此无需切片。
+                if self.search_mode:
+                    start_idx = self.current_page * self.items_per_page
+                    end_idx = start_idx + self.items_per_page
+                    items_for_select = self.current_list_items[start_idx:end_idx]
+
+                # 仅当当前页面有项目可供选择时，才添加下拉菜单。
+                if items_for_select:
+                    self.add_item(self._create_item_select(items_for_select))
 
         elif self.view_mode == "detail":
             self.back_button = discord.ui.Button(
@@ -1233,11 +1244,11 @@ class DBView(discord.ui.View):
         select.callback = self.on_table_select
         return select
 
-    def _create_item_select(self) -> discord.ui.Select:
+    def _create_item_select(self, items_to_display: List) -> discord.ui.Select:
         """根据当前列表页的条目创建选择菜单"""
         options = []
         if self.current_table == "vector_db_metadata":
-            for item in self.current_list_items:
+            for item in items_to_display:
                 title = self._get_entry_title(item)
                 item_id = item["id"]
                 label = f"#{item_id}"
@@ -1249,7 +1260,7 @@ class DBView(discord.ui.View):
                 options.append(discord.SelectOption(label=label, value=str(item_id)))
         else:
             pk = self._get_primary_key_column()
-            for item in self.current_list_items:
+            for item in items_to_display:
                 title = self._get_entry_title(item)
                 item_id = item[pk]
                 label = f"#{item_id}. {title}"
