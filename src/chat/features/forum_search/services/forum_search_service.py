@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import random
 from typing import List, Dict, Any
 import discord
 from datetime import datetime, time
@@ -216,9 +215,6 @@ class ForumSearchService:
             List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
         try:
-            # 0. 检查是否启用了随机模式，并从过滤器中移除它
-            is_random_mode = filters.pop("random", False) if filters else False
-
             # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
             where_filter = None
             if filters:
@@ -258,33 +254,8 @@ class ForumSearchService:
 
             log.info(f"论坛搜索数据库过滤器 (where): {where_filter or '无'}")
 
-            # 2. 根据模式执行相应逻辑
-            if is_random_mode:
-                # --- 随机抽样逻辑 ---
-                log.info("执行随机抽样模式。")
-                all_matching_docs = self.vector_db_service.get(
-                    where=where_filter, include=[]
-                )
-                all_ids = all_matching_docs.get("ids", [])
-
-                if not all_ids:
-                    return []
-
-                sample_size = min(len(all_ids), n_results)
-                sampled_ids = random.sample(all_ids, k=sample_size)
-
-                results = self.vector_db_service.get(
-                    ids=sampled_ids, include=["metadatas"]
-                )
-                ids = results.get("ids", [])
-                metadatas = results.get("metadatas", [])
-                reconstructed_results = [
-                    {"id": id, "metadata": meta, "distance": 0.0}
-                    for id, meta in zip(ids, metadatas)
-                ]
-                return reconstructed_results
-
-            elif query and query.strip():
+            # 2. 根据是否有有效 query 决定执行语义搜索还是元数据浏览
+            if query and query.strip():
                 # --- 语义搜索逻辑 (需要 Gemini) ---
                 if not self.is_ready():
                     log.error("论坛搜索服务（Gemini）尚未准备就绪，无法执行语义搜索。")

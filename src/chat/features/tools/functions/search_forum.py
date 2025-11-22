@@ -21,16 +21,14 @@ async def search_forum_threads(
     """
     在社区论坛中搜索帖子。仅当用户明确想寻找、查询或浏览论坛内容时，使用此工具。
 
-    此工具有三种主要使用模式:
+    此工具有两种主要使用模式:
     1. **语义搜索**: 当用户提供具体的关键词时，使用 `query` 参数进行内容搜索。此时可选择性地附加 `filters` 来缩小范围。
-    2. **条件浏览**: 当用户只想按特定条件筛选帖子时（如按作者、时间），使用 `filters` 参数。此模式下 `query` 参数应为空。
-    3. **随机抽样**: 当用户想随机查看帖子时，在 `filters` 中加入 `"random": True`。此模式下 `query` 参数应为空。可以与其他过滤器（如 `author_id`）结合使用，实现“随机看某个作者的帖子”。
+    2. **条件浏览**: 当用户只想按特定条件筛选帖子时，如时间条件，作者条件;使用 `filters` 参数。**在这种模式下，`query` 参数可以、也应该为空。**
 
     Args:
         query (str, optional): 用于语义搜索的核心查询内容。如果用户只想按条件浏览，请将此项留空。
-        limit (int, optional): 希望返回的帖子链接的最大数量。由于搜索结果是按文本块聚合的，最终返回的唯一帖子数量可能少于此值。默认为 5，最大值为 20。
+        limit (int, optional): 返回结果的最大数量。默认为 5。
         filters (Dict[str, Any], optional): 一个或多个过滤条件。可以单独使用，也可以与 `query` 组合使用。
-            - `random` (bool): 设置为 `True` 以启用随机抽样模式。
             - `category_name` (Union[str, List[str]]): 按一个或多个论坛频道名称进行过滤。
             - `author_id` (Union[str, List[str]]): 按一个或多个作者的Discord ID过滤。要获取此ID，你必须引导用户使用@mention功能。ID应为纯数字字符串。
             - `start_date` (str): 筛选发布日期在此日期或之后的帖子 (格式: YYYY-MM-DD)。
@@ -84,9 +82,7 @@ async def search_forum_threads(
         log.error(
             "工具 'search_forum_threads' 被调用，但缺少 'query' 和 'filters' 参数。"
         )
-        return [
-            "错误：你需要提供一个关键词或者至少一个筛选条件（例如按作者、按频道等）。"
-        ]
+        return ["错误：你需要提供一个关键词或者至少一个筛选条件（比如频道名称）。"]
 
     log.info(f"工具 'search_forum_threads' 被调用，查询: {query}, 过滤器: {filters}")
 
