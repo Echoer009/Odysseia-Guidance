@@ -216,7 +216,7 @@ class ForumSearchService:
         """
         try:
             # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
-            where_filter = None
+            where_filter = {}
             if filters:
                 conditions = []
                 for key, value in filters.items():
