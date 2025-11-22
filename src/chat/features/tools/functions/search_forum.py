@@ -89,8 +89,20 @@ async def search_forum_threads(
     if not forum_search_service.is_ready():
         return ["论坛搜索服务当前不可用，请稍后再试。"]
 
+    log.info(
+        f"[SEARCH_FORUM_TOOL] 准备调用 forum_search_service.search。Limit: {limit}"
+    )
+    import time
+
+    start_time = time.monotonic()
+
     results = await forum_search_service.search(query, n_results=limit, filters=filters)
-    log.info(f"原始搜索结果: {results}")
+
+    duration = time.monotonic() - start_time
+    log.info(
+        f"[SEARCH_FORUM_TOOL] forum_search_service.search 调用完成, 耗时: {duration:.4f} 秒。"
+    )
+    log.debug(f"原始搜索结果: {results}")
 
     if not results:
         return []
@@ -114,6 +126,8 @@ async def search_forum_threads(
             output_string = f"{category_name} > {thread_url}"
             output_list.append(output_string)
             processed_thread_ids.add(thread_id)
+            if len(processed_thread_ids) >= limit:
+                break
         else:
             log.warning(f"元数据缺少 guild_id，无法为帖子 {thread_id} 创建链接。")
 

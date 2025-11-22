@@ -132,6 +132,7 @@ class VectorDBService:
         self,
         ids: List[str] = None,
         where: Dict[str, Any] = None,
+        limit: int = None,
         include: List[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -141,8 +142,23 @@ class VectorDBService:
             log.error("VectorDB 服务不可用，无法获取文档。")
             return {}
         try:
+            log.info(
+                f"[VECTOR_DB] 准备调用 collection.get。参数 - where: {where}, limit: {limit}"
+            )
+            import time
+
+            start_time = time.monotonic()
+
             collection = self.client.get_or_create_collection(name=self.collection_name)
-            return collection.get(ids=ids, where=where, include=include)
+            results = collection.get(ids=ids, where=where, limit=limit, include=include)
+
+            duration = time.monotonic() - start_time
+            result_count = len(results.get("ids", [])) if results else 0
+            log.info(
+                f"[VECTOR_DB] collection.get 调用完成。耗时: {duration:.4f} 秒, 返回 {result_count} 条记录。"
+            )
+
+            return results
         except Exception as e:
             log.error(f"从 ChromaDB 获取文档时出错: {e}", exc_info=True)
             return {}

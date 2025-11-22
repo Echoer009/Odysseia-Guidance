@@ -287,11 +287,23 @@ class ForumSearchService:
                     return []
 
                 # 直接从数据库获取所有匹配的文档
+                log.info(
+                    f"[FORUM_SEARCH] 准备调用 vector_db.get 进行元数据浏览。过滤器: {where_filter}。注意：此处未传递 limit。"
+                )
+                import time
+
+                start_time = time.monotonic()
+
                 results = self.vector_db_service.get(
                     where=where_filter, include=["metadatas"]
                 )
+
+                duration = time.monotonic() - start_time
                 ids = results.get("ids", [])
                 metadatas = results.get("metadatas", [])
+                log.info(
+                    f"[FORUM_SEARCH] vector_db.get 调用完成，耗时: {duration:.4f} 秒，返回了 {len(ids)} 条原始记录。"
+                )
 
                 if not ids:
                     return []
