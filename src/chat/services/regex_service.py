@@ -103,11 +103,10 @@ class RegexService:
         if not isinstance(text, str):
             return ""
 
-        # 移除 (), （）, [], 【】, {}, 《》 及其内部内容
+        # 移除 (), （）, [], 【】, {} 及其内部内容
         text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
         text = re.sub(r"[\[【][^\]】]*[\]】]:?\s*", "", text)
         text = re.sub(r"\{[^\}]*\}", "", text)
-        text = re.sub(r"《[^》]*》", "", text)
 
         # 移除所有剩余的XML/HTML标签
         # 此时真实的Discord表情应该已经被移除了，所以我们可以安全地移除所有 <...> 格式的文本
