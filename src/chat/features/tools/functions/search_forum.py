@@ -4,6 +4,7 @@ import logging
 from src.chat.features.forum_search.services.forum_search_service import (
     forum_search_service,
 )
+from src.chat.config import chat_config as config
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +13,10 @@ from typing import Dict, Any, List, Union
 
 
 async def search_forum_threads(
-    query: str = None, filters: Dict[str, Any] = None, **kwargs
+    query: str = None,
+    filters: Dict[str, Any] = None,
+    limit: int = config.FORUM_SEARCH_DEFAULT_LIMIT,
+    **kwargs,
 ) -> List[str]:
     """
     在社区论坛中搜索帖子。仅当用户明确想寻找、查询或浏览论坛内容时，使用此工具。
@@ -23,6 +27,7 @@ async def search_forum_threads(
 
     Args:
         query (str, optional): 用于语义搜索的核心查询内容。如果用户只想按条件浏览，请将此项留空。
+        limit (int, optional): 返回结果的最大数量。默认为 5。
         filters (Dict[str, Any], optional): 一个或多个过滤条件。可以单独使用，也可以与 `query` 组合使用。
             - `category_name` (Union[str, List[str]]): 按一个或多个论坛频道名称进行过滤。
             - `author_id` (Union[str, List[str]]): 按一个或多个作者的Discord ID过滤。要获取此ID，你必须引导用户使用@mention功能。ID应为纯数字字符串。
@@ -81,7 +86,7 @@ async def search_forum_threads(
     if not forum_search_service.is_ready():
         return ["论坛搜索服务当前不可用，请稍后再试。"]
 
-    results = await forum_search_service.search(query, filters=filters)
+    results = await forum_search_service.search(query, n_results=limit, filters=filters)
     log.info(f"原始搜索结果: {results}")
 
     if not results:
@@ -108,8 +113,5 @@ async def search_forum_threads(
             processed_thread_ids.add(thread_id)
         else:
             log.warning(f"元数据缺少 guild_id，无法为帖子 {thread_id} 创建链接。")
-
-        if len(processed_thread_ids) >= 5:
-            break
 
     return output_list
