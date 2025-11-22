@@ -632,12 +632,24 @@ class GeminiService:
             if log_detailed:
                 log.info(f"--- [工具调用循环: 第 {i + 1}/{max_calls} 次] ---")
 
-            # 步骤 2: 调用模型并接收建议
-            response = await client.aio.models.generate_content(
-                model=(model_name or self.default_model_name),
-                contents=conversation_history,  # 传入完整的历史记录
-                config=gen_config,
-            )
+            # --- (新增) 空白响应重试循环 ---
+            response = None
+            for attempt in range(2):  # 最多尝试2次
+                # 步骤 2: 调用模型并接收建议
+                response = await client.aio.models.generate_content(
+                    model=(model_name or self.default_model_name),
+                    contents=conversation_history,  # 传入完整的历史记录
+                    config=gen_config,
+                )
+
+                # 检查响应是否为空 (没有文本部分也没有工具调用)
+                if response and (response.parts or response.function_calls):
+                    break  # 响应有效，跳出重试循环
+
+                log.warning(f"模型返回空响应 (尝试 {attempt + 1}/2)。将在1秒后重试...")
+                if attempt < 1:  # 如果不是最后一次尝试，则等待
+                    await asyncio.sleep(1)
+            # --- 重试循环结束 ---
 
             # --- 核心日志：根据最新指南 (2025) 提取并记录思考过程 ---
             if log_detailed:

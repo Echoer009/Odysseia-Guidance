@@ -274,14 +274,13 @@ class ForumSearchService:
                 sampled_ids = random.sample(all_ids, k=sample_size)
 
                 results = self.vector_db_service.get(
-                    ids=sampled_ids, include=["metadatas", "documents"]
+                    ids=sampled_ids, include=["metadatas"]
                 )
                 ids = results.get("ids", [])
                 metadatas = results.get("metadatas", [])
-                documents = results.get("documents", [])
                 reconstructed_results = [
-                    {"id": id, "content": doc, "metadata": meta, "distance": 0.0}
-                    for id, doc, meta in zip(ids, documents, metadatas)
+                    {"id": id, "metadata": meta, "distance": 0.0}
+                    for id, meta in zip(ids, metadatas)
                 ]
                 return reconstructed_results
 
@@ -305,6 +304,9 @@ class ForumSearchService:
                     where_filter=where_filter,
                     max_distance=config.FORUM_RAG_MAX_DISTANCE,
                 )
+                # 移除正文内容以减少 Token 消耗和日志干扰
+                for result in search_results:
+                    result.pop("content", None)
                 return search_results
             else:
                 # --- 元数据浏览逻辑 ---
@@ -315,19 +317,18 @@ class ForumSearchService:
 
                 # 直接从数据库获取所有匹配的文档
                 results = self.vector_db_service.get(
-                    where=where_filter, include=["metadatas", "documents"]
+                    where=where_filter, include=["metadatas"]
                 )
                 ids = results.get("ids", [])
                 metadatas = results.get("metadatas", [])
-                documents = results.get("documents", [])
 
                 if not ids:
                     return []
 
                 # 重构结果以便排序
                 reconstructed_results = [
-                    {"id": id, "content": doc, "metadata": meta, "distance": 0.0}
-                    for id, doc, meta in zip(ids, documents, metadatas)
+                    {"id": id, "metadata": meta, "distance": 0.0}
+                    for id, meta in zip(ids, metadatas)
                 ]
 
                 # 按创建时间倒序排序
