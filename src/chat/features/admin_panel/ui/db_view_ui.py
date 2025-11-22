@@ -937,7 +937,7 @@ class SearchVectorDBModal(discord.ui.Modal):
             )
 
             # 性能优化：ChromaDB 不支持模糊搜索，我们先只获取元数据进行过滤
-            all_items = collection.get(where={}, include=["metadatas"])
+            all_items = collection.get(include=["metadatas"])
 
             if not all_items or not all_items["ids"]:
                 await interaction.followup.send(
@@ -2021,7 +2021,6 @@ class DBView(discord.ui.View):
                 total_items = collection.count()
                 offset = self.current_page * self.items_per_page
                 results = collection.get(
-                    where={},
                     limit=self.items_per_page,
                     offset=offset,
                     include=["metadatas", "documents"],

@@ -147,6 +147,70 @@ class ForumSearchService:
         except Exception as e:
             log.error(f"处理帖子 {thread.id} 时发生错误: {e}", exc_info=True)
 
+    async def add_documents_batch(
+        self, ids: List[str], documents: List[str], metadatas: List[Dict[str, Any]]
+    ):
+        """
+        从备份数据批量添加文档，包含重新分块和向量化。
+        这是为 --restore-from 功能设计的核心方法。
+        """
+        if not self.is_ready():
+            log.warning("论坛搜索服务尚未准备就绪，无法添加文档。")
+            return
+
+        all_ids_to_add = []
+        all_documents_to_add = []
+        all_embeddings_to_add = []
+        all_metadatas_to_add = []
+
+        gemini_service = self._get_gemini_service()
+
+        for doc_id, document, metadata in zip(ids, documents, metadatas):
+            try:
+                # 1. 文本分块 (与 process_thread 逻辑保持一致)
+                chunks = create_text_chunks(document, max_chars=1000)
+                if not chunks:
+                    log.warning(f"文档 {doc_id} 的内容无法分块，已跳过。")
+                    continue
+
+                title = metadata.get("thread_name", "")
+
+                # 2. 为每个块生成嵌入
+                for i, chunk in enumerate(chunks):
+                    chunk_id = f"{doc_id}:{i}"
+                    embedding = await gemini_service.generate_embedding(
+                        text=chunk, title=title, task_type="retrieval_document"
+                    )
+                    if embedding:
+                        all_ids_to_add.append(chunk_id)
+                        all_documents_to_add.append(chunk)
+                        all_embeddings_to_add.append(embedding)
+                        # 清理元数据：移除 ChromaDB 的保留键，防止崩溃
+                        safe_metadata = metadata.copy() if metadata else {}
+                        if "chroma:document" in safe_metadata:
+                            del safe_metadata["chroma:document"]
+
+                        # 确保清理后的元数据不为空
+                        if not safe_metadata:
+                            safe_metadata["recovered_doc_id"] = str(doc_id)
+
+                        all_metadatas_to_add.append(safe_metadata)
+
+            except Exception as e:
+                log.error(f"为文档 {doc_id} 生成嵌入时发生错误: {e}", exc_info=True)
+
+        # 3. 最终批量写入数据库
+        if all_ids_to_add:
+            self.vector_db_service.add_documents(
+                ids=all_ids_to_add,
+                documents=all_documents_to_add,
+                embeddings=all_embeddings_to_add,
+                metadatas=all_metadatas_to_add,
+            )
+            log.info(
+                f"成功将 {len(ids)} 个原始文档（共 {len(all_ids_to_add)} 个块）添加到向量数据库。"
+            )
+
     async def get_oldest_indexed_thread_timestamp(self, channel_id: int) -> str | None:
         """
         获取指定频道中已索引的最旧帖子的创建时间戳。
