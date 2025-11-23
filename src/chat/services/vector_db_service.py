@@ -228,12 +228,17 @@ class VectorDBService:
         try:
             # 在操作前获取最新的集合对象
             collection = self.client.get_or_create_collection(name=self.collection_name)
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=where_filter,  # 添加元数据过滤器
-                include=["documents", "distances", "metadatas"],  # 明确请求返回元数据
-            )
+            # 动态构建查询参数
+            query_params = {
+                "query_embeddings": [query_embedding],
+                "n_results": n_results,
+                "include": ["documents", "distances", "metadatas"],
+            }
+            # 仅在 where_filter 有效时（不为 None 且不为空字典）才添加它
+            if where_filter:
+                query_params["where"] = where_filter
+
+            results = collection.query(**query_params)
 
             # 解包并格式化结果
             unfiltered_results = []
