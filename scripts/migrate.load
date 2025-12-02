@@ -1,0 +1,53 @@
+-- ============================================================
+-- PGLOADER MIGRATION SCRIPT (FINAL AUTOMATED VERSION)
+-- ============================================================
+
+-- 1. Migrate guidance.db -> schema 'guidance'
+LOAD DATABASE
+    FROM sqlite:///data/data/guidance.db
+    INTO postgresql://postgres:000000@host.docker.internal:5432/braingirl_db
+
+WITH include drop, create tables, create indexes, reset sequences
+
+-- 🔥 核心修改：先拆 (DROP) 后建 (CREATE)，给数据留好位置
+BEFORE LOAD DO
+  $$ DROP SCHEMA IF EXISTS guidance CASCADE; $$,
+  $$ CREATE SCHEMA guidance; $$
+
+ALTER SCHEMA 'main' RENAME TO 'guidance'
+
+SET work_mem to '16MB', maintenance_work_mem to '512 MB';
+
+
+-- 2. Migrate chat.db -> schema 'chat'
+LOAD DATABASE
+    FROM sqlite:///data/data/chat.db
+    INTO postgresql://postgres:000000@host.docker.internal:5432/braingirl_db
+
+WITH include drop, create tables, create indexes, reset sequences
+
+-- 🔥 核心修改：先拆后建
+BEFORE LOAD DO
+  $$ DROP SCHEMA IF EXISTS chat CASCADE; $$,
+  $$ CREATE SCHEMA chat; $$
+
+ALTER SCHEMA 'main' RENAME TO 'chat'
+
+SET work_mem to '16MB', maintenance_work_mem to '512 MB';
+
+
+-- 3. Migrate world_book.sqlite3 -> schema 'world_book'
+LOAD DATABASE
+    FROM sqlite:///data/data/world_book.sqlite3
+    INTO postgresql://postgres:000000@host.docker.internal:5432/braingirl_db
+
+WITH include drop, create tables, create indexes, reset sequences
+
+-- 🔥 核心修改：先拆后建
+BEFORE LOAD DO
+  $$ DROP SCHEMA IF EXISTS world_book CASCADE; $$,
+  $$ CREATE SCHEMA world_book; $$
+
+ALTER SCHEMA 'main' RENAME TO 'world_book'
+
+SET work_mem to '16MB', maintenance_work_mem to '512 MB';

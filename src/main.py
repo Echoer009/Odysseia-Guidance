@@ -36,6 +36,7 @@ from src.chat.services.review_service import initialize_review_service
 from src.chat.features.work_game.services.work_db_service import WorkDBService
 from src.chat.utils.command_sync import sync_commands
 from src.chat.config import chat_config
+from src.chat.services.postgres_vector_service import postgres_vector_service
 
 current_script_path = os.path.abspath(__file__)
 current_dir = os.path.dirname(current_script_path)
@@ -440,6 +441,9 @@ async def main():
     log.info("初始化 World Book 数据库...")
     await world_book_db_manager.init_async()
     await chat_db_manager.init_async()
+
+    log.info("初始化 Postgres Vector Service...")
+    await postgres_vector_service.initialize()
 
     # 3.5. 初始化商店商品
     from src.chat.features.odysseia_coin.service.coin_service import (

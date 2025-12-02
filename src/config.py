@@ -30,6 +30,15 @@ def _parse_ids(env_var: str) -> set[int]:
 # 用于在开发时快速同步命令，请在 .env 文件中设置
 GUILD_ID = os.getenv("GUILD_ID")
 
+# --- PostgreSQL 配置 ---
+# 从环境变量加载 PostgreSQL 连接信息
+PG_HOST = os.getenv("PG_HOST", "localhost")
+PG_PORT = int(os.getenv("PG_PORT", 5432))
+PG_DATABASE = os.getenv("PG_DATABASE")
+PG_USER = os.getenv("PG_USER")
+PG_PASSWORD = os.getenv("PG_PASSWORD")
+
+
 # --- 代理配置 ---
 PROXY_URL = os.getenv("PROXY_URL")
 

@@ -4,14 +4,16 @@ python-dotenv
 Pillow
 requests
 aiohttp
-aiosqlite
+asyncpg
 google-genai
 google-api-core
 PyYAML
-chromadb
+psycopg2-binary
 objgraph
 uvloop; sys_platform != 'win32'
 apscheduler
+chromadb
+tqdm
 
 # Web UI 依赖
 fastapi
@@ -23,5 +25,5 @@ psutil
 
 # 测试依赖
 pytest
-pytest-asyncio
+pytest-asynci 
 pytest-dotenv
