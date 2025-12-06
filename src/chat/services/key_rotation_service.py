@@ -123,7 +123,8 @@ class KeyRotationService:
 
                 if available_keys:
                     # 找到最久未使用的Key
-                    best_key = min(available_keys, key=lambda k: k.last_used)
+                    # 从可用密钥中随机选择一个
+                    best_key = random.choice(available_keys)
                     best_key.status = KeyStatus.IN_USE
                     best_key.last_used = now
                     log.info(f"获取到密钥: ...{best_key.key[-4:]}")
