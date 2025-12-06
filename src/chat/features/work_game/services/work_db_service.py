@@ -77,25 +77,51 @@ class WorkDBService:
         status["last_work_timestamp"] = now
 
         # --- 全勤奖逻辑 ---
-        consecutive_days = 1
-        is_streak_achieved = False
+        # --- 全勤奖逻辑 (已修复) ---
+        # 修复了同一天多次打工导致连续天数重置的BUG
+        #
+        # 旧逻辑问题:
+        # 1. 每次开始时都将 `consecutive_days` 初始化为 1, 导致无法正确继承之前的连续天数。
+        # 2. 当用户在同一天第二次打工时, `last_streak_date == yesterday` 和
+        #    `last_streak_date != now.date()` 两个条件都不满足, 导致 `consecutive_days`
+        #    维持初始值 1, 从而错误地重置了用户的连续记录。
+        #
+        # 新逻辑:
+        # 1. 首先从数据库状态 `status` 中获取当前的连续天数。
+        # 2. 检查上次打工日期 `last_streak_date` 是否存在且早于今天。
+        # 3. 如果上次打工是昨天, 则连续天数加一。
+        # 4. 如果上次打工不是昨天 (且不是今天), 则说明中断, 连续天数重置为 1。
+        # 5. 如果上次打工就是今天, 则不进行任何操作, 保持现有连续天数。
+
+        now_date = now.date()
         last_streak_date_str = status.get("last_streak_date")
+        consecutive_days = status.get("consecutive_work_days", 0)
+        is_streak_achieved = False
 
         if last_streak_date_str:
             last_streak_date = datetime.fromisoformat(last_streak_date_str).date()
-            yesterday = now.date() - timedelta(days=1)
 
+            # [最终修复] 如果今天已经打过工，直接返回现有状态，不进行任何计算
+            if last_streak_date == now_date:
+                # 在返回前，仍然需要更新数据库以确保状态一致
+                status["last_streak_date"] = now_date.isoformat()
+                await self._update_user_work_status_from_dict(user_id, status)
+                return False, consecutive_days
+
+            yesterday = now_date - timedelta(days=1)
             if last_streak_date == yesterday:
-                consecutive_days = status.get("consecutive_work_days", 0) + 1
-            elif last_streak_date != now.date():
-                consecutive_days = 1  # Streak broken
+                consecutive_days += 1
+            else:
+                consecutive_days = 1
+        else:
+            consecutive_days = 1
 
         if consecutive_days >= WorkConfig.STREAK_DAYS:
             is_streak_achieved = True
-            consecutive_days = 0  # Reset streak after reward
+            consecutive_days = 0
 
         status["consecutive_work_days"] = consecutive_days
-        status["last_streak_date"] = today_str
+        status["last_streak_date"] = now_date.isoformat()
 
         # --- 更新数据库 ---
         await self._update_user_work_status_from_dict(user_id, status)
