@@ -529,13 +529,171 @@ class GeminiService:
 
         return wrapper
 
-    @_api_key_handler
     async def generate_response(
         self,
         user_id: int,
         guild_id: int,
         message: str,
-        channel: Optional[Any] = None,  # 新增: 接收 channel 对象
+        channel: Optional[Any] = None,
+        replied_message: Optional[str] = None,
+        images: Optional[List[Dict]] = None,
+        user_name: str = "用户",
+        channel_context: Optional[List[Dict]] = None,
+        world_book_entries: Optional[List[Dict]] = None,
+        personal_summary: Optional[str] = None,
+        affection_status: Optional[Dict[str, Any]] = None,
+        user_profile_data: Optional[Dict[str, Any]] = None,
+        guild_name: str = "未知服务器",
+        location_name: str = "未知位置",
+        model_name: Optional[str] = None,
+    ) -> str:
+        """
+        AI 回复生成的分发器。
+        如果选择了自定义模型，则优先尝试自定义端点；如果失败，则自动回退到官方 API。
+        """
+        # 如果选择了自定义模型，则尝试使用它，并准备好回退
+        if model_name and model_name in app_config.CUSTOM_GEMINI_ENDPOINTS:
+            log.info(f"检测到自定义模型 '{model_name}'，将优先尝试使用自定义端点。")
+            try:
+                # 尝试使用自定义端点生成回复
+                return await self._generate_with_custom_endpoint(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    message=message,
+                    channel=channel,
+                    replied_message=replied_message,
+                    images=images,
+                    user_name=user_name,
+                    channel_context=channel_context,
+                    world_book_entries=world_book_entries,
+                    personal_summary=personal_summary,
+                    affection_status=affection_status,
+                    user_profile_data=user_profile_data,
+                    guild_name=guild_name,
+                    location_name=location_name,
+                    model_name=model_name,
+                )
+            except Exception as e:
+                log.warning(
+                    f"使用自定义端点 '{model_name}' 失败: {e}. "
+                    f"将回退到官方 API 进行重试。"
+                )
+                # 失败时，获取基础模型名称以用于回退
+                endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name, {})
+                fallback_model_name = endpoint_config.get("model_name")
+                log.info(f"回退到官方 API，使用模型 '{fallback_model_name}'。")
+
+                # 调用官方 API 逻辑进行重试
+                return await self._generate_with_official_api(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    message=message,
+                    channel=channel,
+                    replied_message=replied_message,
+                    images=images,
+                    user_name=user_name,
+                    channel_context=channel_context,
+                    world_book_entries=world_book_entries,
+                    personal_summary=personal_summary,
+                    affection_status=affection_status,
+                    user_profile_data=user_profile_data,
+                    guild_name=guild_name,
+                    location_name=location_name,
+                    model_name=fallback_model_name,  # 关键：使用基础模型名称
+                )
+
+        # 对于非自定义模型或回退失败后的默认路径
+        log.info(
+            f"使用模型 '{model_name or self.default_model_name}'，将使用官方 API 逻辑。"
+        )
+        return await self._generate_with_official_api(
+            user_id=user_id,
+            guild_id=guild_id,
+            message=message,
+            channel=channel,
+            replied_message=replied_message,
+            images=images,
+            user_name=user_name,
+            channel_context=channel_context,
+            world_book_entries=world_book_entries,
+            personal_summary=personal_summary,
+            affection_status=affection_status,
+            user_profile_data=user_profile_data,
+            guild_name=guild_name,
+            location_name=location_name,
+            model_name=model_name,
+        )
+
+    async def _generate_with_custom_endpoint(
+        self,
+        user_id: int,
+        guild_id: int,
+        message: str,
+        channel: Optional[Any] = None,
+        replied_message: Optional[str] = None,
+        images: Optional[List[Dict]] = None,
+        user_name: str = "用户",
+        channel_context: Optional[List[Dict]] = None,
+        world_book_entries: Optional[List[Dict]] = None,
+        personal_summary: Optional[str] = None,
+        affection_status: Optional[Dict[str, Any]] = None,
+        user_profile_data: Optional[Dict[str, Any]] = None,
+        guild_name: str = "未知服务器",
+        location_name: str = "未知位置",
+        model_name: Optional[str] = None,
+    ) -> str:
+        """
+        [新增] 使用自定义端点 (例如公益站) 生成 AI 回复。
+        此方法不使用密钥轮换，直接根据配置创建客户端。
+        失败时会抛出异常，由调用方 (generate_response) 处理回退逻辑。
+        """
+        endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
+        if not endpoint_config or not all(
+            [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
+        ):
+            error_msg = (
+                f"模型 '{model_name}' 的自定义端点配置不完整或未找到。"
+                "请检查 CUSTOM_GEMINI_URL_* 和 CUSTOM_GEMINI_API_KEY_* 环境变量。"
+            )
+            log.error(error_msg)
+            # 抛出异常以触发回退逻辑
+            raise ValueError(error_msg)
+
+        # --- 关键：为自定义端点单独创建客户端，不使用全局的 _create_client_with_key ---
+        log.info(f"正在为自定义端点创建客户端: {endpoint_config['base_url']}")
+        http_options = types.HttpOptions(base_url=endpoint_config["base_url"])
+        client = genai.Client(
+            api_key=endpoint_config["api_key"], http_options=http_options
+        )
+
+        # 复用核心生成逻辑。从此方法抛出的任何异常都将由 generate_response 捕获。
+        return await self._execute_generation_cycle(
+            user_id=user_id,
+            guild_id=guild_id,
+            message=message,
+            channel=channel,
+            replied_message=replied_message,
+            images=images,
+            user_name=user_name,
+            channel_context=channel_context,
+            world_book_entries=world_book_entries,
+            personal_summary=personal_summary,
+            affection_status=affection_status,
+            user_profile_data=user_profile_data,
+            guild_name=guild_name,
+            location_name=location_name,
+            # 关键：将配置中真实的模型名称传递给核心逻辑
+            model_name=endpoint_config.get("model_name") or self.default_model_name,
+            client=client,
+        )
+
+    @_api_key_handler
+    async def _generate_with_official_api(
+        self,
+        user_id: int,
+        guild_id: int,
+        message: str,
+        channel: Optional[Any] = None,
         replied_message: Optional[str] = None,
         images: Optional[List[Dict]] = None,
         user_name: str = "用户",
@@ -549,14 +707,56 @@ class GeminiService:
         model_name: Optional[str] = None,
         client: Any = None,
     ) -> str:
-        """生成AI回复（已重构）。"""
-        # --- 新逻辑：冷却检查已移至装饰器，此处不再需要 ---
-        # 装饰器会处理密钥和客户端的创建，这里我们直接使用
-        # 注意：装饰器会将 client 作为关键字参数注入
+        """
+        [重构] 使用官方 API 密钥池生成 AI 回复。
+        此方法由 _api_key_handler 装饰器管理，负责密钥轮换和重试。
+        """
         if not client:
             raise ValueError("装饰器未能提供客户端实例。")
 
-        # 移除外层 try...except，让异常传递给装饰器
+        # 将所有生成逻辑委托给核心方法
+        return await self._execute_generation_cycle(
+            user_id=user_id,
+            guild_id=guild_id,
+            message=message,
+            channel=channel,
+            replied_message=replied_message,
+            images=images,
+            user_name=user_name,
+            channel_context=channel_context,
+            world_book_entries=world_book_entries,
+            personal_summary=personal_summary,
+            affection_status=affection_status,
+            user_profile_data=user_profile_data,
+            guild_name=guild_name,
+            location_name=location_name,
+            model_name=model_name,
+            client=client,
+        )
+
+    async def _execute_generation_cycle(
+        self,
+        user_id: int,
+        guild_id: int,
+        message: str,
+        channel: Optional[Any],
+        replied_message: Optional[str],
+        images: Optional[List[Dict]],
+        user_name: str,
+        channel_context: Optional[List[Dict]],
+        world_book_entries: Optional[List[Dict]],
+        personal_summary: Optional[str],
+        affection_status: Optional[Dict[str, Any]],
+        user_profile_data: Optional[Dict[str, Any]],
+        guild_name: str,
+        location_name: str,
+        model_name: Optional[str],
+        client: Any,
+    ) -> str:
+        """
+        [新增] 核心的 AI 生成周期，包含上下文构建、工具调用循环和响应处理。
+        此方法被 _generate_with_official_api 和 _generate_with_custom_endpoint 复用。
+        """
         # 1. 构建完整的对话提示
         final_conversation = prompt_service.build_chat_prompt(
             user_name=user_name,
@@ -572,18 +772,13 @@ class GeminiService:
             location_name=location_name,
         )
 
-        # 3. 准备 API 调用参数 (重构以符合文档规范)
+        # 3. 准备 API 调用参数
         chat_config = app_config.GEMINI_CHAT_CONFIG.copy()
         thinking_budget = chat_config.pop("thinking_budget", None)
-
-        # 3.1. 准备 API 调用参数
         gen_config_params = {**chat_config, "safety_settings": self.safety_settings}
 
-        # 3.2. 根据文档，直接传递 Python callable 列表给 tools 参数
-        # SDK 会自动推断 Schema
         if self.available_tools:
             gen_config_params["tools"] = self.available_tools
-            # 关键：显式禁用自动调用，进入手动模式
             gen_config_params["automatic_function_calling"] = (
                 types.AutomaticFunctionCallingConfig(disable=True)
             )
@@ -591,10 +786,9 @@ class GeminiService:
 
         gen_config = types.GenerateContentConfig(**gen_config_params)
 
-        # 3.3. 根据最新指南 (2025) 配置思维链
         if thinking_budget is not None:
             gen_config.thinking_config = types.ThinkingConfig(
-                include_thoughts=True,  # 关键：要求 API 返回思考过程
+                include_thoughts=True,
                 thinking_budget=thinking_budget,
             )
             log.info(
@@ -604,7 +798,6 @@ class GeminiService:
         # 4. 准备初始对话历史
         conversation_history = self._prepare_api_contents(final_conversation)
 
-        # 如果开启了 AI 完整上下文日志，则打印初始上下文
         if app_config.DEBUG_CONFIG["LOG_AI_FULL_CONTEXT"]:
             log.info(f"--- 初始 AI 上下文 (用户 {user_id}) ---")
             log.info(
@@ -619,87 +812,67 @@ class GeminiService:
             )
             log.info("------------------------------------")
 
-        # 5. 实现手动、顺序工具调用循环 (文档代码示例 2.1)
-        called_tool_names = []  # 用于记录本次请求调用的所有工具
-        thinking_was_used = False  # 新增：跟踪本次调用是否实际使用了思考功能
-        max_calls = 5  # 设置最大工具调用循环次数，防止无限循环
+        # 5. 实现手动、顺序工具调用循环
+        called_tool_names = []
+        thinking_was_used = False
+        max_calls = 5
         for i in range(max_calls):
-            # --- (新增) 详细过程日志开关 ---
             log_detailed = app_config.DEBUG_CONFIG.get(
                 "LOG_DETAILED_GEMINI_PROCESS", False
             )
-
             if log_detailed:
                 log.info(f"--- [工具调用循环: 第 {i + 1}/{max_calls} 次] ---")
 
-            # --- (新增) 空白响应重试循环 ---
             response = None
-            for attempt in range(2):  # 最多尝试2次
-                # 步骤 2: 调用模型并接收建议
+            for attempt in range(2):
                 response = await client.aio.models.generate_content(
                     model=(model_name or self.default_model_name),
-                    contents=conversation_history,  # 传入完整的历史记录
+                    contents=conversation_history,
                     config=gen_config,
                 )
-
-                # 检查响应是否为空 (没有文本部分也没有工具调用)
                 if response and (response.parts or response.function_calls):
-                    break  # 响应有效，跳出重试循环
-
+                    break
                 log.warning(f"模型返回空响应 (尝试 {attempt + 1}/2)。将在1秒后重试...")
-                if attempt < 1:  # 如果不是最后一次尝试，则等待
+                if attempt < 1:
                     await asyncio.sleep(1)
-            # --- 重试循环结束 ---
 
-            # --- 核心日志：根据最新指南 (2025) 提取并记录思考过程 ---
             if log_detailed:
                 if response.candidates:
                     candidate = response.candidates[0]
                     if candidate.content and candidate.content.parts:
                         for part in candidate.content.parts:
-                            # 检查 part 是否代表思考过程
                             if hasattr(part, "thought") and part.thought:
-                                thinking_was_used = True  # 标记思考功能已被使用
+                                thinking_was_used = True
                                 log.info("--- 模型思考过程 (Thinking) ---")
                                 log.info(part.text)
                                 log.info("---------------------------------")
 
-            # 检查是否有函数调用建议
             function_calls = response.function_calls
 
             if not function_calls:
                 if log_detailed:
                     log.info("--- 模型决策：直接生成文本回复 (未调用工具) ---")
                     log.info("模型返回了最终文本响应，工具调用流程结束。")
-                # 步骤 4 (结束): 模型返回最终文本，流程结束
-                break  # 退出循环
+                break
 
-            # 如果代码执行到这里，说明模型建议了工具调用
             if log_detailed:
                 log.info("--- 模型决策：建议进行工具调用 ---")
-                # 使用 json.dumps 格式化参数以提高可读性
                 for call in function_calls:
                     args_str = json.dumps(dict(call.args), ensure_ascii=False, indent=2)
                     log.info(f"  - 工具名称: {call.name}")
                     log.info(f"  - 调用参数:\n{args_str}")
                 log.info("------------------------------------")
 
-            # 记录工具名称（无论是否打印详细日志都需要）
             for call in function_calls:
                 called_tool_names.append(call.name)
 
-            # 将包含 FunctionCall 建议的模型响应添加到历史记录中
             if response.candidates and response.candidates[0].content:
                 conversation_history.append(response.candidates[0].content)
 
-            # 步骤 3: 提取并执行函数
             if log_detailed:
                 log.info(f"准备执行 {len(function_calls)} 个工具调用...")
 
-            # 用于收集本次所有工具执行结果的 Part 列表
             tool_result_parts = []
-
-            # 并行执行所有建议的工具调用
             tasks = [
                 self.tool_service.execute_tool_call(
                     tool_call=call,
@@ -723,58 +896,43 @@ class GeminiService:
                         )
                     )
                 else:
-                    # --- 修正：处理工具返回的多种 Part 类型 ---
-                    # 检查 Part 是否为函数响应。如果是，则处理并包装结果。
                     if result.function_response:
                         tool_name = result.function_response.name
-                        # `result.function_response.response` 是一个 protobuf Struct 对象，其行为类似于字典。
                         original_result_str = result.function_response.response.get(
                             "result", ""
                         )
-
-                        # 调用 prompt_service 来获取可能被包装过的结果
                         wrapped_result_str = (
                             prompt_service.build_tool_result_wrapper_prompt(
                                 tool_name, original_result_str
                             )
                         )
-
-                        # 用包装后的结果创建一个新的 Part 对象
                         new_response_part = types.Part.from_function_response(
                             name=tool_name,
                             response={"result": wrapped_result_str},
                         )
                         tool_result_parts.append(new_response_part)
                     else:
-                        # 如果 Part 不是函数响应 (例如，它是一个包含图片的 Part)，
-                        # 则直接将其添加到结果列表中，以便模型可以“看到”它。
                         tool_result_parts.append(result)
-                    # --- 修正结束 ---
 
             if log_detailed:
                 log.info(
                     f"已收集 {len(tool_result_parts)} 个工具执行结果，准备将其返回给模型。"
                 )
 
-            # 步骤 4: 将所有工具结果作为单个用户回合添加到历史记录，准备下一次 API 调用
             conversation_history.append(
                 types.Content(role="user", parts=tool_result_parts)
             )
 
-            # 如果循环达到最大次数，则强制退出
             if i == max_calls - 1:
                 log.warning("已达到最大工具调用限制，流程终止。")
                 return "哎呀，我好像陷入了一个复杂的思考循环里，我们换个话题聊聊吧！"
 
-        # 3. 处理最终响应 (已重构以分离思考和文本)
         if response.parts:
             final_thought = ""
             final_text = ""
-
-            # 遍历最终响应的 parts，分离思考过程和文本回复
             for part in response.parts:
                 if hasattr(part, "thought") and part.thought:
-                    thinking_was_used = True  # 标记思考功能已被使用
+                    thinking_was_used = True
                     final_thought += part.text
                 elif hasattr(part, "text"):
                     final_text += part.text
@@ -798,7 +956,6 @@ class GeminiService:
                 formatted_response = await self._post_process_response(
                     raw_ai_response, user_id, guild_id
                 )
-                # --- (新增) 请求摘要日志 ---
                 total_tokens = 0
                 if response.usage_metadata:
                     total_tokens = response.usage_metadata.total_token_count
@@ -807,8 +964,6 @@ class GeminiService:
                 log.info(
                     f"  - 本次调用是否使用思考功能: {'是' if thinking_was_used else '否'}"
                 )
-
-                # 仅在实际使用了思考功能时，才记录与该轮次相关的Token消耗
                 if thinking_was_used:
                     log.info(f"  - 思考过程Token消耗: {total_tokens}")
 
@@ -824,9 +979,7 @@ class GeminiService:
                 return formatted_response
 
         elif response.prompt_feedback and response.prompt_feedback.block_reason:
-            # --- 增强日志记录 ---
             try:
-                # 尝试序列化整个对话历史和响应以进行调试
                 conversation_for_log = json.dumps(
                     GeminiService._serialize_for_logging(final_conversation),
                     ensure_ascii=False,
@@ -840,13 +993,10 @@ class GeminiService:
                 )
             except Exception as log_e:
                 log.error(f"序列化被阻止的请求用于日志记录时出错: {log_e}")
-                # 即使序列化失败，也记录基本信息
                 log.warning(
                     f"用户 {user_id} 的请求被安全策略阻止，原因: {response.prompt_feedback.block_reason} (详细内容记录失败)"
                 )
-
             return "呜啊! 这个太色情啦,我不看我不看"
-
         else:
             log.warning(f"未能为用户 {user_id} 生成有效回复。")
             return "哎呀，我好像没太明白你的意思呢～可以再说清楚一点吗？✨"

@@ -31,6 +31,17 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # 用于个人记忆摘要的模型。
 SUMMARY_MODEL = "gemini-2.5-flash-lite"
 
+# --- 自定义 Gemini 端点配置 ---
+# 用于通过自定义 URL (例如公益站) 调用模型
+# 格式: "模型别名": {"base_url": "...", "api_key": "...", "model_name": "..."}
+CUSTOM_GEMINI_ENDPOINTS = {
+    "gemini-2.5-flash-custom": {
+        "base_url": os.getenv("CUSTOM_GEMINI_URL_FLASH"),
+        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY_FLASH"),
+        "model_name": "gemini-2.5-flash",  # 该端点实际对应的模型名称
+    }
+}
+
 # --- ComfyUI 图像生成配置 ---
 COMFYUI_CONFIG = {
     "ENABLED": os.getenv("COMFYUI_ENABLED", "True").lower() == "true",

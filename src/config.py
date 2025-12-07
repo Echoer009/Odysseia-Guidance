@@ -79,4 +79,5 @@ RAG_QUERY_REWRITING_ENABLED = int(os.getenv("RAG_QUERY_REWRITING_ENABLED", 1))
 AVAILABLE_AI_MODELS = [
     "gemini-2.5-flash",
     "gemini-flash-latest",
+    "gemini-2.5-flash-custom",
 ]

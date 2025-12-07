@@ -115,7 +115,7 @@ class WorldBookService:
         user_name: str,  # 新增：接收提问者的名字
         conversation_history: Optional[List[Dict[str, Any]]] = None,
         n_results: int = chat_config.RAG_N_RESULTS_DEFAULT,
-        max_distance: float = 0.75,
+        max_distance: float = 0.5,
     ) -> List[Dict[str, Any]]:
         """
         根据用户的最新问题和可选的对话历史，总结查询并查找相关的世界书条目。
