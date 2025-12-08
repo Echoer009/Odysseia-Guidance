@@ -966,15 +966,20 @@ class ChatDatabaseManager:
             raise
 
     async def update_personal_summary(self, user_id: int, summary: str) -> None:
-        """更新用户的个人记忆摘要。"""
-        query = "UPDATE users SET personal_summary = ? WHERE user_id = ?"
+        """更新或创建用户的个人记忆摘要 (Upsert)。"""
+        query = """
+            INSERT INTO users (user_id, personal_summary)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                personal_summary = excluded.personal_summary;
+        """
         try:
             await self._execute(
-                self._db_transaction, query, (summary, user_id), commit=True
+                self._db_transaction, query, (user_id, summary), commit=True
             )
-            log.info(f"已更新用户 {user_id} 的个人记忆摘要。")
+            log.info(f"已为用户 {user_id} 更新或创建了个人记忆摘要。")
         except sqlite3.OperationalError as e:
-            log.error(f"更新用户 {user_id} 的个人记忆摘要失败: {e}")
+            log.error(f"为用户 {user_id} 更新或创建个人记忆摘要失败: {e}")
             raise
 
     # --- 聊天设置管理 ---

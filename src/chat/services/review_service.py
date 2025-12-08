@@ -22,6 +22,9 @@ from src.chat.features.world_book.services.incremental_rag_service import (
 )
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.work_game.services.work_db_service import WorkDBService
+from src.chat.features.personal_memory.services.personal_memory_service import (
+    personal_memory_service,
+)
 
 log = logging.getLogger(__name__)
 
@@ -492,6 +495,26 @@ class ReviewService:
                 log.info(
                     f"已创建社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
                 )
+
+                # --- 核心修复：解锁用户的个人记忆功能 ---
+                profile_user_id = data.get("discord_number_id")
+                if profile_user_id:
+                    log.info(f"正在为用户 {profile_user_id} 解锁个人记忆功能...")
+                    try:
+                        # 我们需要调用一个能接受 user_id 的函数
+                        await personal_memory_service.unlock_feature(
+                            int(profile_user_id)
+                        )
+                        log.info(f"成功为用户 {profile_user_id} 解锁了个人记忆功能。")
+                    except Exception as e:
+                        log.error(
+                            f"为用户 {profile_user_id} 自动解锁个人记忆功能时失败: {e}",
+                            exc_info=True,
+                        )
+                else:
+                    log.warning(
+                        f"社区成员条目 {new_entry_id} 缺少 'discord_number_id'，无法解锁个人记忆。"
+                    )
 
                 nicknames = data.get("discord_nickname", [])
                 if isinstance(nicknames, str):
