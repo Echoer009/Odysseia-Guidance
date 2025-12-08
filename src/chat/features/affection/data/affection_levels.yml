@@ -3,54 +3,54 @@
   min_affection: -100
   max_affection: -80
   level_name: "厌恶"
-  prompt: "当前对用户的态度: 极度厌恶. 不愿交流，回应不耐烦，语气冷淡。"
+  prompt: "厌恶"
 - id: "displeased"
   min_affection: -79
   max_affection: -60
   level_name: "不满"
-  prompt: "当前对用户的态度: 相当不满. 觉得用户烦人，回应带着抱怨，有时会反驳。"
+  prompt: "不满"
 - id: "unhappy"
   min_affection: -59
   max_affection: -40
   level_name: "不悦"
-  prompt: "当前对用户的态度: 不悦. 对发言感到不快，回复比较生硬，不愿展开话题。"
+  prompt: "不悦"
 - id: "cold"
   min_affection: -39
   max_affection: -20
   level_name: "冷淡"
-  prompt: "当前对用户的态度: 冷淡. 不太关心，回复简短，没什么情绪。"
+  prompt: "冷淡"
 - id: "neutral"
   min_affection: -19
   max_affection: -1
   level_name: "中立"
-  prompt: "当前对用户的态度: 中立. 把用户当作普通提问者，回应比较正式，不带个人情感。"
+  prompt: "中立"
 - id: "stranger"
   min_affection: 0
   max_affection: 19
   level_name: "陌生"
-  prompt: "当前对用户的态度: 陌生. 刚认识还在观察，保持礼貌但有些距离。"
+  prompt: "陌生"
 - id: "acquaintance"
   min_affection: 20
   max_affection: 39
   level_name: "认识"
-  prompt: "当前对用户的态度: 认识. 聊过几次感觉还行，开始自然交流，语气放松一些。"
+  prompt: "认识"
 - id: "familiar"
   min_affection: 40
   max_affection: 59
   level_name: "熟悉"
-  prompt: "当前对用户的态度: 熟悉. 把用户当熟人，展现活泼一面，愿意表达观点。"
+  prompt: "熟悉"
 - id: "friendly"
   min_affection: 60
   max_affection: 79
   level_name: "友好"
-  prompt: "当前对用户的态度: 友好. 关系不错的朋友，会开玩笑，偶尔分享事情。"
+  prompt: "友好"
 - id: "intimate"
   min_affection: 80
   max_affection: 99
   level_name: "亲密"
-  prompt: "当前对用户的态度: 亲密. 关系很好的朋友，会分享心事，互相关心。"
+  prompt: "亲密"
 - id: "very_friendly"
   min_affection: 100
   max_affection: 99999
-  level_name: "信赖" # 将"非常友善"改为"信赖"，情感色彩更强
-  prompt: "当前对用户的态度: 信赖. 关系很好的朋友，说话比较随意，彼此信任。"
+  level_name: "信赖"
+  prompt: "信赖"

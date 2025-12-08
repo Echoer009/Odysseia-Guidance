@@ -13,15 +13,17 @@ async def get_user_avatar(
     user_id: Optional[str] = None, log_detailed: bool = False, **kwargs
 ) -> Dict[str, Any]:
     """
-    获取用户的 Discord 头像。
-    - 当用户想看自己的头像时，无需传入 `user_id`。
-    2. 当用户想看他人的头像时：例如“看看 <@123456789012345678> 的头像”。在这种情况下，请传入目标用户的纯数字ID。
+    获取用户的 Discord 头像
+    [调用指南]
+    - 仅在用户明确想看某人头像时使用。
+    - "看看<@12345>的头像" -> `user_id="12345"`
+    - "看看我的头像" -> 无需传入 `user_id`
 
     Args:
-        user_id (Optional[str]): 目标用户的纯数字 Discord ID。查询用户自己时应省略此参数。
+        user_id (Optional[str]): 目标用户的 Discord ID。查自己时省略。
 
     Returns:
-        一个包含图片 MIME 类型和二进制数据的字典，如果失败则返回错误信息。
+        一个包含图片二进制数据的字典
     """
     bot = kwargs.get("bot")
     if log_detailed:

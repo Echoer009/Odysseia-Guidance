@@ -8,16 +8,17 @@ log = logging.getLogger(__name__)
 
 async def get_coin_balance(user_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
     """
-    查询用户所拥有的“类脑币”余额。
-    - 当用户查询自己的余额时，无需传入 `user_id`。
-    - 当用户查询他人的余额时，则需要传入目标的 `user_id`。
-    - 你无法查询自己的余额
+    查询用户“类脑币”余额
+    [调用指南]
+    - 仅在用户明确想查询金币余额时使用。
+    - 必须从用户的发言中（如 @mention）获取 `user_id`。
+    - "查查<@12345>有多少钱" -> `user_id="12345"`
 
     Args:
-        user_id (Optional[str]): 目标用户的 Discord ID，可以是纯数字格式，也可以是 Discord 的 @ 提及格式 (例如: "<@123456789012345678>")。如果用户想查询自己的余额，则应省略此参数。
+        user_id (Optional[str]): 目标用户的 Discord ID。查自己时省略。
 
     Returns:
-        一个包含用户余额的字典，如果失败则返回错误信息。
+        一个包含用户余额的字典。
     """
     log.info(f"--- [工具执行]: get_coin_balance, 参数: user_id={user_id} ---")
 

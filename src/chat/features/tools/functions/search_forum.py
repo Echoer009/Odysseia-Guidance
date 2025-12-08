@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import logging
+from typing import Dict, Any, List, Optional
+
 from src.chat.features.forum_search.services.forum_search_service import (
     forum_search_service,
 )
@@ -9,33 +11,33 @@ from src.chat.config import chat_config as config
 log = logging.getLogger(__name__)
 
 
-from typing import Dict, Any, List, Union
-
-
 async def search_forum_threads(
-    query: str = None,
-    filters: Dict[str, Any] = None,
+    query: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
     limit: int = config.FORUM_SEARCH_DEFAULT_LIMIT,
     **kwargs,
 ) -> List[str]:
     """
-    在社区论坛中搜索帖子。仅当用户明确想寻找、查询或浏览论坛内容时，使用此工具。
+    [功能描述] 在社区论坛中搜索帖子，可以根据关键词、作者、频道或日期进行精确查找或模糊浏览。
 
-    此工具有两种主要使用模式:
-    1. **语义搜索**: 当用户提供具体的关键词时，使用 `query` 参数进行内容搜索。此时可选择性地附加 `filters` 来缩小范围。
-    2. **条件浏览**: 当用户只想按特定条件筛选帖子时，如时间条件，作者条件;使用 `filters` 参数。**在这种模式下，`query` 参数可以、也应该为空。**
+    [使用时机]
+    - 当用户明确表示想“找帖子”、“搜内容”、“查记录”时使用。
+    - 当用户询问特定用户（例如 @user）发过什么内容时使用。
+    - 当用户想看某个频道（例如“角色卡”）的近期帖子时使用。
 
-    Args:
-        query (str, optional): 用于语义搜索的核心查询内容。如果用户只想按条件浏览，请将此项留空。
-        limit (int, optional): 返回结果的最大数量。默认为 5。
-        filters (Dict[str, Any], optional): 一个或多个过滤条件。可以单独使用，也可以与 `query` 组合使用。
-            - `category_name` (Union[str, List[str]]): 按一个或多个论坛频道名称进行过滤。
-            - `author_id` (Union[str, List[str]]): 按一个或多个作者的Discord ID过滤。要获取此ID，你必须引导用户使用@mention功能。ID应为纯数字字符串。
-            - `start_date` (str): 筛选发布日期在此日期或之后的帖子 (格式: YYYY-MM-DD)。
-            - `end_date` (str): 筛选发布日期在此日期或之前的帖子 (格式: YYYY-MM-DD)。
+    [参数说明]
+    - query (str, optional): 搜索的关键词。如果用户只是按条件浏览，此项可留空。
+    - limit (int, optional): 返回结果的最大数量，默认为 5。
+    - filters (Dict[str, Any], optional): 过滤条件。
+      - `category_name` (Union[str, List[str]]): 论坛频道的名称。
+      - `author_id` (Union[str, List[str]]): 作者的Discord ID。引导用户使用@mention来获取。
+      - `start_date` (str): 开始日期 (格式: YYYY-MM-DD)。
+      - `end_date` (str): 结束日期 (格式: YYYY-MM-DD)。
 
-    Returns:
-        List[str]: 一个字符串列表，每个字符串格式为 '分类名 > https://discord.com/channels/...'。
+    [使用示例]
+    - 用户说: "帮我找找关于'猫猫'的帖子" -> 调用时: `query="猫猫"`
+    - 用户说: "看看<@12345>最近发了什么" -> 调用时: `filters={"author_id": "12345"}`
+    - 用户说: "我想看'模型发布'频道里最新的内容" -> 调用时: `filters={"category_name": "模型发布"}`
     """
     # 为保护系统性能，设置一个硬性上限，最多获取 20 个文本块。
     limit = min(limit, 20)
@@ -96,7 +98,12 @@ async def search_forum_threads(
 
     start_time = time.monotonic()
 
-    results = await forum_search_service.search(query, n_results=limit, filters=filters)
+    # 确保 query 和 filters 不为 None，以满足 search 函数的类型要求
+    safe_query = query if query is not None else ""
+    safe_filters = filters if filters is not None else {}
+    results = await forum_search_service.search(
+        safe_query, n_results=limit, filters=safe_filters
+    )
 
     duration = time.monotonic() - start_time
     log.info(
