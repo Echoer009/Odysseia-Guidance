@@ -554,53 +554,64 @@ class GeminiService:
         # 如果选择了自定义模型，则尝试使用它，并准备好回退
         if model_name and model_name in app_config.CUSTOM_GEMINI_ENDPOINTS:
             log.info(f"检测到自定义模型 '{model_name}'，将优先尝试使用自定义端点。")
-            try:
-                # 尝试使用自定义端点生成回复
-                return await self._generate_with_custom_endpoint(
-                    user_id=user_id,
-                    guild_id=guild_id,
-                    message=message,
-                    channel=channel,
-                    replied_message=replied_message,
-                    images=images,
-                    user_name=user_name,
-                    channel_context=channel_context,
-                    world_book_entries=world_book_entries,
-                    personal_summary=personal_summary,
-                    affection_status=affection_status,
-                    user_profile_data=user_profile_data,
-                    guild_name=guild_name,
-                    location_name=location_name,
-                    model_name=model_name,
-                )
-            except Exception as e:
-                log.warning(
-                    f"使用自定义端点 '{model_name}' 失败: {e}. "
-                    f"将回退到官方 API 进行重试。"
-                )
-                # 失败时，获取基础模型名称以用于回退
-                endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name, {})
-                fallback_model_name = endpoint_config.get("model_name")
-                log.info(f"回退到官方 API，使用模型 '{fallback_model_name}'。")
+            max_attempts = 2  # 1次主尝试 + 1次重试
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    log.info(
+                        f"尝试使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts})"
+                    )
+                    return await self._generate_with_custom_endpoint(
+                        user_id=user_id,
+                        guild_id=guild_id,
+                        message=message,
+                        channel=channel,
+                        replied_message=replied_message,
+                        images=images,
+                        user_name=user_name,
+                        channel_context=channel_context,
+                        world_book_entries=world_book_entries,
+                        personal_summary=personal_summary,
+                        affection_status=affection_status,
+                        user_profile_data=user_profile_data,
+                        guild_name=guild_name,
+                        location_name=location_name,
+                        model_name=model_name,
+                    )
+                except Exception as e:
+                    last_exception = e
+                    log.warning(
+                        f"使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts}) 失败: {e}"
+                    )
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(1)  # 在重试前稍作等待
 
-                # 调用官方 API 逻辑进行重试
-                return await self._generate_with_official_api(
-                    user_id=user_id,
-                    guild_id=guild_id,
-                    message=message,
-                    channel=channel,
-                    replied_message=replied_message,
-                    images=images,
-                    user_name=user_name,
-                    channel_context=channel_context,
-                    world_book_entries=world_book_entries,
-                    personal_summary=personal_summary,
-                    affection_status=affection_status,
-                    user_profile_data=user_profile_data,
-                    guild_name=guild_name,
-                    location_name=location_name,
-                    model_name=fallback_model_name,  # 关键：使用基础模型名称
-                )
+            # 如果所有尝试都失败了，则执行回退逻辑
+            log.warning(
+                f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
+                f"将回退到官方 API。"
+            )
+            # --- [新逻辑] 回退时固定使用 gemini-2.5-flash 模型 ---
+            fallback_model_name = "gemini-2.5-flash"
+            log.info(f"回退到官方 API，固定使用模型 '{fallback_model_name}'。")
+
+            return await self._generate_with_official_api(
+                user_id=user_id,
+                guild_id=guild_id,
+                message=message,
+                channel=channel,
+                replied_message=replied_message,
+                images=images,
+                user_name=user_name,
+                channel_context=channel_context,
+                world_book_entries=world_book_entries,
+                personal_summary=personal_summary,
+                affection_status=affection_status,
+                user_profile_data=user_profile_data,
+                guild_name=guild_name,
+                location_name=location_name,
+                model_name=fallback_model_name,  # 关键：使用固定的回退模型
+            )
 
         # 对于非自定义模型或回退失败后的默认路径
         log.info(
