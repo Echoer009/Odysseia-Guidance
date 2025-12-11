@@ -693,8 +693,9 @@ class GeminiService:
             user_profile_data=user_profile_data,
             guild_name=guild_name,
             location_name=location_name,
-            # 关键：将配置中真实的模型名称传递给核心逻辑
-            model_name=endpoint_config.get("model_name") or self.default_model_name,
+            prompt_model_name=model_name,  # 传递用于选择 Prompt 的原始模型名称
+            api_model_name=endpoint_config.get("model_name")
+            or self.default_model_name,  # 传递用于调用 API 的真实模型名称
             client=client,
         )
 
@@ -741,7 +742,8 @@ class GeminiService:
             user_profile_data=user_profile_data,
             guild_name=guild_name,
             location_name=location_name,
-            model_name=model_name,
+            prompt_model_name=model_name,  # 对于官方 API，prompt 和 api 模型名称相同
+            api_model_name=model_name,
             client=client,
         )
 
@@ -761,7 +763,8 @@ class GeminiService:
         user_profile_data: Optional[Dict[str, Any]],
         guild_name: str,
         location_name: str,
-        model_name: Optional[str],
+        prompt_model_name: Optional[str],
+        api_model_name: Optional[str],
         client: Any,
     ) -> str:
         """
@@ -781,6 +784,7 @@ class GeminiService:
             user_profile_data=user_profile_data,
             guild_name=guild_name,
             location_name=location_name,
+            model_name=prompt_model_name,
         )
 
         # 3. 准备 API 调用参数
@@ -837,7 +841,7 @@ class GeminiService:
             response = None
             for attempt in range(2):
                 response = await client.aio.models.generate_content(
-                    model=(model_name or self.default_model_name),
+                    model=(api_model_name or self.default_model_name),
                     contents=conversation_history,
                     config=gen_config,
                 )

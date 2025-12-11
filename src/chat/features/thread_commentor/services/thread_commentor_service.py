@@ -10,11 +10,9 @@ import os
 from src import config
 from src.chat.services.gemini_service import gemini_service
 from src.chat.config.thread_prompts import get_random_praise_prompt
-from src.chat.services.prompt_service import (
-    JAILBREAK_USER_PROMPT,
-    JAILBREAK_MODEL_RESPONSE,
-    JAILBREAK_FINAL_INSTRUCTION,
-)
+from src.chat.config.prompts import (
+    PROMPT_CONFIG,
+)  # <--- 修正：从新的位置导入 PROMPT_CONFIG
 from datetime import datetime, timezone, timedelta
 from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_persona
 from src.chat.utils.database import chat_db_manager
@@ -165,8 +163,14 @@ class ThreadCommentorService:
 
             # 6. 手动构建带有“破限”逻辑的对话历史
             conversation_history = [
-                {"role": "user", "parts": [JAILBREAK_USER_PROMPT]},
-                {"role": "model", "parts": [JAILBREAK_MODEL_RESPONSE]},
+                {
+                    "role": "user",
+                    "parts": [PROMPT_CONFIG["default"]["JAILBREAK_USER_PROMPT"]],
+                },
+                {
+                    "role": "model",
+                    "parts": [PROMPT_CONFIG["default"]["JAILBREAK_MODEL_RESPONSE"]],
+                },
                 {"role": "user", "parts": [core_persona]},
                 {"role": "model", "parts": ["好的，我是类脑娘，已经准备好了"]},
                 {"role": "user", "parts": [user_memory]},
@@ -192,9 +196,11 @@ class ThreadCommentorService:
             current_beijing_time = datetime.now(beijing_tz).strftime(
                 "%Y年%m月%d日 %H:%M"
             )
-            final_injection_content = JAILBREAK_FINAL_INSTRUCTION.format(
+            final_injection_content = PROMPT_CONFIG["default"][
+                "JAILBREAK_FINAL_INSTRUCTION"
+            ].format(
                 guild_name=thread.guild.name,
-                location_name=thread.parent.name,
+                location_name=thread.parent.name if thread.parent else "未知版区",
                 current_time=current_beijing_time,
             )
 
