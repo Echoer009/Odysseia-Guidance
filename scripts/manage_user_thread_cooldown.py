@@ -17,12 +17,35 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
 
 
-async def find_thread_owner(thread_id: int):
+async def find_thread_owner(thread_id: int, guild_id_override: Optional[int] = None):
     """
     连接到 Discord 并查找指定帖子的创建者。
     """
-    if not DISCORD_TOKEN or not GUILD_ID:
-        print("❌ 错误：请确保 .env 文件中已配置 DISCORD_TOKEN 和 GUILD_ID。")
+    if not DISCORD_TOKEN:
+        print("❌ 错误：请确保 .env 文件中已配置 DISCORD_TOKEN。")
+        return
+
+    # 决定使用哪个 Guild ID
+    target_guild_id_str = None
+    if guild_id_override:
+        target_guild_id_str = str(guild_id_override)
+        print(f"ℹ️ 已通过命令行参数指定服务器 ID: {target_guild_id_str}")
+    elif GUILD_ID:
+        # 如果环境变量包含多个ID，取第一个
+        if "," in GUILD_ID:
+            first_id = GUILD_ID.split(",")[0].strip()
+            print(
+                f"⚠️ 检测到 .env 文件中的 GUILD_ID 包含多个值。将自动使用第一个 ID: {first_id}"
+            )
+            target_guild_id_str = first_id
+        else:
+            target_guild_id_str = GUILD_ID
+            print(f"ℹ️ 将使用 .env 文件中配置的服务器 ID: {target_guild_id_str}")
+
+    if not target_guild_id_str:
+        print(
+            "❌ 错误：必须提供服务器 ID。请在 .env 文件中设置 GUILD_ID 或使用 --guild_id 参数。"
+        )
         return
 
     intents = discord.Intents.default()
@@ -32,17 +55,12 @@ async def find_thread_owner(thread_id: int):
     @client.event
     async def on_ready():
         print(f"✅ 以 {client.user} 的身份成功连接到 Discord。")
-        guild = None  # 预先定义 guild
+        guild = None
         try:
-            # 增加对 GUILD_ID 存在性的检查
-            if not GUILD_ID:
-                print("❌ 错误：.env 文件中缺少 GUILD_ID。")
-                return
-
-            guild = client.get_guild(int(GUILD_ID))
+            guild = client.get_guild(int(target_guild_id_str))
             if not guild:
                 print(
-                    f"❌ 错误：找不到服务器 ID: {GUILD_ID}。请检查 .env 文件中的 GUILD_ID 是否正确。"
+                    f"❌ 错误：找不到服务器 ID: {target_guild_id_str}。请检查提供的 ID 是否正确。"
                 )
                 return
 
@@ -64,7 +82,7 @@ async def find_thread_owner(thread_id: int):
 
         except discord.errors.NotFound:
             print(
-                f"❌ 错误：在服务器 {GUILD_ID} 中找不到 ID 为 {thread_id} 的频道或帖子。"
+                f"❌ 错误：在服务器 {target_guild_id_str} 中找不到 ID 为 {thread_id} 的频道或帖子。"
             )
         except discord.errors.Forbidden:
             # 安全地访问 guild.name
@@ -126,10 +144,10 @@ async def set_user_cooldown(
         print("✅ 操作成功！")
         print(f"  用户ID (User ID): {user_id}")
         if is_simple_cooldown:
-            print(f"  冷却模式:         简单冷却")
+            print("  冷却模式:         简单冷却")
             print(f"  冷却时间:         {cooldown_seconds} 秒")
         if is_rate_limit:
-            print(f"  冷却模式:         频率限制")
+            print("  冷却模式:         频率限制")
             print(
                 f"  设置:             {cooldown_limit} 条消息 / {cooldown_duration} 秒"
             )
@@ -157,6 +175,11 @@ def main():
         description="连接到Discord并查找指定帖子的创建者ID。",
     )
     parser_find.add_argument("thread_id", type=int, help="要查询的帖子 (Thread) 的ID。")
+    parser_find.add_argument(
+        "--guild_id",
+        type=int,
+        help="可选：指定在哪个服务器 (Guild) 中进行搜索。如果 .env 文件中有多个ID，建议使用此参数。",
+    )
 
     # --- 设置CD命令 ---
     parser_set = subparsers.add_parser(
@@ -183,7 +206,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "find-owner":
-        asyncio.run(find_thread_owner(args.thread_id))
+        asyncio.run(find_thread_owner(args.thread_id, args.guild_id))
     elif args.command == "set-cooldown":
         asyncio.run(
             set_user_cooldown(
