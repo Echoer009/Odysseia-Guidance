@@ -39,7 +39,12 @@ CUSTOM_GEMINI_ENDPOINTS = {
         "base_url": os.getenv("CUSTOM_GEMINI_URL_FLASH"),
         "api_key": os.getenv("CUSTOM_GEMINI_API_KEY_FLASH"),
         "model_name": "gemini-2.5-flash",  # 该端点实际对应的模型名称
-    }
+    },
+    "gemini-3-pro-preview-custom": {
+        "base_url": os.getenv("CUSTOM_GEMINI_URL_PRO"),
+        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY_PRO"),
+        "model_name": "gemini-3-pro-preview",
+    },
 }
 
 # --- ComfyUI 图像生成配置 ---

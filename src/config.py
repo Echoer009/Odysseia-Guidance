@@ -80,4 +80,5 @@ AVAILABLE_AI_MODELS = [
     "gemini-2.5-flash",
     "gemini-flash-latest",
     "gemini-2.5-flash-custom",
+    "gemini-3-pro-preview-custom",
 ]
