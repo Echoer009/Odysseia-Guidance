@@ -24,9 +24,10 @@ async def issue_user_warning(
 
     [注意事项]
     - 此工具仅针对用户的**直接输入**。如果敏感内容由其他工具返回，不属于用户违规，**严禁**使用此工具。
+    - **关于 user_id**: 系统会自动提供当前用户的数字ID。当你需要警告当前用户时，直接使用此工具即可，无需手动填写user_id。
 
     Args:
-        user_id (Optional[str]): 目标用户的 Discord ID。警告当前用户时省略。
+        user_id (Optional[str]): 目标用户的纯数字 Discord ID。
         reason (str): 警告原因，必须简洁说明违反了哪条准则。
 
     Returns:
