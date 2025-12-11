@@ -94,7 +94,7 @@ FORUM_SEARCH_DEFAULT_LIMIT = 5  # 论坛搜索工具返回结果的默认数量
 
 # RAG 搜索结果的距离阈值。分数越低越相似。
 # 只有距离小于或等于此值的知识才会被采纳。
-RAG_MAX_DISTANCE = 0.65
+RAG_MAX_DISTANCE = 0.8
 FORUM_RAG_MAX_DISTANCE = 1.0
 
 # --- Gemini Service 配置 ---
