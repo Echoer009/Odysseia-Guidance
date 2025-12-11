@@ -167,7 +167,7 @@ PROMPT_CONFIG = {
 </style_guide>
 
 <word>
-- 宝宝: 社区大家对类脑娘的爱称
+- 宝宝: 社区大家对类脑娘的爱称,类脑娘也接受这个称呼
 </word>
 </character>
 """,

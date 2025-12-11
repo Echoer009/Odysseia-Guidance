@@ -32,6 +32,9 @@ from src.chat.services.key_rotation_service import (
 )
 from src.chat.features.tools.services.tool_service import ToolService
 from src.chat.features.tools.tool_loader import load_tools_from_directory
+from src.chat.features.chat_settings.services.chat_settings_service import (
+    chat_settings_service,
+)
 
 
 log = logging.getLogger(__name__)
@@ -771,6 +774,11 @@ class GeminiService:
         [新增] 核心的 AI 生成周期，包含上下文构建、工具调用循环和响应处理。
         此方法被 _generate_with_official_api 和 _generate_with_custom_endpoint 复用。
         """
+        # --- 模型使用计数 ---
+        # 使用 prompt_model_name (表面模型名) 进行计数，而不是 api_model_name (真实模型名)
+        model_to_count = prompt_model_name or self.default_model_name
+        await chat_settings_service.increment_model_usage(model_to_count)
+
         # 1. 构建完整的对话提示
         final_conversation = prompt_service.build_chat_prompt(
             user_name=user_name,

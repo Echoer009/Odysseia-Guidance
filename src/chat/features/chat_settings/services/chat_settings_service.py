@@ -269,6 +269,18 @@ class ChatSettingsService:
         """设置全局AI模型。"""
         await self.db_manager.set_global_setting("ai_model", model)
 
+    # --- AI Model Usage ---
+
+    async def increment_model_usage(self, model_name: str) -> None:
+        """记录一次模型使用。"""
+        if model_name:
+            await self.db_manager.increment_model_usage(model_name)
+
+    async def get_model_usage_counts(self) -> Dict[str, int]:
+        """获取所有模型的使用计数。"""
+        rows = await self.db_manager.get_model_usage_counts()
+        return {row["model_name"]: row["usage_count"] for row in rows}
+
 
 # 单例实例
 chat_settings_service = ChatSettingsService()

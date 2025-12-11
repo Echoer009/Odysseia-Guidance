@@ -28,6 +28,7 @@ class ChatSettingsView(View):
         self.guild = interaction.guild
         self.service = chat_settings_service
         self.settings: Dict[str, Any] = {}
+        self.model_usage_counts: Dict[str, int] = {}
         self.message: Optional[discord.Message] = None
         self.category_paginator: Optional[PaginatedSelect] = None
         self.channel_paginator: Optional[PaginatedSelect] = None
@@ -37,6 +38,7 @@ class ChatSettingsView(View):
     async def _initialize(self):
         """异步获取设置并构建UI。"""
         self.settings = await self.service.get_guild_settings(self.guild.id)
+        self.model_usage_counts = await self.service.get_model_usage_counts()
         self.factions = event_service.get_event_factions()
         self.selected_faction = event_service.get_selected_faction()
         self._create_paginators()
@@ -178,7 +180,7 @@ class ChatSettingsView(View):
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
         await self._initialize()  # 重新获取所有数据，包括派系
-        await interaction.response.edit_message(content="设置已更新。", view=self)
+        await interaction.response.edit_message(view=self)
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         custom_id = interaction.data.get("custom_id")

@@ -491,6 +491,14 @@ class ChatDatabaseManager:
                 """)
                 log.info("已向 muted_channels 表添加 muted_until 列。")
 
+            # --- AI模型使用计数表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ai_model_usage (
+                    model_name TEXT PRIMARY KEY,
+                    usage_count INTEGER NOT NULL DEFAULT 0
+                );
+            """)
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -1346,6 +1354,22 @@ class ChatDatabaseManager:
                 return True
         # 不在禁言列表
         return False
+
+    # --- AI模型使用计数 ---
+    async def increment_model_usage(self, model_name: str) -> None:
+        """为一个模型增加使用次数。"""
+        query = """
+            INSERT INTO ai_model_usage (model_name, usage_count)
+            VALUES (?, 1)
+            ON CONFLICT(model_name) DO UPDATE SET
+                usage_count = usage_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (model_name,), commit=True)
+
+    async def get_model_usage_counts(self) -> List[sqlite3.Row]:
+        """获取所有模型的使用次数。"""
+        query = "SELECT model_name, usage_count FROM ai_model_usage"
+        return await self._execute(self._db_transaction, query, fetch="all")
 
 
 # --- 单例实例 ---
