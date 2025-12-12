@@ -45,6 +45,11 @@ CUSTOM_GEMINI_ENDPOINTS = {
         "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
         "model_name": "gemini-3-pro-preview",
     },
+    "gemini-2.5-pro-custom": {
+        "base_url": os.getenv("CUSTOM_GEMINI_URL"),
+        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
+        "model_name": "gemini-2.5-pro",
+    },
 }
 
 # --- ComfyUI 图像生成配置 ---
