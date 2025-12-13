@@ -48,7 +48,7 @@ class RegexService:
         cleaned_name = emoji_pattern.sub("", name)
 
         # 移除常见的装饰性字符
-        cleaned_name = re.sub(r"[|｜︱🔨🪓👑💟🔧]", "", cleaned_name)
+        cleaned_name = re.sub(r"[|｜︱🔨🪓👑💟🔧丨]", "", cleaned_name)
 
         # 移除前后及中间多余的空格
         cleaned_name = re.sub(r"\s+", " ", cleaned_name).strip()
