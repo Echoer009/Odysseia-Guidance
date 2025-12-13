@@ -35,6 +35,7 @@ from src.chat.features.tools.tool_loader import load_tools_from_directory
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
+from src.chat.utils.image_utils import sanitize_image
 
 
 log = logging.getLogger(__name__)
@@ -680,6 +681,23 @@ class GeminiService:
             api_key=endpoint_config["api_key"], http_options=http_options
         )
 
+        # --- [重构] 针对自定义端点的图片净化 ---
+        # 只有在调用自定义端点时才执行此操作，因为官方API可以处理这些图片。
+        sanitized_images_for_endpoint = []
+        if images:
+            log.info(f"检测到 {len(images)} 张图片，将为自定义端点进行净化处理。")
+            for img_data in images:
+                try:
+                    # 调用新的工具函数
+                    sanitized_bytes, new_mime_type = sanitize_image(img_data["bytes"])
+                    sanitized_images_for_endpoint.append(
+                        {"bytes": sanitized_bytes, "mime_type": new_mime_type}
+                    )
+                except Exception as e:
+                    # 如果净化失败，记录错误并通知用户
+                    log.error(f"为自定义端点净化图片时失败: {e}", exc_info=True)
+                    return "抱歉，我在尝试处理您上传的图片以兼容当前线路时遇到了问题。"
+
         # 复用核心生成逻辑。从此方法抛出的任何异常都将由 generate_response 捕获。
         return await self._execute_generation_cycle(
             user_id=user_id,
@@ -687,7 +705,9 @@ class GeminiService:
             message=message,
             channel=channel,
             replied_message=replied_message,
-            images=images,
+            images=sanitized_images_for_endpoint
+            if images
+            else None,  # 如果有图片，则使用净化后的版本
             user_name=user_name,
             channel_context=channel_context,
             world_book_entries=world_book_entries,
