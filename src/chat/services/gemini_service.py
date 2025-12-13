@@ -687,29 +687,33 @@ class GeminiService:
         if images:
             log.info(f"检测到 {len(images)} 张图片，将为自定义端点进行净化处理。")
             for img_data in images:
-                try:
-                    # 调用新的工具函数
-                    # [修复] 增加健壮性，同时检查 'data' 和 'bytes' 键
-                    image_bytes = img_data.get("data") or img_data.get("bytes")
-                    if not image_bytes:
-                        log.warning(
-                            f"图片数据字典中缺少 'data' 或 'bytes' 键，已跳过。Keys: {list(img_data.keys())}"
-                        )
-                        continue
+                # --- [优化] 仅当图片来源是用户附件时才进行净化 ---
+                if img_data.get("source") == "attachment":
+                    try:
+                        # [修复] 增加健壮性，同时检查 'data' 和 'bytes' 键
+                        image_bytes = img_data.get("data") or img_data.get("bytes")
+                        if not image_bytes:
+                            log.warning(
+                                f"附件图片数据字典中缺少 'data' 或 'bytes' 键，已跳过。Keys: {list(img_data.keys())}"
+                            )
+                            continue
 
-                    sanitized_bytes, new_mime_type = sanitize_image(image_bytes)
-                    # [修复] 保持键名一致性，使用 'data' 存储净化后的字节
-                    sanitized_images_for_endpoint.append(
-                        {
-                            "data": sanitized_bytes,
-                            "mime_type": new_mime_type,
-                            "source": img_data.get("source"),
-                        }
-                    )
-                except Exception as e:
-                    # 如果净化失败，记录错误并通知用户
-                    log.error(f"为自定义端点净化图片时失败: {e}", exc_info=True)
-                    return "抱歉，我在尝试处理您上传的图片以兼容当前线路时遇到了问题。"
+                        sanitized_bytes, new_mime_type = sanitize_image(image_bytes)
+                        # [修复] 保持键名一致性，使用 'data' 存储净化后的字节
+                        sanitized_images_for_endpoint.append(
+                            {
+                                "data": sanitized_bytes,
+                                "mime_type": new_mime_type,
+                                "source": "attachment",  # 来源是确定的
+                            }
+                        )
+                    except Exception as e:
+                        # 如果净化失败，记录错误并通知用户
+                        log.error(f"为自定义端点净化附件图片时失败: {e}", exc_info=True)
+                        return "呜哇，这张图好像有点问题，我处理不了…可以换一张试试吗？<伤心>"
+                else:
+                    # 对于非附件图片（如表情），直接使用原始数据
+                    sanitized_images_for_endpoint.append(img_data)
 
         # 复用核心生成逻辑。从此方法抛出的任何异常都将由 generate_response 捕获。
         return await self._execute_generation_cycle(

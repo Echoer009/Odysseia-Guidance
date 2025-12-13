@@ -6,48 +6,94 @@ from typing import Tuple
 log = logging.getLogger(__name__)
 
 
+# --- 压缩策略常量 ---
+NO_COMPRESSION_THRESHOLD_BYTES = 10 * 1024 * 1024  # 10 MB (小于此值不执行迭代压缩)
+MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15 MB (硬性物理上限)
+TARGET_IMAGE_SIZE_BYTES = 4 * 1024 * 1024  # 4 MB  (大于10MB的图片期望压缩到的目标大小)
+MAX_IMAGE_DIMENSION = 4096  # 4096 像素 (最大尺寸)
+HIGH_QUALITY = 95  # 用于10MB以下图片的保存质量
+INITIAL_QUALITY = 85  # 用于10MB以上图片的初始保存质量
+MIN_QUALITY = 50  # 最低可接受质量
+QUALITY_STEP = 10  # 每次迭代降低的质量值
+
+
 def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
     """
-    对输入的图片字节数据进行“净化”处理，确保其格式标准。
-    1. 使用Pillow打开图片。
-    2. 将其转换为统一的 RGBA 模式以获得最大兼容性。
-    3. 重新保存为 PNG 格式的字节流。
-    这可以修复损坏的、非标准的或缺少元数据的图片文件，以兼容健壮性较差的API端点。
-
-    Args:
-        image_bytes: 原始图片的字节数据。
-
-    Returns:
-        一个元组，包含净化后的图片字节数据和新的MIME类型 ("image/png")。
-
-    Raises:
-        ValueError: 如果输入的 image_bytes 为空。
-        Exception: Pillow 库在处理过程中可能抛出的任何其他异常。
+    对输入的图片字节数据进行智能预处理和压缩。
+    - **如果图片 < 10MB**: 只进行必要的尺寸调整和格式统一，以高质量保存。
+    - **如果图片 >= 10MB**: 执行“尽力压缩”策略，尝试将图片压缩至 4MB 以下。
+    - **最终检查**: 任何情况下，处理后的图片都不能超过 15MB 的物理上限。
     """
     if not image_bytes:
         raise ValueError("输入的图片字节数据不能为空。")
 
-    log.info("正在对图片进行净化处理...")
+    original_byte_size = len(image_bytes)
+    log.info(f"开始处理图片，原始大小: {original_byte_size / 1024:.2f} KB。")
+
     try:
         with Image.open(io.BytesIO(image_bytes)) as img:
-            # 转换为 RGBA 模式，这是最通用的模式，可以避免很多色彩空间问题
+            # --- 1. 尺寸调整 (对所有图片都执行) ---
+            if img.width > MAX_IMAGE_DIMENSION or img.height > MAX_IMAGE_DIMENSION:
+                log.info(
+                    f"图片尺寸 {img.size} 超过最大限制 {MAX_IMAGE_DIMENSION}px，将进行缩放。"
+                )
+                img.thumbnail(
+                    (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS
+                )
+                log.info(f"图片已缩放至: {img.size}")
+
+            # --- 2. 格式转换 (对所有图片都执行) ---
             if img.mode != "RGBA":
-                log.debug(f"图片模式为 {img.mode}，将转换为 RGBA。")
                 img = img.convert("RGBA")
 
-            # 创建一个新的 BytesIO 对象来保存转换后的图片
-            output_buffer = io.BytesIO()
-            # 将图片保存为 PNG 格式，PNG 兼容性好且无损
-            img.save(output_buffer, format="PNG")
+            processed_bytes = b""
 
-            sanitized_bytes = output_buffer.getvalue()
+            # --- 3. 根据原始大小选择不同策略 ---
+            if original_byte_size < NO_COMPRESSION_THRESHOLD_BYTES:
+                # --- 策略A: 小于10MB，高质量保存 ---
+                log.info("图片小于10MB，执行高质量保存。")
+                output_buffer = io.BytesIO()
+                img.save(output_buffer, format="WEBP", quality=HIGH_QUALITY)
+                processed_bytes = output_buffer.getvalue()
+            else:
+                # --- 策略B: 大于等于10MB，尽力压缩 ---
+                log.info("图片大于等于10MB，执行迭代压缩。")
+                quality = INITIAL_QUALITY
+                while quality >= MIN_QUALITY:
+                    output_buffer = io.BytesIO()
+                    img.save(output_buffer, format="WEBP", quality=quality)
+                    processed_bytes = output_buffer.getvalue()
+
+                    log.debug(
+                        f"尝试使用质量 {quality} 进行压缩，大小为: {len(processed_bytes) / 1024:.2f} KB。"
+                    )
+
+                    if len(processed_bytes) <= NO_COMPRESSION_THRESHOLD_BYTES:
+                        log.info(
+                            f"压缩成功，文件大小满足目标要求。最终质量: {quality}。"
+                        )
+                        break
+
+                    quality -= QUALITY_STEP
+                else:
+                    log.warning(
+                        f"即便使用最低质量 {MIN_QUALITY}，文件大小 ({len(processed_bytes) / 1024:.2f} KB) "
+                        f"仍未达到 {NO_COMPRESSION_THRESHOLD_BYTES / 1024 / 1024:.2f} MB 的目标。"
+                    )
+
+            # --- 4. 最终检查 (对所有图片都执行) ---
+            if len(processed_bytes) > MAX_IMAGE_SIZE_BYTES:
+                raise ValueError(
+                    f"图片经过处理后大小 ({len(processed_bytes) / 1024 / 1024:.2f} MB) "
+                    f"仍然超过了物理上限 {MAX_IMAGE_SIZE_BYTES / 1024 / 1024:.0f} MB。"
+                )
 
             log.info(
-                f"图片净化完成。原始大小: {len(image_bytes)} bytes -> 净化后大小: {len(sanitized_bytes)} bytes."
+                f"图片处理完成。原始大小: {original_byte_size / 1024:.2f} KB -> "
+                f"处理后大小: {len(processed_bytes) / 1024:.2f} KB."
             )
 
-            return sanitized_bytes, "image/png"
+            return processed_bytes, "image/webp"
     except Exception as e:
-        log.error(f"图片净化过程中发生严重错误: {e}", exc_info=True)
-        # 重新抛出异常，让调用者 (gemini_service) 捕获并处理
+        log.error(f"图片处理过程中发生严重错误: {e}", exc_info=True)
         raise
