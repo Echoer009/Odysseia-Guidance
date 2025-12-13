@@ -689,9 +689,22 @@ class GeminiService:
             for img_data in images:
                 try:
                     # 调用新的工具函数
-                    sanitized_bytes, new_mime_type = sanitize_image(img_data["bytes"])
+                    # [修复] 增加健壮性，同时检查 'data' 和 'bytes' 键
+                    image_bytes = img_data.get("data") or img_data.get("bytes")
+                    if not image_bytes:
+                        log.warning(
+                            f"图片数据字典中缺少 'data' 或 'bytes' 键，已跳过。Keys: {list(img_data.keys())}"
+                        )
+                        continue
+
+                    sanitized_bytes, new_mime_type = sanitize_image(image_bytes)
+                    # [修复] 保持键名一致性，使用 'data' 存储净化后的字节
                     sanitized_images_for_endpoint.append(
-                        {"bytes": sanitized_bytes, "mime_type": new_mime_type}
+                        {
+                            "data": sanitized_bytes,
+                            "mime_type": new_mime_type,
+                            "source": img_data.get("source"),
+                        }
                     )
                 except Exception as e:
                     # 如果净化失败，记录错误并通知用户
