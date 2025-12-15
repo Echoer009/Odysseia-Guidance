@@ -51,7 +51,15 @@ async def search_forum_threads(
     # 3. 将 Pydantic 模型转换为字典，以便在函数内部安全地操作
     filter_dict = {}
     if filters:
-        # 使用 model_dump 将 Pydantic 对象转换为字典
+        # 健壮性处理：如果传入的是字典，先用它创建 Pydantic 模型实例
+        if not isinstance(filters, ForumSearchFilters):
+            try:
+                filters = ForumSearchFilters(**filters)
+            except Exception as e:
+                log.error(f"从字典 {filters} 创建 ForumSearchFilters 时出错: {e}")
+                return [f"错误：提供的筛选条件格式不正确。详情: {e}"]
+
+        # 现在 filters 肯定是一个 Pydantic 对象，可以安全地调用 model_dump
         filter_dict = filters.model_dump(exclude_none=True)
 
     # 4. 在字典上执行所有的数据清洗和验证逻辑
