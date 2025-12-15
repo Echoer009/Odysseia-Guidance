@@ -106,7 +106,11 @@ class ForumSearchService:
             embeddings_to_add = []
             metadatas_to_add = []
 
-            beijing_created_at = thread.created_at.astimezone(BEIJING_TZ)
+            beijing_created_at = (
+                thread.created_at.astimezone(BEIJING_TZ)
+                if thread.created_at
+                else datetime.now(BEIJING_TZ)
+            )
 
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{thread.id}:{i}"
@@ -257,9 +261,9 @@ class ForumSearchService:
 
     async def search(
         self,
-        query: str = None,
+        query: str | None = None,
         n_results: int = 5,
-        filters: Dict[str, Any] = None,
+        filters: Dict[str, Any] | None = None,
     ) -> List[Dict[str, Any]]:
         """
         执行高级语义搜索或按元数据浏览。
@@ -296,9 +300,9 @@ class ForumSearchService:
                         )
                     elif key == "end_date":
                         end_dt_naive = datetime.strptime(value, "%Y-%m-%d")
-                        end_dt_aware = datetime.combine(end_dt_naive, time.max).replace(
-                            tzinfo=BEIJING_TZ
-                        )
+                        end_dt_aware = datetime.combine(
+                            end_dt_naive, datetime.time.max
+                        ).replace(tzinfo=BEIJING_TZ)
                         end_timestamp = end_dt_aware.timestamp()
                         conditions.append(
                             {"created_timestamp": {"$lte": end_timestamp}}
@@ -311,10 +315,11 @@ class ForumSearchService:
                         else:
                             conditions.append({key: {"$eq": value}})
 
-                if len(conditions) > 1:
-                    where_filter = {"$and": conditions}
-                elif conditions:
-                    where_filter = conditions[0]
+                if conditions:
+                    if len(conditions) > 1:
+                        where_filter = {"$and": conditions}
+                    else:
+                        where_filter = conditions[0]
 
             log.info(f"论坛搜索数据库过滤器 (where): {where_filter or '无'}")
 

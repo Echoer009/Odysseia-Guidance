@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
+from pydantic import BaseModel, Field
 
 from src.chat.features.forum_search.services.forum_search_service import (
     forum_search_service,
@@ -11,28 +12,29 @@ from src.chat.config import chat_config as config
 log = logging.getLogger(__name__)
 
 
+# 1. 使用 Pydantic 定义 Filter 的精确结构，替代模糊的 Dict[str, Any]
+# 这能让 Google SDK 自动生成精确的 JSON Schema，引导模型正确调用
+class ForumSearchFilters(BaseModel):
+    category_name: Optional[Union[str, List[str]]] = Field(
+        None,
+        description="论坛频道的名称，例如: '世界书', '教程', '男性向'等。",
+    )
+    author_id: Optional[Union[str, List[str]]] = Field(
+        None, description="作者的 Discord ID (纯数字) 或 @mention 字符串。"
+    )
+    start_date: Optional[str] = Field(None, description="开始日期 (格式: YYYY-MM-DD)。")
+    end_date: Optional[str] = Field(None, description="结束日期 (格式: YYYY-MM-DD)。")
+
+
+# 2. 在函数签名中使用 Pydantic 模型
 async def search_forum_threads(
     query: Optional[str] = None,
-    filters: Optional[Dict[str, Any]] = None,
+    filters: Optional[ForumSearchFilters] = None,
     limit: int = config.FORUM_SEARCH_DEFAULT_LIMIT,
     **kwargs,
 ) -> List[str]:
     """
-    [功能描述] 在社区论坛中搜索帖子，可以根据关键词、作者、频道或日期进行精确查找或模糊浏览。
-
-    [使用时机]
-    - 当用户明确表示想找帖子、搜内容时使用。
-    - 当用户询问特定用户（例如 @user）发过什么内容时使用。
-    - 当用户想看某个频道的近期帖子时使用。
-
-    [参数说明]
-    - query (str, optional): 搜索的关键词。如果用户只是按条件浏览，此项可留空。
-    - limit (int, optional): 返回结果的最大数量，默认为 5。
-    - filters (Dict[str, Any], optional): 过滤条件。
-      - `category_name` (Union[str, List[str]]): 论坛频道的名称。有效名称包括: ['世界书', '全性向', '其他区', '制卡工具区', '女性向', '工具区', '插件', '教程', '深渊区', '男性向', '纯净区', '美化', '预设', '️其它工具区']。
-      - `author_id` (Union[str, List[str]]): 作者的Discord ID。引导用户使用@mention来获取。
-      - `start_date` (str): 开始日期 (格式: YYYY-MM-DD)。
-      - `end_date` (str): 结束日期 (格式: YYYY-MM-DD)。
+    在社区论坛中搜索帖子，可根据关键词、作者、频道或日期进行精确查找。
 
     [使用示例]
     - 用户说: "帮我找找关于'猫猫'的帖子" -> 调用时: `query="猫猫"`
@@ -43,21 +45,23 @@ async def search_forum_threads(
     - 函数返回一个字符串列表，每个字符串的格式为：`'频道名称 > 帖子链接'`。
     - 你在最终回复时，必须原样输出这些字符串，**不要**对链接进行任何形式的再加工、转换或添加Markdown格式。
     """
-    # 为保护系统性能，设置一个硬性上限，最多获取 20 个文本块。
+    # 为保护系统性能，设置一个硬性上限
     limit = min(limit, 20)
 
-    if filters is None:
-        filters = {}
+    # 3. 将 Pydantic 模型转换为字典，以便在函数内部安全地操作
+    filter_dict = {}
+    if filters:
+        # 使用 model_dump 将 Pydantic 对象转换为字典
+        filter_dict = filters.model_dump(exclude_none=True)
 
-    # 修复：确保 author_id 是整数或整数列表，并能处理 @mention 格式
-    if "author_id" in filters and filters["author_id"] is not None:
-        author_id_input = filters["author_id"]
+    # 4. 在字典上执行所有的数据清洗和验证逻辑
+    if "author_id" in filter_dict and filter_dict.get("author_id") is not None:
+        author_id_input = filter_dict["author_id"]
         is_single_item = not isinstance(author_id_input, list)
         author_id_list = [author_id_input] if is_single_item else author_id_input
 
         processed_ids = []
         for author_id_val in author_id_list:
-            # 检查并从 <@...> mention 格式中提取数字 ID
             if (
                 isinstance(author_id_val, str)
                 and author_id_val.startswith("<@")
@@ -68,59 +72,52 @@ async def search_forum_threads(
                 match = re.search(r"\d+", author_id_val)
                 if match:
                     author_id_val = match.group(0)
-
             try:
-                # 将最终处理过的值转换为整数
                 processed_ids.append(int(author_id_val))
             except (ValueError, TypeError) as e:
                 log.error(f"无法将 author_id '{author_id_val}' 转换为整数: {e}")
                 return ["错误：提供的作者ID列表中包含无法处理的格式。"]
 
-        # 如果原来是单个条目，就还用单个整数；如果原来是列表，就用列表
-        filters["author_id"] = processed_ids[0] if is_single_item else processed_ids
+        # 更新字典中的值
+        filter_dict["author_id"] = processed_ids if is_single_item else processed_ids
 
     # 健壮性处理：应对 query 被错误地传入 filters 字典内的情况
-    if query is None and "query" in filters:
-        query = filters.pop("query")
+    if query is None and "query" in filter_dict:
+        query = filter_dict.pop("query", None)
 
-    # 如果 query (去除首尾空格后) 为空且 filters 也为空，则返回错误
-    if not (query and query.strip()) and not filters:
-        log.error(
-            "工具 'search_forum_threads' 被调用，但缺少 'query' 和 'filters' 参数。"
-        )
-        return ["错误：你需要提供一个关键词或者至少一个筛选条件（比如频道名称）。"]
+    # 检查调用是否有效
+    if not (query and query.strip()) and not filter_dict:
+        log.error("工具调用缺少 'query' 和 'filters' 参数。")
+        return ["错误：你需要提供一个关键词或者至少一个筛选条件。"]
 
-    log.info(f"工具 'search_forum_threads' 被调用，查询: {query}, 过滤器: {filters}")
+    log.info(
+        f"工具 'search_forum_threads' 被调用，查询: {query}, 过滤器: {filter_dict}"
+    )
 
     if not forum_search_service.is_ready():
         return ["论坛搜索服务当前不可用，请稍后再试。"]
 
-    log.info(
-        f"[SEARCH_FORUM_TOOL] 准备调用 forum_search_service.search。Limit: {limit}"
-    )
+    # 5. 执行搜索
+    log.info(f"准备调用 forum_search_service.search。Limit: {limit}")
     import time
 
     start_time = time.monotonic()
 
-    # 确保 query 和 filters 不为 None，以满足 search 函数的类型要求
     safe_query = query if query is not None else ""
-    safe_filters = filters if filters is not None else {}
     results = await forum_search_service.search(
-        safe_query, n_results=limit, filters=safe_filters
+        safe_query, n_results=limit, filters=filter_dict
     )
 
     duration = time.monotonic() - start_time
-    log.info(
-        f"[SEARCH_FORUM_TOOL] forum_search_service.search 调用完成, 耗时: {duration:.4f} 秒。"
-    )
+    log.info(f"forum_search_service.search 调用完成, 耗时: {duration:.4f} 秒。")
     log.debug(f"原始搜索结果: {results}")
 
     if not results:
         return []
 
+    # 6. 处理并格式化返回结果
     processed_thread_ids = set()
     output_list = []
-
     for result in results:
         metadata = result.get("metadata", {})
         thread_id = metadata.get("thread_id")
@@ -133,7 +130,6 @@ async def search_forum_threads(
 
         if guild_id:
             thread_url = f"https://discord.com/channels/{guild_id}/{thread_id}"
-            # 构建 "分类 > 链接" 格式的字符串
             output_string = f"{category_name} > {thread_url}"
             output_list.append(output_string)
             processed_thread_ids.add(thread_id)

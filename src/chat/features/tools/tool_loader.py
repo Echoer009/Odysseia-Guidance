@@ -2,12 +2,14 @@ import os
 import importlib
 import inspect
 import logging
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Tuple
 
 log = logging.getLogger(__name__)
 
 
-def load_tools_from_directory(directory: str) -> (List[Callable], Dict[str, Callable]):
+def load_tools_from_directory(
+    directory: str,
+) -> Tuple[List[Callable], Dict[str, Callable]]:
     """
     动态地从指定目录加载所有工具函数。
 
