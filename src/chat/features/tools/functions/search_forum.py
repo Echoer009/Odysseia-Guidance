@@ -21,7 +21,7 @@ async def search_forum_threads(
     [功能描述] 在社区论坛中搜索帖子，可以根据关键词、作者、频道或日期进行精确查找或模糊浏览。
 
     [使用时机]
-    - 当用户明确表示想“找帖子”、“搜内容”、“查记录”时使用。
+    - 当用户明确表示想找帖子、搜内容时使用。
     - 当用户询问特定用户（例如 @user）发过什么内容时使用。
     - 当用户想看某个频道的近期帖子时使用。
 
@@ -29,7 +29,7 @@ async def search_forum_threads(
     - query (str, optional): 搜索的关键词。如果用户只是按条件浏览，此项可留空。
     - limit (int, optional): 返回结果的最大数量，默认为 5。
     - filters (Dict[str, Any], optional): 过滤条件。
-      - `category_name` (Union[str, List[str]]): 论坛频道的名称。
+      - `category_name` (Union[str, List[str]]): 论坛频道的名称。有效名称包括: ['世界书', '全性向', '其他区', '制卡工具区', '女性向', '工具区', '插件', '教程', '深渊区', '男性向', '纯净区', '美化', '预设', '️其它工具区']。
       - `author_id` (Union[str, List[str]]): 作者的Discord ID。引导用户使用@mention来获取。
       - `start_date` (str): 开始日期 (格式: YYYY-MM-DD)。
       - `end_date` (str): 结束日期 (格式: YYYY-MM-DD)。
@@ -38,6 +38,10 @@ async def search_forum_threads(
     - 用户说: "帮我找找关于'猫猫'的帖子" -> 调用时: `query="猫猫"`
     - 用户说: "看看<@12345>最近发了什么" -> 调用时: `filters={"author_id": "12345"}`
     - 用户说: "我想看'男性向'频道里最新的内容" -> 调用时: `filters={"category_name": "男性向"}`
+
+    [返回格式与要求]
+    - 函数返回一个字符串列表，每个字符串的格式为：`'频道名称 > 帖子链接'`。
+    - 你在最终回复时，必须原样输出这些字符串，**不要**对链接进行任何形式的再加工、转换或添加Markdown格式。
     """
     # 为保护系统性能，设置一个硬性上限，最多获取 20 个文本块。
     limit = min(limit, 20)
