@@ -10,17 +10,18 @@ log = logging.getLogger(__name__)
 
 
 async def get_user_avatar(
-    user_id: Optional[str] = None, log_detailed: bool = False, **kwargs
+    user_id: str, log_detailed: bool = False, **kwargs
 ) -> Dict[str, Any]:
     """
-    获取用户的 Discord 头像
+    获取用户的 Discord 头像。
     [调用指南]
-    - 仅在用户明确想看某人头像时使用。
-    - "看看<@12345>的头像" -> `user_id="12345"`
-    - "看看我的头像" -> 无需传入 `user_id`
+    - 当用户想看自己的头像时，请不要传递 `user_id` 参数，系统会自动获取。
+    - 当用户想看其他人的头像时 (例如通过 @mention)，请传递 `user_id`。
+    - "看看我的头像" -> 调用 get_user_avatar()
+    - "看看<@123456789>的头像" -> 调用 get_user_avatar(user_id="123456789")
 
     Args:
-        user_id (Optional[str]): 目标用户的 Discord ID。查自己时省略。
+        user_id (str): 目标用户的 Discord 数字ID。如果模型未提供，系统会自动填充为消息发送者的ID。
 
     Returns:
         一个包含图片二进制数据的字典
@@ -35,8 +36,9 @@ async def get_user_avatar(
         log.error("工具 'get_user_avatar' 执行失败: Discord bot 实例不可用。")
         return {"error": "Discord bot instance is not available."}
 
-    if not user_id or not user_id.isdigit():
-        log.warning(f"提供了无效的 user_id: {user_id}。")
+    # ToolService 保证了 user_id 在执行时总是有效的
+    if not user_id.isdigit():
+        log.warning(f"接收到无效的 user_id: {user_id}。")
         return {"error": f"Invalid user_id provided: {user_id}"}
 
     try:
