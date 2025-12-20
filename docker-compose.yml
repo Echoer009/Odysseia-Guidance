@@ -9,7 +9,7 @@ services:
     #  context: .
     #  dockerfile: .devcontainer/Dockerfile
     #  network: host
-    image: odysseia-guidance-bot_app:latest
+    image: echoni0n/odysseia-guidance-bot_app:latest
     pull_policy: never
     container_name: Odysseia_Guidance
     volumes:
