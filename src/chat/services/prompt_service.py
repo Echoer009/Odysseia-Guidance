@@ -48,24 +48,20 @@ class PromptService:
     def get_prompt(self, prompt_name: str, **kwargs) -> Optional[str]:
         """
         获取一个格式化后的提示词。
-
-        它会首先尝试从当前激活的活动配置中查找覆盖值。
-        如果找不到，则会回退到 `src.chat.config.prompts` 模块中的默认值。
+        它会优先从活动事件中查找覆盖，然后尝试获取模型特定的提示词，最后回退到默认值。
 
         Args:
             prompt_name: 提示词的变量名 (例如, "SYSTEM_PROMPT")。
-            **kwargs: 用于格式化提示词字符串的任何关键字参数。
+            **kwargs: 用于格式化提示词字符串的任何关键字参数，包括 'model_name'。
 
         Returns:
             格式化后的提示词字符串，如果找不到则返回 None。
         """
         prompt_template = None
+        model_name = kwargs.get("model_name")
 
         # 1. 优先检查活动覆盖
         prompt_overrides = event_service.get_prompt_overrides()
-        log.info(
-            f"PromptService: 从 EventService 收到的提示词覆盖配置为: {prompt_overrides}"
-        )
         active_event = event_service.get_active_event()
         active_event_id = active_event["event_id"] if active_event else "N/A"
 
@@ -75,53 +71,44 @@ class PromptService:
                 f"PromptService: 已为 '{prompt_name}' 应用活动 '{active_event_id}' 的提示词覆盖。"
             )
         else:
-            # 2. 如果没有覆盖，则执行回退逻辑
-            if prompt_name == "SYSTEM_PROMPT":
-                # 2.1. 对 SYSTEM_PROMPT 的特殊处理
-                base_template = getattr(default_prompts, "SYSTEM_PROMPT", "")
-                if not base_template:
-                    log.error("默认的 SYSTEM_PROMPT 未找到！")
-                    return None
+            # 2. 如果没有活动覆盖，则获取模型特定的提示词
+            prompt_template = self._get_model_specific_prompt(model_name, prompt_name)
 
-                faction_pack_content = (
-                    event_service.get_system_prompt_faction_pack_content()
+        if not prompt_template:
+            log.warning(
+                f"提示词 '{prompt_name}' 在任何地方都找不到 (模型: {model_name})。"
+            )
+            return None
+
+        # 3. 对 SYSTEM_PROMPT 进行派系包处理（后应用）
+        if prompt_name == "SYSTEM_PROMPT":
+            faction_pack_content = (
+                event_service.get_system_prompt_faction_pack_content()
+            )
+            if faction_pack_content:
+                tag_overrides = dict(
+                    re.findall(r"<(\w+)>(.*?)</\1>", faction_pack_content, re.DOTALL)
                 )
-                if faction_pack_content:
-                    tag_overrides = dict(
-                        re.findall(
-                            r"<(\w+)>(.*?)</\1>", faction_pack_content, re.DOTALL
+                modified_template = prompt_template
+                for tag, content in tag_overrides.items():
+                    replacement = f"<{tag}>{content}</{tag}>"
+                    pattern = re.compile(f"<{tag}>.*?</{tag}>", re.DOTALL)
+                    if pattern.search(modified_template):
+                        modified_template = pattern.sub(replacement, modified_template)
+                        log.debug(
+                            f"已为 SYSTEM_PROMPT 应用派系包中的标签 '{tag}' 覆盖。"
                         )
-                    )
-                    modified_template = base_template
-                    for tag, content in tag_overrides.items():
-                        replacement = f"<{tag}>{content}</{tag}>"
-                        pattern = re.compile(f"<{tag}>.*?</{tag}>", re.DOTALL)
-                        if pattern.search(modified_template):
-                            modified_template = pattern.sub(
-                                replacement, modified_template
-                            )
-                            log.debug(
-                                f"已为 SYSTEM_PROMPT 应用派系包中的标签 '{tag}' 覆盖。"
-                            )
-                        else:
-                            log.warning(
-                                f"在 SYSTEM_PROMPT 中未找到用于覆盖的标签: <{tag}>"
-                            )
-                    prompt_template = modified_template
-                else:
-                    prompt_template = base_template
-            else:
-                # 2.2. 对其他提示词的通用处理
-                if hasattr(default_prompts, prompt_name):
-                    prompt_template = getattr(default_prompts, prompt_name)
-                else:
-                    log.warning(f"提示词 '{prompt_name}' 在任何地方都找不到。")
-                    return None
+                    else:
+                        log.warning(f"在 SYSTEM_PROMPT 中未找到用于覆盖的标签: <{tag}>")
+                prompt_template = modified_template
 
-        # 3. 使用提供的参数格式化提示词
-        if kwargs and prompt_template:
+        # 4. 使用提供的参数格式化提示词
+        format_kwargs = kwargs.copy()
+        format_kwargs.pop("model_name", None)
+
+        if format_kwargs and prompt_template:
             try:
-                return prompt_template.format(**kwargs)
+                return prompt_template.format(**format_kwargs)
             except KeyError as e:
                 log.error(f"格式化提示词 '{prompt_name}' 时缺少参数: {e}")
                 return prompt_template
@@ -166,7 +153,7 @@ class PromptService:
         beijing_tz = timezone(timedelta(hours=8))
         current_beijing_time = datetime.now(beijing_tz).strftime("%Y年%m月%d日 %H:%M")
         # 动态知识块（世界之书、个人记忆）将作为独立消息注入，无需在此处处理占位符
-        core_prompt_template = self.get_prompt("SYSTEM_PROMPT")
+        core_prompt_template = self.get_prompt("SYSTEM_PROMPT", model_name=model_name)
 
         # 填充核心提示词
         core_prompt = core_prompt_template
