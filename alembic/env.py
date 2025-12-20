@@ -26,7 +26,7 @@ if config.config_file_name is not None:
 # Set the database URL from environment variables
 DB_USER = os.getenv("POSTGRES_USER", "user")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
-DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_HOST = os.getenv("DB_HOST", "db")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "odysseia_db")
 
