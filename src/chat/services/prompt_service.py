@@ -9,7 +9,6 @@ import json
 import re
 
 
-from src.chat.config import prompts as default_prompts
 from src.chat.config.prompts import PROMPT_CONFIG
 from src.chat.config import chat_config
 from src.chat.services.event_service import event_service
@@ -207,7 +206,7 @@ class PromptService:
                 {
                     "role": "user",
                     "parts": [
-                        f'<attitude_and_background user="{user_name}">\n{combined_prompt}\n</attitude_and_background>'
+                        f'<attitude_and_background user="{user_name}">\n这是关于 {user_name} 的一些背景信息，你在与ta互动时应该了解这些，除非涉及,不要在对话中直接引用这些信息，。\n{combined_prompt}\n</attitude_and_background>'
                     ],
                 }
             )
