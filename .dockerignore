@@ -1,0 +1,41 @@
+# .dockerignore
+
+# Git - 我们在 dive 中亲眼看到了它占用了 306MB
+.git
+.gitignore
+
+# data 文件夹 - 我们发现它是最大的一个，占用了 954MB
+data/
+
+# venv 虚拟环境 - 第二大元凶，占用了 497MB
+venv/
+.venv/
+env/
+
+# tutorial 文件夹 - 占用 198MB，也应作为数据处理
+tutorial/
+
+# tests 文件夹 - 占用 193MB，生产环境不需要
+tests/
+
+# node_modules - 占用 45MB，不应包含在最终镜像中
+node_modules/
+
+# 其他开发和缓存文件
+.vscode/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 构建工具，不需要在镜像内部
+.dockerignore
+Dockerfile
+Dockerfile.postgres
+.devcontainer
+
+# 数据和日志的最佳实践
+pgdata/
+logs.txt
+*.log

@@ -1,8 +1,6 @@
 FROM python:3.11.5-slim AS builder
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc default-libmysqlclient-dev && \
-    rm -rf /var/lib/apt/lists/*
+# We no longer need to install gcc or mysql client, as our dependencies are pre-compiled.
 
 WORKDIR /opt/pysetup
 
@@ -15,9 +13,7 @@ FROM python:3.11.5-slim
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends default-libmysqlclient-dev && \
-    rm -rf /var/lib/apt/lists/*
+# We no longer need to install mysql client in the final image.
 
 COPY --from=builder /opt/pysetup/deps /usr/local/lib/python3.11/site-packages
 

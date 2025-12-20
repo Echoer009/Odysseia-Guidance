@@ -2,38 +2,67 @@ services:
   bot_app:
     restart: no
     env_file:
-     - .env
-    build:
-      context: .
-      dockerfile: .devcontainer/Dockerfile
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    #build:
+    #  context: .
+    #  dockerfile: .devcontainer/Dockerfile
+    #  network: host
+    image: odysseia-guidance-bot_app:latest
+    pull_policy: never
     container_name: Odysseia_Guidance
     volumes:
       - .:/app
+      - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     # --- DEV请 取消 注释下面的command:sleep命令并且 注释 掉command: python ---
     #command: sleep infinity
     command: python3 -u -m src.main
     networks:
       - bot_network
+    depends_on:
+      - db
 
-  config_web:
-    build:
-      context: .
-      dockerfile: .devcontainer/Dockerfile
-    container_name: config_web
-    restart: unless-stopped
-    env_file:
-      - .env
+  #  config_web:
+  #    build:
+  #      context: .
+  #      dockerfile: .devcontainer/Dockerfile
+  #    container_name: config_web
+  #    restart: unless-stopped
+  #    env_file:
+  #      - .env
+  #    ports:
+  #      - "${CONFIG_WEB_PORT:-8080}:80"
+  #    networks:
+  #      - bot_network
+  #    volumes:
+  #      - .:/app
+  #      - /var/run/docker.sock:/var/run/docker.sock
+  #    # --- DEV请 取失 注释下面的command: sleep命令并且 注释 掉command: gunicorn ---
+  #    #command: sleep infinity
+  #    command: gunicorn --chdir ./web --worker-class eventlet -w 1 --bind 0.0.0.0:80 "web-main:web_app"
+  #    depends_on:
+  #      - db
+
+  db:
+    # 使用官方打包好的 ParadeDB 镜像，它基于 PG16
+    image: paradedb/paradedb:latest-pg16
+    container_name: odysseia_pg_db # 保持与项目其余部分一致的命名
+    restart: unless-stopped # 保持与项目其余部分一致的重启策略
+    environment:
+      # 沿用 .env 文件中的变量，更加灵活和安全
+      POSTGRES_DB: ${POSTGRES_DB:-odysseia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
-      - "${CONFIG_WEB_PORT:-8080}:80"
+      # 沿用变量端口映射，方便在不同环境中部署
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # 数据持久化到本地 ./pgdata 目录，并使用 PG16 的标准数据路径
+      - ./pgdata:/var/lib/postgresql/data
     networks:
       - bot_network
-    volumes:
-      - .:/app
-      - /var/run/docker.sock:/var/run/docker.sock
-    # --- DEV请 取消 注释下面的command: sleep命令并且 注释 掉command: gunicorn ---
-    #command: sleep infinity
-    command: gunicorn --chdir ./web --worker-class eventlet -w 1 --bind 0.0.0.0:80 "web-main:web_app"
 
 networks:
   bot_network:

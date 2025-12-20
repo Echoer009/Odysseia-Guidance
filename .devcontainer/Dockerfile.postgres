@@ -1,0 +1,38 @@
+# 基于官方 pgvector 镜像（包含 Postgres 18 和 pgvector）
+FROM pgvector/pgvector:pg18
+
+# 设置构建参数
+ENV SCWS_VERSION=1.2.3
+ENV ZHPARSER_VERSION=master
+
+# 安装编译所需的依赖
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    make \
+    automake \
+    autoconf \
+    libtool \
+    gcc \
+    g++ \
+    git \
+    libc-dev \
+    postgresql-server-dev-18 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 1. 编译安装 SCWS (zhparser 的依赖)
+# 注意：这里加了 'autoreconf -i' 来生成 configure 脚本
+RUN git clone https://github.com/hightman/scws.git /tmp/scws \
+    && cd /tmp/scws \
+    && autoreconf -i \
+    && ./configure \
+    && make install \
+    && ldconfig
+
+# 2. 编译安装 zhparser
+RUN git clone https://github.com/amutu/zhparser.git /tmp/zhparser \
+    && cd /tmp/zhparser \
+    && make install
+
+# 清理编译工具以减小镜像体积 (可选)
+# RUN apt-get purge -y make automake gcc g++ git postgresql-server-dev-18 && apt-get autoremove -y

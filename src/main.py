@@ -176,6 +176,7 @@ def setup_logging():
     logging.getLogger("chromadb").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
 class GuidanceBot(commands.Bot):
@@ -230,7 +231,7 @@ class GuidanceBot(commands.Bot):
         # 检查频道是否被禁言
         if await chat_db_manager.is_channel_muted(channel.id):
             logging.getLogger(__name__).debug(
-                f"交互来自被禁言的频道 {channel.name}，已忽略。"
+                f"交互来自被禁言的频道 {getattr(channel, 'name', f'ID: {channel.id}')}，已忽略。"
             )
             # 尝试发送一个仅自己可见的提示消息
             try:
@@ -246,7 +247,7 @@ class GuidanceBot(commands.Bot):
         # 检查交互是否来自配置中禁用的频道
         if channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
             logging.getLogger(__name__).debug(
-                f"交互来自禁用的频道 {channel.name}，已忽略。"
+                f"交互来自禁用的频道 {getattr(channel, 'name', f'ID: {channel.id}')}，已忽略。"
             )
             # 注意：全局检查无法发送响应消息，只能返回False来静默地阻止命令
             return False

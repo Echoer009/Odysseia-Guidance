@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Documentation files
+docs/
+
 # C extensions
 *.so
 
@@ -295,3 +298,8 @@ $RECYCLE.BIN/
 
 # Ignore local Vite config with SSL for development
 src/chat/features/games/blackjack-web/vite.config.ts
+
+# Docker persistent data
+/pgdata/
+# Ignore tutorial source files, as they are processed into the database
+tutorial/

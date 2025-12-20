@@ -107,6 +107,15 @@ FORUM_SEARCH_DEFAULT_LIMIT = 5  # 论坛搜索工具返回结果的默认数量
 RAG_MAX_DISTANCE = 1.2
 FORUM_RAG_MAX_DISTANCE = 1.0
 
+# --- 教程 RAG 配置 ---
+TUTORIAL_RAG_CONFIG = {
+    "TOP_K_VECTOR": 20,  # 向量搜索返回的初始结果数量
+    "TOP_K_FTS": 20,  # 全文搜索返回的初始结果数量
+    "HYBRID_SEARCH_FINAL_K": 5,  # 混合搜索后最终选择的文本块数量
+    "RRF_K": 60,  # RRF 算法中的排名常数
+    "MAX_PARENT_DOCS": 3,  # 最终返回给AI的父文档最大数量
+}
+
 # --- Gemini Service 配置 ---
 GEMINI_CHAT_CONFIG = {
     "temperature": 1.1,

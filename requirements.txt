@@ -12,6 +12,15 @@ chromadb
 objgraph
 uvloop; sys_platform != 'win32'
 apscheduler
+# PostgreSQL and ORM dependencies
+SQLAlchemy
+asyncpg
+pgvector
+alembic
+
+# Data Processing & AI
+langchain-text-splitters
+numpy
 
 # Web UI 依赖
 fastapi
@@ -25,3 +34,5 @@ psutil
 pytest
 pytest-asyncio
 pytest-dotenv
+# This is for Alembic's sync operations, our main app still uses asyncpg
+psycopg2-binary
