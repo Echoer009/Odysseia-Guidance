@@ -22,6 +22,7 @@ def upgrade() -> None:
     Phase 1: Only install the required extensions.
     This is to ensure they are fully available before being used in a subsequent migration.
     """
+    op.execute("CREATE SCHEMA IF NOT EXISTS tutorials;")
     op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_search;")
 
@@ -32,3 +33,4 @@ def downgrade() -> None:
     """
     op.execute("DROP EXTENSION IF EXISTS pg_search;")
     op.execute("DROP EXTENSION IF EXISTS vector;")
+    op.execute("DROP SCHEMA IF EXISTS tutorials CASCADE;")
