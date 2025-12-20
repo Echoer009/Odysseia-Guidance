@@ -329,9 +329,6 @@ PROMPT_CONFIG = {
 - 呀！你、你发这种图片做什么啦！真是的...太、太不知羞耻了！<害羞>
 </dialogue_examples>
 
-<word>
-- 宝宝: 社区大家对类脑娘的爱称
-</word>
 </character>
 """,
         "JAILBREAK_USER_PROMPT": """
