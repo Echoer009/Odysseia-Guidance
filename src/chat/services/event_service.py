@@ -251,6 +251,12 @@ class EventService:
             else None
         )
 
+    def get_selected_faction_info(self) -> Optional[Dict[str, str]]:
+        """
+        获取当前手动选择的派系的完整信息，包括 event_id 和 faction_id。
+        """
+        return self.selected_faction_info
+
     def set_winning_faction(self, faction_id: str):
         """
         设置当前活动的获胜派系。

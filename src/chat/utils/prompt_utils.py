@@ -1,4 +1,5 @@
 import re
+import random
 from src.chat.config.prompts import SYSTEM_PROMPT
 from src.chat.config.emoji_config import EMOJI_MAPPINGS, FACTION_EMOJI_MAPPINGS
 from src.chat.services.event_service import event_service
@@ -13,27 +14,35 @@ def replace_emojis(text: str) -> str:
     将文本中的自定义表情占位符（如 <微笑>）替换为对应的 Discord 自定义表情（如 <:xianhua:12345>）。
     此函数现在会根据当前活动和派系动态选择表情包。
     """
-    active_event = event_service.get_active_event()
-    selected_faction = event_service.get_selected_faction()
+    faction_info = event_service.get_selected_faction_info()
+    processed_text = text
 
-    emoji_map_to_use = EMOJI_MAPPINGS  # 默认使用全局映射
+    # 首先尝试使用派系专属表情包
+    if faction_info:
+        event_id = faction_info.get("event_id")
+        faction_id = faction_info.get("faction_id")
 
-    if active_event and selected_faction:
-        event_id = active_event.get("event_id")
-        faction_map = FACTION_EMOJI_MAPPINGS.get(event_id, {}).get(selected_faction)
-        if faction_map:
-            log.info(
-                f"prompt_utils: 使用事件 '{event_id}' 派系 '{selected_faction}' 的专属表情包。"
-            )
-            # 将派系表情包与默认表情包合并，实现优先使用派系表情，然后回退到默认
-            emoji_map_to_use = faction_map + EMOJI_MAPPINGS
+        if event_id and faction_id:
+            faction_map = FACTION_EMOJI_MAPPINGS.get(event_id, {}).get(faction_id)
+            if faction_map:
+                log.info(
+                    f"prompt_utils: 正在为事件 '{event_id}' 的派系 '{faction_id}' 应用专属表情包。"
+                )
+                for pattern, replacement_list in faction_map:
+                    if replacement_list:
+                        # 使用 lambda 函数为每个匹配项随机选择一个替换
+                        processed_text = pattern.sub(
+                            lambda m: random.choice(replacement_list), processed_text
+                        )
 
-    for pattern, replacement_list in emoji_map_to_use:
+    # 然后，对剩余的占位符（或所有占位符，如果没有派系包）使用默认表情包
+    for pattern, replacement_list in EMOJI_MAPPINGS:
         if replacement_list:
-            # 替换内容必须是字符串，因此我们从列表中取出第一个元素
-            # 注意：对于空字符串 '' 的情况，这里会正确地移除占位符
-            text = pattern.sub(replacement_list[0], text)
-    return text
+            processed_text = pattern.sub(
+                lambda m: random.choice(replacement_list), processed_text
+            )
+
+    return processed_text
 
 
 def extract_persona_prompt(system_prompt: str) -> str:
