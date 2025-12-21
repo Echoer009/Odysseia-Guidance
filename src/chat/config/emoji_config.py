@@ -120,7 +120,7 @@ FACTION_EMOJI_MAPPINGS = {
         "werewolf": _HALLOWEEN_WEREWOLF_EMOJI_MAPPINGS,
     },
     "christmas_2025": {
-        "christmas": [
+        "before_christmas": [
             (
                 re.compile(r"\<乖巧\>"),
                 [
@@ -177,6 +177,122 @@ FACTION_EMOJI_MAPPINGS = {
                     "<:Christmas_xianqi_2:1452279627329437870>",
                 ],
             ),
-        ]
+        ],
+        "christmas_eve": [
+            (
+                re.compile(r"\<乖巧\>"),
+                [
+                    "<:Christmas_guaiqiao_1:1452280027914702900>",
+                    "<:Christmas_guaiqiao_2:1452280092133691433>",
+                    "<:Christmas_guaiqiao_3:1452280220873916436>",
+                ],
+            ),
+            (
+                re.compile(r"\<害羞\>"),
+                [
+                    "<:Christmas_shy_1:1452279894846345326>",
+                    "<:Christmas_shy_2:1452279992787669103>",
+                ],
+            ),
+            (re.compile(r"\<微笑\>"), ["<:Christmas_smile:1452279788185325725>"]),
+            (
+                re.compile(r"\<赞\>"),
+                [
+                    "<:Christmas_zan_1:1452279676708982854>",
+                    "<:Christmas_zan_2:1452279742375137424>",
+                ],
+            ),
+            (
+                re.compile(r"\<鬼脸\>"),
+                [
+                    "<:Christmas_ghost_face_1:1452279221941698631>",
+                    "<:Christmas_ghost_face_2:1452279452108324875>",
+                ],
+            ),
+            (
+                re.compile(r"\<偷笑\>"),
+                [
+                    "<:Christmas_touxiao_1:1452280592178610207>",
+                    "<:Christmas_touxiao_2:1452280613708107786>",
+                ],
+            ),
+            (re.compile(r"\<吃瓜\>"), ["<:Christmas_chigua:1452280544078331949>"]),
+            (re.compile(r"\<尴尬赞\>"), ["<:Christmas_ganga_zan:1452280484393648229>"]),
+            (re.compile(r"\<傲娇\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
+            (
+                re.compile(r"\<生气\>"),
+                [
+                    "<:Christmas_anger_1:1452280274787373096>",
+                    "<:Christmas_anger_2:1452280361190035618>",
+                ],
+            ),
+            (re.compile(r"\<伤心\>"), ["<:Christmas_sad:1452280136098512988>"]),
+            (re.compile(r"\<呆\>"), ["<:Christmas_dai:1452280631235973150>"]),
+            (
+                re.compile(r"\<嫌弃\>"),
+                [
+                    "<:Christmas_xianqi_1:1452279510832644268>",
+                    "<:Christmas_xianqi_2:1452279627329437870>",
+                ],
+            ),
+        ],
+        "christmas_day": [
+            (
+                re.compile(r"\<乖巧\>"),
+                [
+                    "<:Christmas_guaiqiao_1:1452280027914702900>",
+                    "<:Christmas_guaiqiao_2:1452280092133691433>",
+                    "<:Christmas_guaiqiao_3:1452280220873916436>",
+                ],
+            ),
+            (
+                re.compile(r"\<害羞\>"),
+                [
+                    "<:Christmas_shy_1:1452279894846345326>",
+                    "<:Christmas_shy_2:1452279992787669103>",
+                ],
+            ),
+            (re.compile(r"\<微笑\>"), ["<:Christmas_smile:1452279788185325725>"]),
+            (
+                re.compile(r"\<赞\>"),
+                [
+                    "<:Christmas_zan_1:1452279676708982854>",
+                    "<:Christmas_zan_2:1452279742375137424>",
+                ],
+            ),
+            (
+                re.compile(r"\<鬼脸\>"),
+                [
+                    "<:Christmas_ghost_face_1:1452279221941698631>",
+                    "<:Christmas_ghost_face_2:1452279452108324875>",
+                ],
+            ),
+            (
+                re.compile(r"\<偷笑\>"),
+                [
+                    "<:Christmas_touxiao_1:1452280592178610207>",
+                    "<:Christmas_touxiao_2:1452280613708107786>",
+                ],
+            ),
+            (re.compile(r"\<吃瓜\>"), ["<:Christmas_chigua:1452280544078331949>"]),
+            (re.compile(r"\<尴尬赞\>"), ["<:Christmas_ganga_zan:1452280484393648229>"]),
+            (re.compile(r"\<傲娇\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
+            (
+                re.compile(r"\<生气\>"),
+                [
+                    "<:Christmas_anger_1:1452280274787373096>",
+                    "<:Christmas_anger_2:1452280361190035618>",
+                ],
+            ),
+            (re.compile(r"\<伤心\>"), ["<:Christmas_sad:1452280136098512988>"]),
+            (re.compile(r"\<呆\>"), ["<:Christmas_dai:1452280631235973150>"]),
+            (
+                re.compile(r"\<嫌弃\>"),
+                [
+                    "<:Christmas_xianqi_1:1452279510832644268>",
+                    "<:Christmas_xianqi_2:1452279627329437870>",
+                ],
+            ),
+        ],
     },
 }
