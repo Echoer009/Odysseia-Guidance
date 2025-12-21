@@ -139,7 +139,7 @@ MODEL_GENERATION_CONFIG = {
         "max_output_tokens": 6000,
         "thinking_config": {
             "include_thoughts": True,
-            "thinking_level": "low",  # 使用新的思考等级设置
+            "thinking_level": "Medium",  # 使用新的思考等级设置
         },
     },
     # 你可以在这里为其他模型添加更多自定义配置
