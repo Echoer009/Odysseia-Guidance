@@ -1,0 +1,20 @@
+[
+    {
+        "faction_id": "before_christmas",
+        "faction_name": "圣诞节前",
+        "description": "圣诞节快要到啦！空气里都充满了期待的味道！",
+        "thumbnail_url": "https://img.hellogithub.com/cos/2024/12/21/christmas_faction.webp"
+    },
+    {
+        "faction_id": "christmas_eve",
+        "faction_name": "平安夜",
+        "description": "平安夜的钟声即将敲响，来感受节日前夕的宁静与期待吧！",
+        "thumbnail_url": "https://img.hellogithub.com/cos/2024/12/21/christmas_faction.webp"
+    },
+    {
+        "faction_id": "christmas_day",
+        "faction_name": "圣诞节",
+        "description": "圣诞快乐！尽情享受节日的欢乐与惊喜吧！",
+        "thumbnail_url": "https://img.hellogithub.com/cos/2024/12/21/christmas_faction.webp"
+    }
+]

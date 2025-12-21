@@ -1,0 +1,7 @@
+{
+    "system_prompt_faction_packs": {
+        "before_christmas": "factions/before_christmas.xml",
+        "christmas_eve": "factions/christmas_eve.xml",
+        "christmas_day": "factions/christmas_day.xml"
+    }
+}
