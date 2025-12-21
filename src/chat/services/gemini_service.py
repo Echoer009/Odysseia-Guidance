@@ -774,10 +774,17 @@ class GeminiService:
             model_name=prompt_model_name,
         )
 
-        # 3. 准备 API 调用参数
-        chat_config = app_config.GEMINI_CHAT_CONFIG.copy()
-        thinking_budget = chat_config.pop("thinking_budget", None)
-        gen_config_params = {**chat_config, "safety_settings": self.safety_settings}
+        # 3. 准备 API 调用参数 (重构)
+        model_key = prompt_model_name or "default"
+        gen_config_data = app_config.MODEL_GENERATION_CONFIG.get(
+            model_key, app_config.MODEL_GENERATION_CONFIG["default"]
+        ).copy()
+
+        log.info(f"正在为模型 '{model_key}' 加载生成配置。")
+
+        # 从配置中提取 thinking_config，剩下的作为 generation_config 的参数
+        thinking_config_data = gen_config_data.pop("thinking_config", None)
+        gen_config_params = {**gen_config_data, "safety_settings": self.safety_settings}
 
         if self.available_tools:
             gen_config_params["tools"] = self.available_tools
@@ -788,13 +795,11 @@ class GeminiService:
 
         gen_config = types.GenerateContentConfig(**gen_config_params)
 
-        if thinking_budget is not None:
-            gen_config.thinking_config = types.ThinkingConfig(
-                include_thoughts=True,
-                thinking_budget=thinking_budget,
-            )
+        # 根据提取的 thinking_config_data 动态构建 ThinkingConfig
+        if thinking_config_data:
+            gen_config.thinking_config = types.ThinkingConfig(**thinking_config_data)
             log.info(
-                f"已为模型启用思维链 (Thinking)，预算: {thinking_budget}，并要求返回思考内容。"
+                f"已为模型 '{model_key}' 启用思维链 (Thinking)，配置: {thinking_config_data}"
             )
 
         # 4. 准备初始对话历史
