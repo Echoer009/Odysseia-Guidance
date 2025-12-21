@@ -22,9 +22,9 @@ from google.genai import errors as genai_errors
 # 导入数据库管理器和提示词配置
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config as app_config
-from src.chat.config.emoji_config import EMOJI_MAPPINGS, FACTION_EMOJI_MAPPINGS
 from src.chat.services.event_service import event_service
 from src.chat.services.regex_service import regex_service
+from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.key_rotation_service import (
     KeyRotationService,
@@ -282,66 +282,8 @@ class GeminiService:
         discord_emoji_pattern = re.compile(r":\w+:")
         formatted = discord_emoji_pattern.sub("", formatted)
 
-        # 3. Replace custom emoji placeholders
-        active_event = event_service.get_active_event()
-        selected_faction = event_service.get_selected_faction()
-
-        emoji_map_to_use = EMOJI_MAPPINGS  # Default to global map
-
-        if active_event and selected_faction:
-            event_id = active_event.get("event_id")
-            faction_map = FACTION_EMOJI_MAPPINGS.get(event_id, {}).get(selected_faction)
-            if faction_map:
-                log.info(
-                    f"使用事件 '{event_id}' 派系 '{selected_faction}' 的专属表情包。"
-                )
-                emoji_map_to_use = faction_map
-            else:
-                log.info(
-                    f"未找到派系 '{selected_faction}' 的专属表情包，使用全局表情包。"
-                )
-        else:
-            log.info("未使用任何派系表情包，使用全局表情包。")
-
-        for pattern, emojis in emoji_map_to_use:
-            if isinstance(emojis, list) and emojis:
-                selected_emoji = random.choice(emojis)
-                formatted = pattern.sub(selected_emoji, formatted)
-            elif isinstance(emojis, str):
-                formatted = pattern.sub(emojis, formatted)
-
-        # 4. Handle warning marker (DEPRECATED)
-        # This logic is now handled by the 'issue_user_warning' tool.
-        # The code is kept here for reference but is disabled.
-        # warning_marker = "<warn>"
-        # if formatted.endswith(warning_marker):
-        #     formatted = formatted[: -len(warning_marker)].strip()
-        #     try:
-        #         min_d, max_d = app_config.BLACKLIST_BAN_DURATION_MINUTES
-        #         ban_duration = random.randint(min_d, max_d)
-        #         expires_at = datetime.now(timezone.utc) + timedelta(
-        #             minutes=ban_duration
-        #         )
-        #
-        #         log.info(f"用户 {user_id} 在服务器 {guild_id} 收到一次警告。")
-        #
-        #         was_blacklisted = (
-        #             await chat_db_manager.record_warning_and_check_blacklist(
-        #                 user_id, guild_id, expires_at
-        #             )
-        #         )
-        #
-        #         if was_blacklisted:
-        #             log.info(
-        #                 f"用户 {user_id} 因累计3次警告被自动拉黑 {ban_duration} 分钟，过期时间: {expires_at}。"
-        #             )
-        #             await affection_service.decrease_affection_on_blacklist(
-        #                 user_id, guild_id
-        #             )
-        #         # 如果只是警告而未拉黑，也可以考虑在这里进行轻微的好感度惩罚，但根据当前需求，我们只在拉黑时操作。
-        #
-        #     except Exception as e:
-        #         log.error(f"处理用户 {user_id} 的警告时出错: {e}")
+        # 3. Replace custom emoji placeholders using the centralized function
+        formatted = replace_emojis(formatted)
 
         return formatted
 
