@@ -1,6 +1,7 @@
 services:
   bot_app:
-    restart: no
+    restart: unless-stopped # 2. 设置重启策略
+    mem_limit: 1g # 1. 设置内存硬限制为 1GB (您可以根据VPS配置调整)
     env_file:
       - .env
     environment:
