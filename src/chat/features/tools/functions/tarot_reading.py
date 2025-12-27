@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import io
 import discord
 
@@ -10,7 +10,10 @@ log = logging.getLogger(__name__)
 
 
 async def tarot_reading(
-    question: str = "关于我最近的整体运势", spread_type: str = "three_card", **kwargs
+    question: str = "关于我最近的整体运势",
+    spread_type: str = "three_card",
+    channel: Optional[discord.TextChannel] = None,
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     为用户执行一次塔罗牌占卜。
@@ -19,6 +22,7 @@ async def tarot_reading(
     Args:
         question (str): 用户提出的具体问题。如果用户没有提供，则默认为“关于我最近的整体运势”。
         spread_type (str): 使用的牌阵类型。默认为 'three_card'（三张牌）。也可以是 'single_card'（单张牌）。
+        channel (discord.TextChannel): 占卜结果将被发送到的频道。这个参数由系统自动注入。
 
     Returns:
         一个字典，其中包含抽到的牌的详细信息，供你进行解读。
@@ -27,7 +31,6 @@ async def tarot_reading(
         f"--- [工具执行]: tarot_reading, 参数: question='{question}', spread_type='{spread_type}' ---"
     )
 
-    channel = kwargs.get("channel")
     if not channel:
         log.error("无法执行塔罗牌占卜：缺少 'channel' 对象。")
         return {
