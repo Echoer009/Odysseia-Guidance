@@ -38,5 +38,5 @@ class ShopPanel(BasePanel["SimpleShopView"]):
             if self.shop_data.balance is not None
             else "查询失败"
         )
-        embed.set_footer(text=f"你的余额: {balance_str} 奥德赛币")
+        embed.set_footer(text=f"你的余额: {balance_str} 类脑币")
         return embed

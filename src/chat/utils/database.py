@@ -208,7 +208,7 @@ class ChatDatabaseManager:
                 );
             """)
 
-            # --- 奥德赛币系统表 ---
+            # --- 类脑币系统表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_coins (
                     user_id INTEGER PRIMARY KEY,
