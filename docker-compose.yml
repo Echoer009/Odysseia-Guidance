@@ -56,9 +56,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-odysseia_db}
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-    ports:
-      # 沿用变量端口映射，方便在不同环境中部署
-      - "${DB_PORT:-5432}:5432"
+    #    ports:
+    #      # 沿用变量端口映射，方便在不同环境中部署
+    #      - "${DB_PORT:-5432}:5432"
     volumes:
       # 数据持久化到本地 ./pgdata 目录，并使用 PG16 的标准数据路径
       - ./pgdata:/var/lib/postgresql/data
