@@ -76,32 +76,32 @@ class ToolService:
                 log.info(f"模型提供的参数: {tool_args}")
 
             # 步骤 2 & 3: 智能注入依赖和上下文
+            # 我们不再检查函数签名，而是将所有可用的上下文信息直接注入
+            # 到 tool_args 中。工具函数可以通过 **kwargs 来按需取用。
             sig = inspect.signature(tool_function)
             if "bot" in sig.parameters:
                 tool_args["bot"] = self.bot
                 if log_detailed:
                     log.info("已智能注入 'bot' 实例。")
 
-            if "user_id" in sig.parameters and author_id is not None:
-                tool_args.setdefault("user_id", str(author_id))
-                if log_detailed:
-                    log.info(f"确保 'user_id' 已智能填充: {tool_args['user_id']}")
+            if author_id is not None:
+                tool_args["author_id"] = author_id
+                # 同时也为明确需要 user_id 的工具提供便利
+                if "user_id" in sig.parameters:
+                    tool_args.setdefault("user_id", str(author_id))
+                    if log_detailed:
+                        log.info(f"确保 'user_id' 已智能填充: {tool_args['user_id']}")
 
             if channel:
-                if "channel" in sig.parameters:
-                    tool_args["channel"] = channel
-                    if log_detailed:
-                        log.info(f"已智能注入 'channel' (ID: {channel.id})。")
-                if "guild_id" in sig.parameters and channel.guild:
-                    tool_args.setdefault("guild_id", str(channel.guild.id))
-                if "thread_id" in sig.parameters and isinstance(
-                    channel, discord.Thread
-                ):
+                tool_args["channel"] = channel
+                if log_detailed:
+                    log.info(f"已注入 'channel' (ID: {channel.id}) 到 **kwargs。")
+                if channel.guild:
+                    tool_args["guild_id"] = str(channel.guild.id)
+                if isinstance(channel, discord.Thread):
                     tool_args["thread_id"] = channel.id
                     if log_detailed:
-                        log.info(
-                            f"检测到帖子上下文，已智能注入 'thread_id': {channel.id}"
-                        )
+                        log.info(f"检测到帖子上下文，已注入 'thread_id': {channel.id}")
 
             # 步骤 4: 智能地传递 log_detailed 参数
             if "log_detailed" in sig.parameters:

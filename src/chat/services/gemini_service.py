@@ -902,29 +902,68 @@ class GeminiService:
                             },
                         )
                     )
-                else:
-                    if result.function_response:
-                        tool_name = result.function_response.name
-                        original_result_str = result.function_response.response.get(
-                            "result", ""
-                        )
+                # 确保 result 是 Part 类型，并且其 function_response 和 response 属性都存在
+                elif (
+                    isinstance(result, types.Part)
+                    and result.function_response
+                    and result.function_response.response
+                ):
+                    tool_name = result.function_response.name
+                    # 现在这里是绝对安全的
+                    original_result = result.function_response.response.get(
+                        "result", ""
+                    )
+
+                    response_content: Dict[str, Any]
+
+                    if isinstance(original_result, (dict, list)):
+                        response_content = {"result": original_result}
+                    else:
+                        safe_tool_name = tool_name or "unknown_tool"
+                        safe_result_str = str(original_result or "")
+
                         wrapped_result_str = (
                             prompt_service.build_tool_result_wrapper_prompt(
-                                tool_name, original_result_str
+                                safe_tool_name,
+                                safe_result_str,
                             )
                         )
-                        new_response_part = types.Part.from_function_response(
-                            name=tool_name,
-                            response={"result": wrapped_result_str},
-                        )
-                        tool_result_parts.append(new_response_part)
-                    else:
-                        tool_result_parts.append(result)
+                        response_content = {"result": wrapped_result_str}
+
+                    new_response_part = types.Part.from_function_response(
+                        name=tool_name or "unknown_tool",
+                        response=response_content,
+                    )
+                    tool_result_parts.append(new_response_part)
+                elif isinstance(result, types.Part):
+                    tool_result_parts.append(result)
+                else:
+                    log.warning(f"接收到未知的工具执行结果类型: {type(result)}")
 
             if log_detailed:
                 log.info(
                     f"已收集 {len(tool_result_parts)} 个工具执行结果，准备将其返回给模型。"
                 )
+                try:
+                    # --- [新增调试日志] ---
+                    # 序列化并打印工具返回的详细内容
+                    results_for_log = []
+                    for part in tool_result_parts:
+                        if part and part.function_response:
+                            results_for_log.append(
+                                {
+                                    "name": part.function_response.name,
+                                    "response": self._serialize_for_logging(
+                                        part.function_response.response
+                                    ),
+                                }
+                            )
+                    log.info(
+                        f"--- [工具结果详细内容] ---\n{json.dumps(results_for_log, ensure_ascii=False, indent=2)}"
+                    )
+                    # --- [日志结束] ---
+                except Exception as e:
+                    log.error(f"序列化工具结果用于日志记录时出错: {e}")
 
             conversation_history.append(
                 types.Content(role="user", parts=tool_result_parts)
