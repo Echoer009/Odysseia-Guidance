@@ -2,6 +2,7 @@ import logging
 from src.chat.features.tutorial_search.services.tutorial_search_service import (
     tutorial_search_service,
 )
+from src.chat.services.prompt_service import prompt_service
 
 log = logging.getLogger(__name__)
 
@@ -21,26 +22,18 @@ async def query_tutorial_knowledge_base(query: str, **kwargs) -> str:
     """
     log.info(f"工具 'query_tutorial_knowledge_base' 被调用，查询: '{query}'")
 
-    # 工具的职责非常简单：直接调用专门的 Service 来完成所有复杂工作。
-    # 这使得工具本身保持干净、解耦，并且避免了循环依赖。
-    context = await tutorial_search_service.search(query)
+    # 1. 从 kwargs 中提取 user_id 和 thread_id
+    user_id = kwargs.get("user_id", "N/A")
+    thread_id = kwargs.get("thread_id")
 
-    # 如果搜索服务未能找到任何内容，直接返回其提示信息
-    if not context or "没有找到" in context:
-        return context
+    # 2. 调用搜索服务，获取原始的、结构化的教程文档列表
+    docs = await tutorial_search_service.search(
+        query, user_id=str(user_id), thread_id=thread_id
+    )
 
-    # --- 专用提示词包装 ---
-    # 为 RAG 返回的上下文添加一层严格的指令，确保 AI 忠实地使用提供的链接
-    prompt_wrapper = f"""
-请严格根据以下提供的参考资料来回答问题。
+    # 3. 将原始文档列表和 thread_id 传递给 prompt_service 进行专业的上下文格式化
+    #    prompt_service 内部会处理 docs 为空的情况，并包裹上必要的指令。
+    formatted_context = prompt_service.format_tutorial_context(docs, thread_id)
 
-**核心指令**:
-1.  **忠实引用**: 当你引用或提及任何教程时，必须使用下面资料中提供的、与之对应的 Markdown 格式链接，例如 `[教程标题](链接)`。
-2.  **禁止修改**: 绝对不允许以任何形式修改、替换或自行创造任何 URL 链接。链接必须与资料中的原文一字不差。
-3.  **内容为王**: 你的回答应该完全基于这些资料的内容。如果资料无法解答，请明确告知。
-
---- 参考资料 ---
-{context}
---- 结束 ---
-"""
-    return prompt_wrapper
+    # 4. 返回由 prompt_service 精心构建的、带有明确来源标注和行为指令的最终上下文
+    return formatted_context

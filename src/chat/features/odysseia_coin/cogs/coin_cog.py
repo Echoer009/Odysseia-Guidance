@@ -1,14 +1,12 @@
 import logging
 import discord
-import os
 from discord import app_commands
 from discord.ext import commands
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.odysseia_coin.ui.shop_ui import SimpleShopView
-from src.chat.services.event_service import event_service
-from src.chat.features.events.ui.event_panel_view import EventPanelView
 from src.chat.config import chat_config
+from src.chat.features.odysseia_coin.service.shop_service import shop_service
 
 log = logging.getLogger(__name__)
 
@@ -26,10 +24,15 @@ class CoinCog(commands.Cog):
             return
 
         # 排除特定命令前缀的消息，避免与命令冲突
-        if hasattr(self.bot, "command_prefix") and message.content.startswith(
-            self.bot.command_prefix
-        ):
-            return
+        command_prefix = self.bot.command_prefix
+        # command_prefix can be a string, or a list/tuple of strings.
+        # startswith requires a string or a tuple of strings.
+        if isinstance(command_prefix, str):
+            if message.content.startswith(command_prefix):
+                return
+        elif isinstance(command_prefix, (list, tuple)):
+            if message.content.startswith(tuple(command_prefix)):
+                return
 
         try:
             reward_granted = await coin_service.grant_daily_message_reward(
@@ -58,7 +61,8 @@ class CoinCog(commands.Cog):
             # 检查服务器是否在奖励列表中已由中央处理器完成，这里直接执行逻辑
             log.info(f"[CoinCog] 接收到新帖子进行奖励处理: {thread.name} ({thread.id})")
             reward_amount = chat_config.COIN_CONFIG["FORUM_POST_REWARD"]
-            reason = f"在频道 {thread.parent.name} 发布新帖"
+            channel_name = thread.parent.name if thread.parent else "未知频道"
+            reason = f"在频道 {channel_name} 发布新帖"
             new_balance = await coin_service.add_coins(author.id, reward_amount, reason)
             log.info(
                 f"[CoinCog] 用户 {author.name} ({author.id}) 因发帖获得 {reward_amount} 类脑币。新余额: {new_balance}"
@@ -72,111 +76,32 @@ class CoinCog(commands.Cog):
     @app_commands.command(name="类脑商店", description="打开商店，购买商品。")
     async def shop(self, interaction: discord.Interaction):
         """斜杠命令：打开商店"""
-        await interaction.response.defer(ephemeral=True)
         try:
-            from src.chat.utils.database import chat_db_manager
+            # 1. 准备数据
+            shop_data = await shop_service.prepare_shop_data(interaction.user.id)
 
-            balance = await coin_service.get_balance(interaction.user.id)
-            items_rows = await coin_service.get_all_items()
-            items = [dict(item) for item in items_rows]
+            is_thread_author = False
+            if isinstance(interaction.channel, discord.Thread):
+                if interaction.user.id == interaction.channel.owner_id:
+                    is_thread_author = True
+                    shop_data.thread_id = interaction.channel.id
+            shop_data.show_tutorial_button = is_thread_author
 
-            # 检查用户是否已经拥有个人记忆功能
-            user_profile = await chat_db_manager.get_user_profile(interaction.user.id)
-            has_personal_memory = user_profile and user_profile["has_personal_memory"]
+            # 2. 创建视图
+            view = SimpleShopView(self.bot, interaction.user, shop_data)
 
-            # 如果用户已经拥有个人记忆功能，则修改商品列表中"个人记忆功能"的价格为10
-            if has_personal_memory:
-                for item in items:
-                    if item["name"] == "个人记忆功能":
-                        item["price"] = 10
-                        break
-
-            view = SimpleShopView(self.bot, interaction.user, balance, items)
-            view.interaction = interaction  # 提前设置，以便 EventPanelView 能访问
-
-            embeds_to_send = []
-
-            # 0. 创建商店公告 Embed
-            try:
-                announcement_path = (
-                    "src/chat/features/odysseia_coin/shop_announcement.md"
-                )
-                if (
-                    os.path.exists(announcement_path)
-                    and os.path.getsize(announcement_path) > 0
-                ):
-                    with open(announcement_path, "r", encoding="utf-8") as f:
-                        announcement_content = f.read()
-                    announcement_embed = discord.Embed(
-                        description=announcement_content,
-                        color=discord.Color.from_rgb(255, 182, 193),  # Light Pink
-                    )
-                    embeds_to_send.append(announcement_embed)
-            except Exception as e:
-                log.error(f"读取或创建商店公告时出错: {e}")
-
-            # 1. 检查是否有活动，如果有，创建活动推广 Embed
-            active_event = event_service.get_active_event()
-            if active_event:
-                # 创建 EventPanelView 实例以调用其 embed 创建方法
-                event_panel_view = EventPanelView(
-                    event_data=active_event, main_shop_view=view
-                )
-                # 现在 create_event_embed 是异步的，需要 await
-                event_promo_embed = await event_panel_view.create_event_embed()
-                embeds_to_send.append(event_promo_embed)
-
-            # 2. 创建商店主 Embed
-            shop_embed = view.create_shop_embed()
-            embeds_to_send.append(shop_embed)
-
-            # 3. 发送消息
-            await interaction.followup.send(
-                embeds=embeds_to_send, view=view, ephemeral=True
-            )
+            # 3. 启动视图（视图现在自己处理交互响应）
+            await view.start(interaction)
 
         except Exception as e:
             log.error(f"打开商店时出错: {e}", exc_info=True)
-            await interaction.followup.send(
-                "打开商店时发生错误，请稍后再试。", ephemeral=True
-            )
-
-    # @app_commands.command(name="admin_add_coins", description="【管理员】为指定用户添加类脑币。")
-    # @app_commands.default_permissions(administrator=True)
-    # @app_commands.describe(
-    #     user="选择一个用户",
-    #     amount="要添加的金额"
-    # )
-    # async def admin_add_coins(
-    #     self,
-    #     interaction: discord.Interaction,
-    #     user: discord.Member,
-    #     amount: int
-    # ):
-    #     """管理员命令：为用户添加类脑币"""
-    #     if amount <= 0:
-    #         await interaction.response.send_message("❌ 金额必须是正数。", ephemeral=True)
-    #         return
-
-    #     await interaction.response.defer(ephemeral=True)
-    #     try:
-    #         reason = f"由管理员 {interaction.user.name} 添加"
-    #         new_balance = await coin_service.add_coins(user.id, amount, reason)
-
-    #         embed = discord.Embed(
-    #             title="💰 类脑币添加成功",
-    #             description=f"已成功为用户 {user.mention} 添加了 **{amount}** 类脑币。",
-    #             color=discord.Color.green()
-    #         )
-    #         embed.add_field(name="操作人", value=interaction.user.mention, inline=True)
-    #         embed.add_field(name="新余额", value=f"{new_balance}", inline=True)
-
-    #         await interaction.followup.send(embed=embed, ephemeral=True)
-    #         log.info(f"管理员 {interaction.user.name} 为用户 {user.name} 添加了 {amount} 类脑币。")
-
-    #     except Exception as e:
-    #         log.error(f"管理员 {interaction.user.name} 添加类脑币时出错: {e}", exc_info=True)
-    #         await interaction.followup.send(f"❌ 操作失败，发生内部错误：{e}", ephemeral=True)
+            error_message = "打开商店时发生错误，请稍后再试。"
+            # 根据交互是否已被响应来决定是使用 followup 还是 send_message
+            if interaction.response.is_done():
+                await interaction.followup.send(error_message, ephemeral=True)
+            else:
+                # 在初始 defer 之前就发生错误的情况
+                await interaction.response.send_message(error_message, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

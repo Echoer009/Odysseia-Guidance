@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     Index,
+    func,
 )
 from sqlalchemy.orm import declarative_base, relationship
 from pgvector.sqlalchemy import HALFVEC
@@ -33,19 +34,24 @@ class TutorialDocument(Base):
     title = Column(String, nullable=False, comment="教程的标题。")
     category = Column(String, nullable=True, comment="教程所属的高级类别。")
     source_url = Column(String, nullable=True, comment="文档的源URL。")
-    author = Column(String, nullable=True, comment="文档的作者。")
+    author = Column(String, nullable=True, comment="文档的作者名。")
+    author_id = Column(String, nullable=False, comment="作者的Discord用户ID。")
+    thread_id = Column(String, nullable=True, comment="原始Discord帖子的ID。")
     tags = Column(JSON, nullable=True, comment="用于存储标签的JSON字段。")
 
     # 完整的原始内容存储在这里，以备参考和重新分块。
     original_content = Column(Text, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(
-        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
-    )
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # 这创建了与 KnowledgeChunk 的一对多关系。
     chunks = relationship("KnowledgeChunk", back_populates="document")
+
+    __table_args__ = (
+        Index("ix_tutorial_documents_author_id", "author_id"),
+        {"schema": SCHEMA_NAME},
+    )
 
     def __repr__(self):
         return f"<TutorialDocument(id={self.id}, title='{self.title}')>"

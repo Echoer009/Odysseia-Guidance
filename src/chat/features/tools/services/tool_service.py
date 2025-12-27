@@ -1,7 +1,7 @@
 from google.genai import types
 import discord
 import inspect
-from typing import Optional, Dict, Callable
+from typing import Optional, Dict, Callable, Any
 import logging
 
 log = logging.getLogger(__name__)
@@ -50,6 +50,13 @@ class ToolService:
         if log_detailed:
             log.info(f"--- [工具执行流程]: 准备执行 '{tool_name}' ---")
 
+        if not tool_name:
+            log.error("接收到没有名称的工具调用。")
+            return types.Part.from_function_response(
+                name="unknown_tool",
+                response={"error": "Tool call with no name received."},
+            )
+
         tool_function = self.tool_map.get(tool_name)
 
         if not tool_function:
@@ -60,36 +67,43 @@ class ToolService:
 
         try:
             # 步骤 1: 从模型响应中提取参数
-            tool_args = dict(tool_call.args)
+            tool_args: Dict[str, Any] = (
+                {key: value for key, value in tool_call.args.items()}
+                if tool_call.args
+                else {}
+            )
             if log_detailed:
                 log.info(f"模型提供的参数: {tool_args}")
 
-            # 步骤 2: 注入应用程序级别的依赖项 (依赖注入)
-            tool_args["bot"] = self.bot
-            if log_detailed:
-                log.info("已注入 'bot' 实例。")
+            # 步骤 2 & 3: 智能注入依赖和上下文
+            sig = inspect.signature(tool_function)
+            if "bot" in sig.parameters:
+                tool_args["bot"] = self.bot
+                if log_detailed:
+                    log.info("已智能注入 'bot' 实例。")
 
-            # 步骤 3: 注入上下文信息
-            if author_id is not None:
-                if not tool_args.get("user_id"):
-                    tool_args["user_id"] = str(author_id)
+            if "user_id" in sig.parameters and author_id is not None:
+                tool_args.setdefault("user_id", str(author_id))
+                if log_detailed:
+                    log.info(f"确保 'user_id' 已智能填充: {tool_args['user_id']}")
+
+            if channel:
+                if "channel" in sig.parameters:
+                    tool_args["channel"] = channel
+                    if log_detailed:
+                        log.info(f"已智能注入 'channel' (ID: {channel.id})。")
+                if "guild_id" in sig.parameters and channel.guild:
+                    tool_args.setdefault("guild_id", str(channel.guild.id))
+                if "thread_id" in sig.parameters and isinstance(
+                    channel, discord.Thread
+                ):
+                    tool_args["thread_id"] = channel.id
                     if log_detailed:
                         log.info(
-                            f"模型未提供有效 'user_id'，已自动填充为消息作者 ID: {author_id}"
+                            f"检测到帖子上下文，已智能注入 'thread_id': {channel.id}"
                         )
-            if channel:
-                tool_args["channel"] = channel
-                # 自动填充 guild_id
-                if channel.guild:
-                    tool_args.setdefault("guild_id", str(channel.guild.id))
-                if log_detailed:
-                    log.info(
-                        f"已注入 'channel' (ID: {channel.id}) 和 'guild_id' (ID: {channel.guild.id if channel.guild else 'N/A'})。"
-                    )
 
             # 步骤 4: 智能地传递 log_detailed 参数
-            # 检查工具函数是否接受 'log_detailed' 关键字参数
-            sig = inspect.signature(tool_function)
             if "log_detailed" in sig.parameters:
                 tool_args["log_detailed"] = log_detailed
 
@@ -118,7 +132,8 @@ class ToolService:
             else:
                 # 这是一个标准的文本/JSON结果（包括错误信息）
                 part = types.Part.from_function_response(
-                    name=tool_name, response={"result": result}
+                    name=tool_name,
+                    response={"result": result or "操作成功完成，但没有返回文本内容。"},
                 )
                 if log_detailed:
                     log.info(f"已为 '{tool_name}' 构造标准的 FunctionResponse Part。")

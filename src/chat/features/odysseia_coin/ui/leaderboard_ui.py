@@ -1,6 +1,6 @@
 import discord
 import logging
-from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING
+from typing import List, Dict, Any, TYPE_CHECKING, TypeVar, cast
 from discord.ext import commands
 
 from src.chat.utils.database import chat_db_manager
@@ -10,12 +10,23 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+ViewT = TypeVar("ViewT", bound="LeaderboardView")
+
+
+class LeaderboardButton(discord.ui.Button[ViewT]):
+    @property
+    def view(self) -> ViewT:
+        return cast(ViewT, super().view)
+
 
 class LeaderboardView(discord.ui.View):
     """排行榜视图，显示类脑币和卖屁股次数排行榜"""
 
     def __init__(
-        self, bot: commands.Bot, author: discord.Member, main_view: "SimpleShopView"
+        self,
+        bot: commands.Bot,
+        author: discord.User | discord.Member,
+        main_view: "SimpleShopView",
     ):
         super().__init__(timeout=180)
         self.bot = bot
@@ -186,7 +197,7 @@ class LeaderboardView(discord.ui.View):
         return True
 
 
-class CoinsLeaderboardButton(discord.ui.Button):
+class CoinsLeaderboardButton(LeaderboardButton["LeaderboardView"]):
     """类脑币排行榜按钮"""
 
     def __init__(self):
@@ -203,7 +214,7 @@ class CoinsLeaderboardButton(discord.ui.Button):
         await interaction.response.edit_message(embed=embed, view=self.view)
 
 
-class SellBodyLeaderboardButton(discord.ui.Button):
+class SellBodyLeaderboardButton(LeaderboardButton["LeaderboardView"]):
     """卖屁股排行榜按钮"""
 
     def __init__(self):
@@ -220,7 +231,7 @@ class SellBodyLeaderboardButton(discord.ui.Button):
         await interaction.response.edit_message(embed=embed, view=self.view)
 
 
-class PreviousPageButton(discord.ui.Button):
+class PreviousPageButton(LeaderboardButton["LeaderboardView"]):
     """上一页按钮"""
 
     def __init__(self):
@@ -238,7 +249,7 @@ class PreviousPageButton(discord.ui.Button):
             await interaction.response.defer()
 
 
-class NextPageButton(discord.ui.Button):
+class NextPageButton(LeaderboardButton["LeaderboardView"]):
     """下一页按钮"""
 
     def __init__(self):
@@ -256,7 +267,7 @@ class NextPageButton(discord.ui.Button):
             await interaction.response.defer()
 
 
-class BackToShopButton(discord.ui.Button):
+class BackToShopButton(LeaderboardButton["LeaderboardView"]):
     """返回商店按钮"""
 
     def __init__(self):
@@ -266,6 +277,5 @@ class BackToShopButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """返回商店界面"""
-        await interaction.response.edit_message(
-            embed=self.view.main_view.create_shop_embed(), view=self.view.main_view
-        )
+        embeds = await self.view.main_view.create_shop_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=self.view.main_view)

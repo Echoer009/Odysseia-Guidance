@@ -657,6 +657,92 @@ class PromptService:
 [/工具 '{tool_name}' 的执行结果]
 """
 
+    def format_tutorial_context(
+        self, docs: List[Dict[str, Any]], thread_id: Optional[int]
+    ) -> str:
+        """
+        将从 tutorial_search_service 获取的文档列表格式化为带有上下文感知的、给AI看的最终字符串。
+        同时，在此处包裹上严格的指令，确保AI忠实地使用提供的内容和链接。
+
+        Args:
+            docs: 包含教程信息的字典列表，每个字典包含 'title', 'content', 'thread_id'。
+            thread_id: 当前搜索发生的帖子ID。
+
+        Returns:
+            一个格式化好的、带有指令包装的字符串。
+        """
+        if not docs:
+            return (
+                "我在教程知识库里没有找到关于这个问题的具体信息。您可以换个方式问问吗？"
+            )
+
+        thread_docs_parts = []
+        general_docs_parts = []
+
+        for doc in docs:
+            # 移除可能存在的 "教程地址: [url]" 行，因为它会被元数据中的 link 替代
+            # 使用 splitlines() 和 join() 来安全地处理多行内容
+            content_lines = [
+                line
+                for line in doc["content"].splitlines()
+                if not line.strip().startswith("教程地址:")
+            ]
+            cleaned_content = "\n".join(content_lines)
+
+            # 从元数据中获取 link
+            link = doc.get("link")
+            title = doc["title"]
+
+            # 如果链接存在，则格式化为 Markdown 链接；否则只使用标题
+            if link:
+                formatted_title = f"[{title}]({link})"
+            else:
+                formatted_title = title
+
+            doc_content = f"--- 参考资料: {formatted_title} ---\n{cleaned_content}"
+
+            if thread_id is not None and doc.get("thread_id") == thread_id:
+                thread_docs_parts.append(doc_content)
+            else:
+                general_docs_parts.append(doc_content)
+
+        context_parts = []
+        if thread_docs_parts:
+            context_parts.append(
+                "[来自此帖子作者的教程]:\n" + "\n\n".join(thread_docs_parts)
+            )
+
+        if general_docs_parts:
+            context_parts.append(
+                "[来自官方知识库的补充信息]:\n" + "\n\n".join(general_docs_parts)
+            )
+
+        # 理论上 context_parts 不会为空，因为我们已经处理了 if not docs 的情况
+        # 但为了代码健壮性，保留检查
+        if not context_parts:
+            return (
+                "我在教程知识库里没有找到关于这个问题的具体信息。您可以换个方式问问吗？"
+            )
+
+        final_context = "\n\n".join(context_parts)
+
+        # --- 在这里应用最终的指令包装 ---
+        prompt_wrapper = f"""
+请严格根据以下提供的参考资料来回答问题。
+
+**核心指令**:
+1.  **优先采纳与明确归属**: 当“参考资料”中包含“[来自此帖子作者的教程]”时，需要**优先**采纳这部分信息。在回答时，必须明确点出信息的来源
+2.  **链接处理**: 仔细检查每一份参考资料。
+    *   如果一份资料中**包含**URL链接，当你在回答中提及这篇教程时，**必须**使用资料中提供的那个完整链接。
+    *   如果一份资料中**不包含**任何URL链接，你在回答中提及它时，**严禁**自行创造链接。
+3.  **内容为王**: 你的回答应该完全基于这些资料的内容。如果资料无法解答，明确告知。
+
+--- 参考资料 ---
+{final_context}
+--- 结束 ---
+"""
+        return prompt_wrapper
+
 
 # 创建一个单例
 prompt_service = PromptService()
