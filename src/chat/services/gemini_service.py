@@ -884,7 +884,7 @@ class GeminiService:
                 self.tool_service.execute_tool_call(
                     tool_call=call,
                     channel=channel,
-                    author_id=user_id,
+                    user_id=user_id,
                     log_detailed=log_detailed,
                 )
                 for call in function_calls

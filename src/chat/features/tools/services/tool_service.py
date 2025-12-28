@@ -31,17 +31,17 @@ class ToolService:
         self,
         tool_call: types.FunctionCall,
         channel: Optional[discord.TextChannel] = None,
-        author_id: Optional[int] = None,
+        user_id: Optional[int] = None,
         log_detailed: bool = False,
     ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
-        这个版本通过依赖注入来提供上下文（如 bot 实例、channel），并处理备用参数（如 author_id）。
+        这个版本通过依赖注入来提供上下文（如 bot 实例、channel），并处理备用参数（如 user_id）。
 
         Args:
             tool_call: 来自 Gemini API 响应的函数调用对象。
             channel: 可选的当前消息所在的 Discord 频道对象。
-            author_id: 可选的当前消息作者的 Discord ID，用作某些参数的备用值。
+            user_id: 可选的当前消息作者的 Discord ID，用作某些参数的备用值。
 
         Returns:
             一个格式化为 FunctionResponse 的 Part 对象，其中包含工具的输出。
@@ -84,13 +84,18 @@ class ToolService:
                 if log_detailed:
                     log.info("已智能注入 'bot' 实例。")
 
-            if author_id is not None:
-                tool_args["author_id"] = author_id
-                # 同时也为明确需要 user_id 的工具提供便利
-                if "user_id" in sig.parameters:
-                    tool_args.setdefault("user_id", str(author_id))
+            if user_id is not None:
+                # 优先注入通用的 user_id
+                tool_args["user_id"] = user_id
+                if log_detailed:
+                    log.info(f"已注入 'user_id': {user_id}")
+                # 为需要 author_id 的旧工具提供兼容性
+                if "author_id" in sig.parameters:
+                    tool_args.setdefault("author_id", user_id)
                     if log_detailed:
-                        log.info(f"确保 'user_id' 已智能填充: {tool_args['user_id']}")
+                        log.info(
+                            f"为兼容性，已填充 'author_id': {tool_args['author_id']}"
+                        )
 
             if channel:
                 tool_args["channel"] = channel
