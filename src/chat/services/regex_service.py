@@ -64,33 +64,15 @@ class RegexService:
         if not isinstance(text, str):
             return ""
 
-        # 1. 保护 Markdown 链接
-        markdown_links = {}
-
-        def replacer(match):
-            placeholder = f"__MARKDOWN_LINK_{len(markdown_links)}__"
-            markdown_links[placeholder] = match.group(0)
-            return placeholder
-
-        # 匹配 [text](url) 格式的链接
-        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", replacer, text)
-
-        # 2. 移除模型输出中可能包含的各种思考过程标签和内容
+        # 移除模型输出中可能包含的各种思考过程标签和内容
         think_pattern = re.compile(
             r"<(思考|think|thinking|thought|scratchpad|reasoning|rationale)>.*?</\1>\s*",
             re.DOTALL | re.IGNORECASE,
         )
         text = think_pattern.sub("", text)
 
-        # 3. 清理其他括号
-        # 匹配 (), （）
-        text = re.sub(r"[\(（][^)）]*[\)）]:?\s*", "", text)
-        # 匹配 [], 【】
-        text = re.sub(r"[\[【][^\]】]*[\]】]:?\s*", "", text)
-
-        # 4. 恢复 Markdown 链接
-        for placeholder, original_link in markdown_links.items():
-            text = text.replace(placeholder, original_link)
+        # 替换 1011 为 [数据删除]
+        text = re.sub(r"1011", "[数据删除]", text)
 
         return text.strip()
 

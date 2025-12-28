@@ -276,7 +276,7 @@ class GeminiService:
         formatted = re.sub(
             r"<CURRENT_USER_MESSAGE_TO_REPLY.*?>", "", formatted, flags=re.IGNORECASE
         )
-        # formatted = regex_service.clean_ai_output(formatted)
+        formatted = regex_service.clean_ai_output(formatted)
 
         # 2. Remove old Discord emoji codes
         discord_emoji_pattern = re.compile(r":\w+:")
