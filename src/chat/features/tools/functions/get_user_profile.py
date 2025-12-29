@@ -19,9 +19,10 @@ async def get_user_profile(
     [调用指南]
     - **自主决策**: 只要认为有必要就可以调用
     - **按需查询**: 根据上下文，在 `queries` 列表中指定一个或多个需要查询的字段，以获取必要的信息。
+    - **查询自己**: 如果用户希望查询自己的信息有,系统会自动提供用户的数字ID，无需手动填写 `user_id`。
 
     Args:
-        user_id (str): 目标用户的 Discord 数字ID。
+        user_id (str): 目标用户的 Discord 数字ID。如果用户正在查询自己的信息，系统将自动填充此字段。
         queries (List[str]): 需要查询的字段列表。有效值: "balance", "avatar", "roles"。
 
     Returns:
