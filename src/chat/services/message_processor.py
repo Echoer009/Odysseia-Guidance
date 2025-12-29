@@ -339,7 +339,7 @@ class MessageProcessor:
             #     # 这样 AI 模型就可以接收到 <@user_id> 格式的字符串并提取 ID
             #     pass
 
-        content = regex_service.clean_user_input(content)
+        # content = regex_service.clean_user_input(content)
         content = content.strip()
 
         return content

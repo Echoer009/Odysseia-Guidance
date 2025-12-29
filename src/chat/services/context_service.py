@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 import discord  # 导入discord模块
+from discord.ext import commands
 import re  # 导入正则表达式模块
 from src import config
 from src.chat.config import chat_config  # 导入 chat_config
@@ -18,7 +19,7 @@ class ContextService:
     def __init__(self):
         self.bot = None  # 初始化时bot实例为空
 
-    def set_bot_instance(self, bot: "discord.ext.commands.Bot"):
+    def set_bot_instance(self, bot: commands.Bot):
         """设置bot实例，以便访问Discord API"""
         self.bot = bot
         log.info("ContextService 已设置 bot 实例。")
@@ -69,6 +70,9 @@ class ContextService:
 
         history = []
         try:
+            if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+                log.warning(f"频道 {channel_id} 类型不支持 history 方法，已跳过。")
+                return []
             # 使用 async for 循环来正确处理异步迭代器
             async for msg in channel.history(limit=limit):
                 # 忽略其他机器人和系统消息
@@ -108,7 +112,7 @@ class ContextService:
         guild_id: int,
         limit: int = chat_config.CHANNEL_MEMORY_CONFIG["formatted_history_limit"],
         exclude_message_id: Optional[int] = None,
-    ) -> List[Dict[str, any]]:
+    ) -> List[Dict[str, Any]]:
         """
         获取结构化的频道对话历史，用于构建多轮对话请求。
         此方法会合并连续的用户消息，以符合 user/model 交替的API格式。
@@ -196,7 +200,7 @@ class ContextService:
                         )
                         pass  # 获取失败则静默忽略
 
-                if msg.author.id == self.bot.user.id or (
+                if (self.bot.user and msg.author.id == self.bot.user.id) or (
                     config.BRAIN_GIRL_APP_ID
                     and msg.author.id == config.BRAIN_GIRL_APP_ID
                 ):
@@ -276,20 +280,57 @@ class ContextService:
         content = re.sub(r"https?://cdn\.discordapp\.com\S+", "", content)
 
         # 3. 将用户提及 <@USER_ID> 替换为 @USERNAME
+        log.info(f"[Mention Clean] ----- Start Mention Cleaning -----")
+        log.info(f"[Mention Clean] Initial content: '{content}'")
+        log.info(f"[Mention Clean] Guild available: {bool(guild)}")
+
         if guild:
 
             def replace_mention(match):
-                user_id = int(match.group(1))
-                member = guild.get_member(user_id)
-                return f"@{member.display_name}" if member else "@未知用户"
+                user_id_str = match.group(1)
+                log.info(f"[Mention Clean] Matched user ID string: '{user_id_str}'")
+                try:
+                    user_id = int(user_id_str)
+                    member = guild.get_member(user_id)
+                    log.info(
+                        f"[Mention Clean] guild.get_member({user_id}) result: {member}"
+                    )
+
+                    if member:
+                        replacement = f"{member.display_name}<{user_id}>"
+                        log.info(
+                            f"[Mention Clean] Found member '{member.display_name}'. Replacing with: '{replacement}'"
+                        )
+                        return replacement
+                    else:
+                        log.warning(
+                            f"[Mention Clean] Could not find member with ID {user_id} in guild '{guild.name}'."
+                        )
+                        replacement = f"未知用户<{user_id}>"
+                        log.info(f"[Mention Clean] Replacing with: '{replacement}'")
+                        return replacement
+                except ValueError:
+                    log.error(
+                        f"[Mention Clean] Could not convert matched group '{user_id_str}' to an integer. Original match: {match.group(0)}"
+                    )
+                    return match.group(
+                        0
+                    )  # Return the original mention if conversion fails
 
             content = re.sub(r"<@!?(\d+)>", replace_mention, content)
+            log.info(f"[Mention Clean] Content after replacement: '{content}'")
+        else:
+            log.warning(
+                "[Mention Clean] No guild object provided, skipping mention replacement."
+            )
+
+        log.info(f"[Mention Clean] ----- End Mention Cleaning -----")
 
         # 4. 移除自定义表情符号 (例如 <:name:id> 或 <a:name:id>)
         content = re.sub(r"<a?:\w+:\d+>", "", content)
 
         # 5. 使用新的清理函数，清理用户输入中的所有指定括号
-        content = regex_service.clean_user_input(content)
+        # content = regex_service.clean_user_input(content)
 
         return content.strip()
 

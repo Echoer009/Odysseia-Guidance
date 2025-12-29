@@ -28,7 +28,7 @@ from src.chat.features.world_book.database.world_book_db_manager import (
 # 这是一个关键步骤。通过在这里导入工具模块，我们可以确保
 # @register_tool 装饰器被执行，从而将工具函数及其 Schema
 # 添加到全局的 tool_registry 中。
-from src.chat.features.tools.functions import get_user_avatar
+# 动态加载器会自动处理工具的加载，此处不再需要手动导入。
 
 # 导入全局 gemini_service 实例
 from src.chat.services.gemini_service import gemini_service

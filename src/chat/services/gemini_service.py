@@ -276,7 +276,7 @@ class GeminiService:
         formatted = re.sub(
             r"<CURRENT_USER_MESSAGE_TO_REPLY.*?>", "", formatted, flags=re.IGNORECASE
         )
-        formatted = regex_service.clean_ai_output(formatted)
+        # formatted = regex_service.clean_ai_output(formatted)
 
         # 2. Remove old Discord emoji codes
         discord_emoji_pattern = re.compile(r":\w+:")
@@ -772,6 +772,7 @@ class GeminiService:
             guild_name=guild_name,
             location_name=location_name,
             model_name=prompt_model_name,
+            channel=channel,  # 传递 channel 对象
         )
 
         # 3. 准备 API 调用参数 (重构)

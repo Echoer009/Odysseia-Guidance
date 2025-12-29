@@ -79,19 +79,26 @@ class ToolService:
             # 我们不再检查函数签名，而是将所有可用的上下文信息直接注入
             # 到 tool_args 中。工具函数可以通过 **kwargs 来按需取用。
             sig = inspect.signature(tool_function)
-            if "bot" in sig.parameters:
-                tool_args["bot"] = self.bot
-                if log_detailed:
-                    log.info("已智能注入 'bot' 实例。")
+            # 无条件注入 bot 实例，让工具函数可以通过 **kwargs 按需获取
+            tool_args["bot"] = self.bot
+            if log_detailed:
+                log.info("已注入 'bot' 实例。")
 
             if user_id is not None:
                 # 优先注入通用的 user_id
-                tool_args["user_id"] = user_id
-                if log_detailed:
-                    log.info(f"已注入 'user_id': {user_id}")
+                # 统一将 user_id 转为字符串类型再注入，以适配工具函数的类型期望
+                user_id_str = str(user_id)
+                # 核心修复：只有当模型没有提供 user_id 时，才注入当前用户的 id 作为默认值。
+                if "user_id" not in tool_args:
+                    tool_args["user_id"] = user_id_str
+                    if log_detailed:
+                        log.info(
+                            f"模型未提供 'user_id'，已注入当前用户 ID: {user_id_str}"
+                        )
+
                 # 为需要 author_id 的旧工具提供兼容性
-                if "author_id" in sig.parameters:
-                    tool_args.setdefault("author_id", user_id)
+                if "author_id" in sig.parameters and "author_id" not in tool_args:
+                    tool_args["author_id"] = user_id_str
                     if log_detailed:
                         log.info(
                             f"为兼容性，已填充 'author_id': {tool_args['author_id']}"
@@ -102,7 +109,11 @@ class ToolService:
                 if log_detailed:
                     log.info(f"已注入 'channel' (ID: {channel.id}) 到 **kwargs。")
                 if channel.guild:
+                    # 同时注入 guild 对象本身和 guild_id，以提供最大的灵活性
+                    tool_args["guild"] = channel.guild
                     tool_args["guild_id"] = str(channel.guild.id)
+                    if log_detailed:
+                        log.info(f"已注入 'guild' (ID: {channel.guild.id}) 实例。")
                 if isinstance(channel, discord.Thread):
                     tool_args["thread_id"] = channel.id
                     if log_detailed:
@@ -111,6 +122,16 @@ class ToolService:
             # 步骤 4: 智能地传递 log_detailed 参数
             if "log_detailed" in sig.parameters:
                 tool_args["log_detailed"] = log_detailed
+
+            # --- 安全加固：确保 'issue_user_warning' 只能对当前用户执行 ---
+            if tool_name == "issue_user_warning" and user_id is not None:
+                user_id_str = str(user_id)
+                if tool_args.get("user_id") != user_id_str:
+                    log.warning(
+                        f"检测到模型尝试为其他用户 ({tool_args.get('user_id')}) 调用警告工具。"
+                        f"已强制重定向到当前用户 ({user_id_str})。"
+                    )
+                tool_args["user_id"] = user_id_str
 
             # 步骤 5: 执行工具函数
             result = await tool_function(**tool_args)

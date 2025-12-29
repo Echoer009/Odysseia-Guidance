@@ -128,6 +128,7 @@ class PromptService:
         personal_summary: Optional[str] = None,
         user_profile_data: Optional[Dict[str, Any]] = None,
         model_name: Optional[str] = None,
+        channel: Optional[Any] = None,  # 新增 channel 参数
     ) -> List[Dict[str, Any]]:
         """
         构建用于AI聊天的分层对话历史。
@@ -394,13 +395,26 @@ class PromptService:
                 log.error(f"Pillow 无法打开附件图片。错误: {e}。")
 
         if current_user_parts:
+            # --- 精确清理：在注入前，替换 current_user_parts 中文本部分的 @提及 ---
+            from src.chat.services.context_service import context_service
+
+            guild = channel.guild if channel and hasattr(channel, "guild") else None
+            cleaned_user_parts = []
+            for part in current_user_parts:
+                if isinstance(part, str):
+                    cleaned_user_parts.append(
+                        context_service.clean_message_content(part, guild)
+                    )
+                else:
+                    cleaned_user_parts.append(part)
+
             # Gemini API 不允许连续的 'user' 角色消息。
             # 如果频道历史的最后一条是 'user'，我们需要将当前输入合并进去。
             if final_conversation and final_conversation[-1].get("role") == "user":
-                final_conversation[-1]["parts"].extend(current_user_parts)
+                final_conversation[-1]["parts"].extend(cleaned_user_parts)
                 log.debug("将当前用户输入合并到上一条 'user' 消息中。")
             else:
-                final_conversation.append({"role": "user", "parts": current_user_parts})
+                final_conversation.append({"role": "user", "parts": cleaned_user_parts})
 
         if chat_config.DEBUG_CONFIG["LOG_FINAL_CONTEXT"]:
             log.debug(
