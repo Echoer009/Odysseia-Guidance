@@ -191,17 +191,34 @@ class PromptService:
         if user_profile_data:
             profile_content = user_profile_data.get("content", {})
             if isinstance(profile_content, dict):
+                # 定义不应透露给 AI 的内部字段
+                EXCLUDED_FIELDS = [
+                    "discord_id",
+                    "discord_number_id",
+                    "uploaded_by",
+                    "uploaded_by_name",
+                    "update_target_id",
+                    "purchase_info",
+                    "item_id",
+                    "price",
+                    "attitude",
+                ]
                 profile_details = [
                     f"{key}: {value}"
                     for key, value in profile_content.items()
-                    if value and value != "未提供"
+                    if value and value != "未提供" and key not in EXCLUDED_FIELDS
                 ]
                 if profile_details:
                     # 移除内部重复的标题，信息将在外部标题下统一呈现
                     user_profile_prompt = "\n\n" + "\n".join(profile_details)
 
         if affection_prompt or user_profile_prompt:
-            combined_prompt = f"{affection_prompt}{user_profile_prompt}".strip()
+            # 如果存在好感度信息，为其添加“态度”标签并换行；否则为空字符串
+            attitude_part = f"态度: {affection_prompt}\n" if affection_prompt else ""
+
+            # 将带标签的好感度部分和用户档案部分（移除前导空白）结合起来
+            combined_prompt = f"{attitude_part}{user_profile_prompt.lstrip()}".strip()
+
             # 更新外部标题，使其更具包容性
             final_conversation.append(
                 {

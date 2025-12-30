@@ -95,7 +95,7 @@ def create_text_chunks(text: str, max_chars: int = 1000) -> list[str]:
     return final_chunks
 
 
-def _format_content_dict(content_dict: dict) -> str:
+def _format_content_dict(content_dict: dict) -> list[str]:
     """将 content 字典格式化为多行的 ' - key: value' 字符串列表，并过滤掉不必要的字段。"""
     if not isinstance(content_dict, dict):
         return [f" - {content_dict}"]
@@ -159,7 +159,7 @@ def _build_text_generic(entry: dict, category_name: str) -> str:
 def _build_text_slang(entry: dict) -> str:
     """为"俚语"类别构建结构化文本。"""
     name = entry.get("name", entry.get("id", ""))
-    text_parts = [f"类别: 俚语", f"名称: {name}"]
+    text_parts = ["类别: 俚语", f"名称: {name}"]
 
     aliases = entry.get("aliases", [])
     if aliases:
@@ -284,7 +284,7 @@ class IncrementalRAGService:
 
         return success
 
-    def _get_community_member_data(self, member_id: str) -> Dict[str, Any]:
+    def _get_community_member_data(self, member_id: str) -> Dict[str, Any] | None:
         """从数据库获取社区成员数据"""
         conn = self._get_db_connection()
         if not conn:
@@ -470,7 +470,7 @@ class IncrementalRAGService:
 
         return success
 
-    def _get_general_knowledge_data(self, entry_id: str) -> Dict[str, Any]:
+    def _get_general_knowledge_data(self, entry_id: str) -> Dict[str, Any] | None:
         """从数据库获取通用知识条目数据"""
         conn = self._get_db_connection()
         if not conn:
@@ -540,10 +540,6 @@ class IncrementalRAGService:
         Returns:
             bool: 删除成功返回True，否则返回False。
         """
-        if not self.is_ready():
-            log.warning(f"RAG服务尚未准备就绪，无法删除条目 {entry_id}")
-            return False
-
         try:
             # ChromaDB 的 get 方法可以按 ID 前缀过滤
             # 我们需要找到所有以 "entry_id:" 开头的文档
@@ -560,15 +556,30 @@ class IncrementalRAGService:
             # 我们只需要 id 字段来执行删除
             # 备用策略：获取集合中的所有ID，然后在本地进行过滤。
             # 这在集合很大时效率很低。
+            log.info(
+                f"开始在向量数据库中删除与 entry_id '{entry_id}' 相关的所有文档块。"
+            )
             all_ids = self.vector_db_service.get_all_ids()
+            log.info(f"从向量数据库获取了 {len(all_ids)} 个ID进行检查。")
+
             # 检查原始 ID 和带 'db_' 前缀的 ID
             prefixed_id = f"db_{str_entry_id}"
+
+            # 新增日志：打印将要用于匹配的 entry_id
+            log.info(f"将使用以下前缀进行匹配: '{str_entry_id}:' 和 '{prefixed_id}:'")
+
             ids_to_delete = [
                 doc_id
                 for doc_id in all_ids
                 if doc_id.startswith(f"{str_entry_id}:")
                 or doc_id.startswith(f"{prefixed_id}:")
             ]
+
+            # 新增日志：打印匹配结果
+            log.info(
+                f"匹配前缀后，找到 {len(ids_to_delete)} 个待删除的ID: {ids_to_delete}"
+            )
+
             if not ids_to_delete:
                 log.warning(
                     f"在向量数据库中没有找到与条目 {entry_id} 相关的文档块可供删除。"

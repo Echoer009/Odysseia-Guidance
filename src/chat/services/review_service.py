@@ -101,8 +101,8 @@ class ReviewService:
         # 从数据库记录中获取提交所在的频道ID
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not channel:
-            log.error(f"找不到提交时所在的频道 ID: {review_channel_id}")
+        if not isinstance(channel, discord.TextChannel):
+            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
             return
 
         review_message = await channel.send(embed=embed)
@@ -182,8 +182,8 @@ class ReviewService:
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not channel:
-            log.error(f"找不到提交时所在的频道 ID: {review_channel_id}")
+        if not isinstance(channel, discord.TextChannel):
+            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
             return
 
         review_message = await channel.send(embed=embed)
@@ -262,8 +262,8 @@ class ReviewService:
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not channel:
-            log.error(f"找不到提交时所在的频道 ID: {review_channel_id}")
+        if not isinstance(channel, discord.TextChannel):
+            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
             return
 
         review_message = await channel.send(embed=embed)
@@ -343,7 +343,11 @@ class ReviewService:
             log.warning(f"找不到消息 {payload.message_id}，可能已被删除。")
             return
 
-        if not message.author.id == self.bot.user.id or not message.embeds:
+        if (
+            not self.bot.user
+            or message.author.id != self.bot.user.id
+            or not message.embeds
+        ):
             return
 
         embed = message.embeds[0]
@@ -474,30 +478,75 @@ class ReviewService:
                 embed_description = f"大家的意见咱都收到啦！关于 **{data['title']}** 的新知识已经被我记在小本本上啦！"
 
             elif entry_type == "community_member":
-                clean_name = re.sub(r"[^\w\u4e00-\u9fff]", "_", data["name"])[:50]
-                new_entry_id = f"member_{clean_name}_{int(time.time())}"
+                profile_user_id = data.get("discord_number_id")
+                if not profile_user_id:
+                    log.error(
+                        f"待批准的社区成员条目 #{pending_id} 缺少 discord_number_id，无法处理。"
+                    )
+                    conn.rollback()
+                    return
+
+                # --- 检查用户是否已有档案 ---
+                cursor.execute(
+                    "SELECT id FROM community_members WHERE discord_number_id = ?",
+                    (str(profile_user_id),),
+                )
+                existing_member = cursor.fetchone()
 
                 content_json_for_db = json.dumps(data, ensure_ascii=False)
-                cursor.execute(
-                    """
-                    INSERT INTO community_members (id, title, discord_id, discord_number_id, content_json, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        new_entry_id,
-                        data["name"],  # 将'name'插入到'title'列
-                        data.get("discord_id"),
-                        data.get("discord_number_id"),
-                        content_json_for_db,
-                        "approved",
-                    ),
-                )
-                log.info(
-                    f"已创建社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
-                )
 
-                # --- 核心修复：解锁用户的个人记忆功能 ---
-                profile_user_id = data.get("discord_number_id")
+                if existing_member:
+                    # --- 更新现有档案 ---
+                    old_entry_id = existing_member["id"]
+                    log.info(
+                        f"检测到用户 {profile_user_id} 已有档案 (ID: {old_entry_id})，将执行更新操作。"
+                    )
+
+                    cursor.execute(
+                        """
+                        UPDATE community_members
+                        SET title = ?, content_json = ?, status = 'approved'
+                        WHERE id = ?
+                        """,
+                        (data["name"], content_json_for_db, old_entry_id),
+                    )
+                    log.info(
+                        f"已更新社区成员条目 {old_entry_id} (源自审核 #{pending_id})。"
+                    )
+                    new_entry_id = old_entry_id  # 后续RAG处理使用旧ID
+
+                    # 异步执行删除旧RAG索引的任务
+                    log.info(f"准备为旧档案 {old_entry_id} 删除过时的RAG索引...")
+                    task = asyncio.create_task(
+                        incremental_rag_service.delete_entry(old_entry_id)
+                    )
+                    self.background_tasks.add(task)
+                    task.add_done_callback(self._handle_task_result)
+
+                else:
+                    # --- 创建新档案 ---
+                    clean_name = re.sub(r"[^\w\u4e00-\u9fff]", "_", data["name"])[:50]
+                    new_entry_id = f"member_{clean_name}_{int(time.time())}"
+
+                    cursor.execute(
+                        """
+                        INSERT INTO community_members (id, title, discord_id, discord_number_id, content_json, status)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            new_entry_id,
+                            data["name"],
+                            data.get("discord_id"),
+                            profile_user_id,
+                            content_json_for_db,
+                            "approved",
+                        ),
+                    )
+                    log.info(
+                        f"已创建新的社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
+                    )
+
+                # --- 解锁个人记忆功能 ---
                 if profile_user_id:
                     log.info(f"正在为用户 {profile_user_id} 解锁个人记忆功能...")
                     try:
@@ -717,9 +766,9 @@ class ReviewService:
                         continue
 
                     channel = self.bot.get_channel(entry["channel_id"])
-                    if not channel:
+                    if not isinstance(channel, discord.TextChannel):
                         log.warning(
-                            f"找不到频道 {entry['channel_id']}，无法处理过期条目 #{entry['id']}"
+                            f"频道 {entry['channel_id']} 不是文本频道，无法处理过期条目 #{entry['id']}"
                         )
                         continue
 

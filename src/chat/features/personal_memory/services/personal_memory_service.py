@@ -65,7 +65,7 @@ class PersonalMemoryService:
 
         try:
             message = await channel.send(embed=embed)
-            await message.add_reaction(approval_emoji)
+            await message.add_reaction(str(approval_emoji))
             # 将消息ID和当前时间戳添加到追踪字典中
             now = datetime.now(timezone.utc)
             self.approval_message_ids[message.id] = now
@@ -145,7 +145,7 @@ class PersonalMemoryService:
                 cursor.execute(
                     "UPDATE community_members SET title = ?, content_json = ? WHERE discord_number_id = ?",
                     (
-                        f"用户档案 - {profile_data.get('name', '匿名')}",
+                        profile_data.get("name", "匿名"),
                         content_json,
                         str(user_id),
                     ),
@@ -158,7 +158,7 @@ class PersonalMemoryService:
                     "INSERT INTO community_members (id, title, discord_number_id, content_json) VALUES (?, ?, ?, ?)",
                     (
                         rag_update_id,
-                        f"用户档案 - {profile_data.get('name', '匿名')}",
+                        profile_data.get("name", "匿名"),
                         str(user_id),
                         content_json,
                     ),
