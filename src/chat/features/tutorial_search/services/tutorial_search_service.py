@@ -88,7 +88,7 @@ class TutorialSearchService:
             {
                 "query_text": query_text,
                 "query_vector": str(query_vector),
-                "thread_id": thread_id,
+                "thread_id": str(thread_id) if thread_id is not None else None,
                 "top_k_vector": self.config["TOP_K_VECTOR"],
                 "top_k_fts": self.config["TOP_K_FTS"],
                 "rrf_k": self.config["RRF_K"],
