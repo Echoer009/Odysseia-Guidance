@@ -350,13 +350,13 @@ WORLD_BOOK_CONFIG = {
     # 审核系统设置
     "review_settings": {
         # 审核的持续时间（分钟）
-        "review_duration_minutes": 1,
+        "review_duration_minutes": 5,
         # 审核时间结束后，通过所需的最低赞成票数
-        "approval_threshold": 1,
+        "approval_threshold": 3,
         # 在审核期间，可立即通过的赞成票数
-        "instant_approval_threshold": 1,
+        "instant_approval_threshold": 5,
         # 在审核期间，可立即否决的反对票数
-        "rejection_threshold": 1,
+        "rejection_threshold": 3,
         # 投票使用的表情符号
         "vote_emoji": "✅",
         "reject_emoji": "❌",
@@ -364,13 +364,13 @@ WORLD_BOOK_CONFIG = {
     # 个人资料审核设置
     "personal_profile_review_settings": {
         # 审核的持续时间（分钟）
-        "review_duration_minutes": 1,
+        "review_duration_minutes": 5,
         # 审核时间结束后，通过所需的最低赞成票数
-        "approval_threshold": 1,
+        "approval_threshold": 2,
         # 在审核期间，可立即通过的赞成票数
-        "instant_approval_threshold": 1,
+        "instant_approval_threshold": 3,
         # 在审核期间，可立即否决的反对票数
-        "rejection_threshold": 1,
+        "rejection_threshold": 3,
         # 投票使用的表情符号
         "vote_emoji": "✅",
         "reject_emoji": "❌",
