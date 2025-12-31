@@ -499,6 +499,17 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 年度总结日志表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS yearly_summary_log (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    year INTEGER NOT NULL,
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, year)
+                );
+            """)
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:

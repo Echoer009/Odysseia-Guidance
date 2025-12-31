@@ -14,7 +14,6 @@ from src.chat.config.chat_config import (
     GEMINI_SUMMARY_GEN_CONFIG,
 )
 from src.chat.features.personal_memory.ui.profile_modal import ProfileEditView
-from src.chat.services.gemini_service import gemini_service
 from src.chat.features.world_book.services.incremental_rag_service import (
     incremental_rag_service,
 )
@@ -222,6 +221,9 @@ class PersonalMemoryService:
 
     async def summarize_and_save_memory(self, user_id: int, guild_id: int):
         """获取用户的对话历史（根据 guild_id 区分私聊和频道），生成摘要，并保存到数据库。"""
+        # 延迟导入以避免循环依赖
+        from src.chat.services.gemini_service import gemini_service
+
         log.info(
             f"用户 {user_id} 在 guild_id {guild_id} 的个人消息已达到 {PERSONAL_MEMORY_CONFIG['summary_threshold']} 条，触发总结。"
         )

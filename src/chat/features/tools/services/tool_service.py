@@ -123,6 +123,16 @@ class ToolService:
             if "log_detailed" in sig.parameters:
                 tool_args["log_detailed"] = log_detailed
 
+            # --- 安全加固：确保 'get_yearly_summary' 只能对当前用户执行 ---
+            if tool_name == "get_yearly_summary" and user_id is not None:
+                user_id_str = str(user_id)
+                if tool_args.get("user_id") != user_id_str:
+                    log.warning(
+                        f"检测到模型为 get_yearly_summary 提供了不同的 user_id ({tool_args.get('user_id')})。"
+                        f"已强制覆盖为当前用户 ID ({user_id_str})。"
+                    )
+                tool_args["user_id"] = user_id_str
+
             # --- 安全加固：确保 'issue_user_warning' 只能对当前用户执行 ---
             if tool_name == "issue_user_warning" and user_id is not None:
                 user_id_str = str(user_id)
