@@ -52,18 +52,17 @@ async def get_yearly_summary(**kwargs) -> Dict[str, Any]:
     from src.chat.services.gemini_service import gemini_service
 
     # 1. 检查用户是否已经生成过当年的总结
+    # 1. 检查用户生成次数是否已达上限
     status_result = await _check_summary_status(user_id, year)
-    if status_result["is_summary_sent"]:
-        log.info(f"用户 {user_id} 在 {year} 年的总结已发送过，操作终止。")
-        sent_at_str = status_result["sent_at"]
-        try:
-            # 格式化时间，使其更友好
-            sent_at_dt = datetime.fromisoformat(sent_at_str)
-            friendly_time = sent_at_dt.strftime("%Y-%m-%d %H:%M")
-            message = f"你已经在 {friendly_time} 生成过 {year} 年的总结了哦。"
-        except (ValueError, TypeError):
-            message = f"你已经生成过 {year} 年的总结了哦。"
-        return {"status": "already_generated", "message": message}
+    generation_count = status_result.get("count", 0)
+    generation_limit = 3
+
+    if generation_count >= generation_limit:
+        log.info(
+            f"用户 {user_id} 在 {year} 年的总结生成次数已达上限 {generation_limit} 次，操作终止。"
+        )
+        message = f"你今年的 {year} 年度总结生成次数已经用完啦（最多 {generation_limit} 次）。"
+        return {"status": "limit_reached", "message": message}
 
     # 2. 获取 Discord 用户对象以便发送私信
     if not gemini_service.bot:
@@ -161,10 +160,10 @@ def _create_tier3_embed(user: discord.User, data: Dict[str, Any]) -> discord.Emb
     )
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.add_field(
-        name="🪙 赚取奥德赛币", value=f"`{data['total_coins_earned']}` 枚", inline=True
+        name="🪙 赚取类脑币", value=f"`{data['total_coins_earned']}` 枚", inline=True
     )
     embed.add_field(
-        name="💸 花费奥德赛币", value=f"`{data['total_coins_spent']}` 枚", inline=True
+        name="💸 花费类脑币", value=f"`{data['total_coins_spent']}` 枚", inline=True
     )
     embed.add_field(
         name="💖 最爱买", value=f"`{data['most_frequent_purchase']}`", inline=True
@@ -200,7 +199,7 @@ def _create_tier1_or_2_prompt(
 
     **需要融入故事的数据点**:
     - **我们之间的好感度**: {data["affection_level"]}
-    - **他今年赚取的奥德赛币**: {data["total_coins_earned"]} 枚
+    - **他今年赚取的类脑币**: {data["total_coins_earned"]} 枚
     - **他今年投喂了你**: {data["feeding_count"]} 次
     - **他今年向你忏悔**: {data["confession_count"]} 次
     """
@@ -234,23 +233,20 @@ def _create_tier1_or_2_prompt(
     return prompt
 
 
-async def _check_summary_status(user_id: int, year: int) -> Dict[str, Any]:
-    """(内部) 检查用户在指定年份是否已经接收过年度总结。"""
-    query = "SELECT sent_at FROM yearly_summary_log WHERE user_id = ? AND year = ?"
+async def _check_summary_status(user_id: int, year: int) -> Dict[str, int]:
+    """(内部) 检查用户在指定年份已生成年度总结的次数。"""
+    query = "SELECT COUNT(*) as count FROM yearly_summary_log WHERE user_id = ? AND year = ?"
     try:
         result = await chat_db_manager._execute(
             chat_db_manager._db_transaction, query, (user_id, year), fetch="one"
         )
-        if result:
-            return {"is_summary_sent": True, "sent_at": result["sent_at"]}
-        else:
-            return {"is_summary_sent": False, "sent_at": None}
+        return {"count": result["count"] if result else 0}
     except Exception as e:
         log.error(
-            f"检查用户 {user_id} 的年度总结状态时发生数据库错误: {e}", exc_info=True
+            f"检查用户 {user_id} 的年度总结生成次数时发生数据库错误: {e}", exc_info=True
         )
-        # 发生错误时，假定已发送以防止重复
-        return {"is_summary_sent": True, "sent_at": "Database Error"}
+        # 发生错误时，返回一个较高的数值以阻止生成，防止意外的重复
+        return {"count": 999}
 
 
 async def _get_user_summary_data(user_id: int, year: int) -> Dict[str, Any] | None:
@@ -343,6 +339,7 @@ async def _get_user_summary_data(user_id: int, year: int) -> Dict[str, Any] | No
 
 async def _log_summary_sent(user_id: int, year: int) -> bool:
     """(内部) 在数据库中记录已向用户发送指定年份的年度总结。"""
+    # 该查询现在会为每次成功的生成插入一条新记录
     query = "INSERT INTO yearly_summary_log (user_id, year) VALUES (?, ?)"
     try:
         await chat_db_manager._execute(

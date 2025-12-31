@@ -505,8 +505,7 @@ class ChatDatabaseManager:
                     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     year INTEGER NOT NULL,
-                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(user_id, year)
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
 
