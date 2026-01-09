@@ -33,7 +33,19 @@ class EditMemoryModal(discord.ui.Modal):
     def __init__(
         self, db_view: "DBView", user_id: int, member_name: str, current_summary: str
     ):
-        super().__init__(title=f"编辑 {member_name} 的记忆")
+        # --- 标题截断 ---
+        title_prefix = "编辑 "
+        title_suffix = " 的记忆"
+        # 计算 `member_name` 的最大允许长度
+        max_name_len = 45 - len(title_prefix) - len(title_suffix)
+
+        truncated_name = member_name
+        # 如果 `member_name` 太长，则截断并添加省略号
+        if len(member_name) > max_name_len:
+            # 减去3是为了给 "..." 留出空间
+            truncated_name = member_name[: max_name_len - 3] + "..."
+
+        super().__init__(title=f"{title_prefix}{truncated_name}{title_suffix}")
         self.db_view = db_view
         self.user_id = user_id
 
