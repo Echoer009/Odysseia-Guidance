@@ -788,12 +788,29 @@ class GeminiService:
         thinking_config_data = gen_config_data.pop("thinking_config", None)
         gen_config_params = {**gen_config_data, "safety_settings": self.safety_settings}
 
+        # --- [新增] 动态开启 Google 搜索和 URL 上下文工具 ---
+        # 1. 初始化一个工具配置列表
+        enabled_tools = []
+
+        # 2. 添加 Google 搜索和 URL 阅读工具
+        # 这会开启模型原生
+        enabled_tools.append(types.Tool(google_search=types.GoogleSearch()))
+        enabled_tools.append(types.Tool(url_context=types.UrlContext()))
+        log.info("已为本次调用启用 Google 搜索工具。")
+
+        # 3. 合并自定义的函数工具
         if self.available_tools:
-            gen_config_params["tools"] = self.available_tools
+            enabled_tools.extend(self.available_tools)
+            log.info(f"已合并 {len(self.available_tools)} 个自定义函数工具。")
+
+        # 4. 如果最终有工具被启用，则配置到生成参数中
+        if enabled_tools:
+            gen_config_params["tools"] = enabled_tools
+            # 保持手动调用模式，让我们可以控制工具的执行流程
             gen_config_params["automatic_function_calling"] = (
                 types.AutomaticFunctionCallingConfig(disable=True)
             )
-            log.info("已启用手动工具调用模式。")
+            log.info("已启用手动工具调用模式，并集成了原生搜索及自定义函数。")
 
         gen_config = types.GenerateContentConfig(**gen_config_params)
 
