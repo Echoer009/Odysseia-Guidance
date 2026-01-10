@@ -125,7 +125,7 @@ MODEL_GENERATION_CONFIG = {
         "temperature": 1.1,
         "top_p": 0.95,
         "top_k": 40,
-        "max_output_tokens": 3000,
+        "max_output_tokens": 6000,
         "thinking_config": {
             "include_thoughts": True,
             "thinking_budget": -1,  # 默认使用动态思考预算
@@ -267,8 +267,8 @@ PERSONAL_MEMORY_CONFIG = {
 
 # --- 频道记忆功能 ---
 CHANNEL_MEMORY_CONFIG = {
-    "raw_history_limit": 20,  # 从Discord API获取的原始消息数量
-    "formatted_history_limit": 20,  # 格式化为AI模型可用的对话历史消息数量
+    "raw_history_limit": 35,  # 从Discord API获取的原始消息数量
+    "formatted_history_limit": 35,  # 格式化为AI模型可用的对话历史消息数量
 }
 
 
