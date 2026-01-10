@@ -792,11 +792,10 @@ class GeminiService:
         # 1. 初始化一个工具配置列表
         enabled_tools = []
 
-        # 2. 添加 Google 搜索和 URL 阅读工具
-        # 这会开启模型原生
-        enabled_tools.append(types.Tool(google_search=types.GoogleSearch()))
-        enabled_tools.append(types.Tool(url_context=types.UrlContext()))
-        log.info("已为本次调用启用 Google 搜索工具。")
+        # 2. 添加 Google 搜索和 URL 阅读工具 (暂时禁用以恢复功能)
+        # enabled_tools.append(types.Tool(google_search=types.GoogleSearch()))
+        # enabled_tools.append(types.Tool(url_context=types.UrlContext()))
+        # log.info("已为本次调用启用 Google 搜索工具。")
 
         # 3. 合并自定义的函数工具
         if self.available_tools:
