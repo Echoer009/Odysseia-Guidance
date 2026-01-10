@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.games.config import blackjack_config
 from src.chat.features.games.services.blackjack_service import blackjack_service
+from src.chat.utils.database import chat_db_manager
 
 # 从根目录加载 .env 文件
 load_dotenv(
@@ -39,6 +40,20 @@ class LockCache(TTLCache):
 # 创建一个TTL缓存来存储用户锁，TTL设置为30分钟（1800秒）
 # 减少TTL时间以防止锁对象积累，maxsize设置为100以限制内存使用
 user_locks = LockCache(maxsize=100, ttl=1800)
+
+
+async def _record_game_result(bet_amount: int, payout_amount: int):
+    """
+    计算AI的净盈利并记录到数据库。
+    - 如果玩家赢钱，AI的盈利为负。
+    - 如果玩家输钱，AI的盈利为正。
+    """
+    try:
+        net_win_loss = bet_amount - payout_amount
+        await chat_db_manager.update_blackjack_net_win_loss(net_win_loss)
+        log.info(f"已记录21点游戏结果到日报统计：AI净盈利 {net_win_loss}")
+    except Exception as e:
+        log.error(f"记录21点游戏结果到日报统计时出错: {e}", exc_info=True)
 
 
 # --- 应用生命周期事件 ---
@@ -299,6 +314,8 @@ async def start_game(
 
                 # 游戏已结束，立即删除记录
                 await blackjack_service.delete_game(user_id)
+                # --- 记录游戏结果 ---
+                await _record_game_result(game.bet_amount, payout_amount)
 
             return JSONResponse(
                 content={
@@ -337,6 +354,9 @@ async def forfeit_game(user_id: int = Depends(get_current_user_id)):
         log.info(f"用户 {user_id} 已放弃赌注为 {active_game.bet_amount} 的游戏。")
         # 直接删除游戏记录，赌注不退还
         await blackjack_service.delete_game(user_id)
+
+        # --- 记录游戏结果 ---
+        await _record_game_result(active_game.bet_amount, 0)  # 投降，派彩为0
 
         return JSONResponse(
             content={"success": True, "message": "Game forfeited successfully."},
@@ -397,6 +417,9 @@ async def double_down(user_id: int = Depends(get_current_user_id)):
 
             await blackjack_service.delete_game(user_id)
 
+            # --- 记录游戏结果 ---
+            await _record_game_result(game.bet_amount, payout_amount)
+
             return JSONResponse(
                 content={
                     "success": True,
@@ -430,6 +453,8 @@ async def player_hit(user_id: int = Depends(get_current_user_id)):
             if game.game_state == "finished_loss":
                 log.info(f"User {user_id} busted. Bet of {game.bet_amount} lost.")
                 await blackjack_service.delete_game(user_id)
+                # --- 记录游戏结果 ---
+                await _record_game_result(game.bet_amount, 0)  # 爆牌，派彩为0
                 return JSONResponse(
                     content={
                         "success": True,
@@ -481,6 +506,9 @@ async def player_stand(user_id: int = Depends(get_current_user_id)):
 
             # 游戏结束，删除记录
             await blackjack_service.delete_game(user_id)
+
+            # --- 记录游戏结果 ---
+            await _record_game_result(game.bet_amount, payout_amount)
 
             return JSONResponse(
                 content={

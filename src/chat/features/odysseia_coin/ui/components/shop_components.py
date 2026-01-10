@@ -85,6 +85,56 @@ class EventButton(ShopButton["SimpleShopView"]):
         await interaction.response.edit_message(embeds=[embed], view=event_view)
 
 
+# --- Daily Report UI Components ---
+
+
+class DailyReportView(discord.ui.View):
+    """View for displaying the daily report."""
+
+    def __init__(self, main_view: "SimpleShopView"):
+        super().__init__(timeout=180)
+        self.main_view = main_view
+
+        back_button = discord.ui.Button(
+            label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️"
+        )
+        back_button.callback = self.back_callback
+        self.add_item(back_button)
+
+    async def create_embed(self) -> discord.Embed:
+        """Creates the embed for the daily report."""
+        if hasattr(self.main_view, "daily_panel"):
+            return await self.main_view.daily_panel.create_embed()
+        return discord.Embed(
+            title="错误", description="无法加载日报面板。", color=discord.Color.red()
+        )
+
+    async def back_callback(self, interaction: discord.Interaction):
+        """Returns to the main shop view."""
+        embeds = await self.main_view.create_shop_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=self.main_view)
+
+
+class DailyReportButton(ShopButton["SimpleShopView"]):
+    """Button to open the daily report view."""
+
+    def __init__(self):
+        super().__init__(
+            label="每日速报", style=discord.ButtonStyle.primary, emoji="📅"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not hasattr(self.view, "daily_panel"):
+            await interaction.response.send_message(
+                "日报功能暂未开放。", ephemeral=True
+            )
+            return
+
+        daily_view = DailyReportView(self.view)
+        embed = await daily_view.create_embed()
+        await interaction.response.edit_message(embeds=[embed], view=daily_view)
+
+
 # --- Loan UI Components ---
 
 

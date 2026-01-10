@@ -9,6 +9,7 @@ from src.chat.features.odysseia_coin.service.shop_service import (
 )
 from src.chat.features.events.ui.event_panel_view import EventPanelView
 from .panels.shop_panel import ShopPanel
+from .panels.daily_panel import DailyPanel
 from .panels.tutorial_panel import TutorialPanel
 from .components.shop_components import (
     CategorySelect,
@@ -21,6 +22,7 @@ from .components.shop_components import (
     EventButton,
     KnowledgeBaseButton,
     ManageTutorialsButton,
+    DailyReportButton,
 )
 
 log = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ class SimpleShopView(discord.ui.View):
 
         # 初始化面板
         self.shop_panel = ShopPanel(self)
+        self.daily_panel = DailyPanel(self)
 
         # 按类别分组商品
         self.grouped_items = {}
@@ -78,6 +81,7 @@ class SimpleShopView(discord.ui.View):
         self.add_item(WorkButton())
         self.add_item(SellBodyButton())
         self.add_item(LeaderboardButton())
+        self.add_item(DailyReportButton())
 
         # --- 动态添加按钮 ---
         if self.shop_data.active_event:

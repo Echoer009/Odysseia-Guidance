@@ -18,6 +18,13 @@ DB_PATH = os.path.join(_PROJECT_ROOT, "data", "chat.db")
 log = logging.getLogger(__name__)
 
 
+# --- 辅助函数：获取北京时间的当前日期字符串 ---
+def get_beijing_today_str() -> str:
+    """获取北京时间（UTC+8）的当前日期字符串，格式为 YYYY-MM-DD。"""
+    beijing_tz = timezone(timedelta(hours=8))
+    return datetime.now(beijing_tz).strftime("%Y-%m-%d")
+
+
 class ChatDatabaseManager:
     """管理所有与聊天模块相关的 SQLite 数据库的异步交互。"""
 
@@ -499,6 +506,16 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 每日模型使用计数表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_model_usage (
+                    model_name TEXT NOT NULL,
+                    usage_date TEXT NOT NULL,
+                    usage_count INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (model_name, usage_date)
+                );
+            """)
+
             # --- 年度总结日志表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS yearly_summary_log (
@@ -506,6 +523,14 @@ class ChatDatabaseManager:
                     user_id INTEGER NOT NULL,
                     year INTEGER NOT NULL,
                     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # --- 21点每日战绩表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS blackjack_daily_stats (
+                    stat_date TEXT PRIMARY KEY,
+                    net_win_loss INTEGER NOT NULL DEFAULT 0
                 );
             """)
 
@@ -1367,19 +1392,84 @@ class ChatDatabaseManager:
 
     # --- AI模型使用计数 ---
     async def increment_model_usage(self, model_name: str) -> None:
-        """为一个模型增加使用次数。"""
-        query = """
+        """为一个模型增加累计和每日使用次数。"""
+        # 增加总数
+        query_total = """
             INSERT INTO ai_model_usage (model_name, usage_count)
             VALUES (?, 1)
             ON CONFLICT(model_name) DO UPDATE SET
                 usage_count = usage_count + 1;
         """
-        await self._execute(self._db_transaction, query, (model_name,), commit=True)
+        await self._execute(
+            self._db_transaction, query_total, (model_name,), commit=True
+        )
+
+        # 增加当日计数
+        today_date_str = get_beijing_today_str()
+        query_daily = """
+            INSERT INTO daily_model_usage (model_name, usage_date, usage_count)
+            VALUES (?, ?, 1)
+            ON CONFLICT(model_name, usage_date) DO UPDATE SET
+                usage_count = usage_count + 1;
+        """
+        await self._execute(
+            self._db_transaction, query_daily, (model_name, today_date_str), commit=True
+        )
 
     async def get_model_usage_counts(self) -> List[sqlite3.Row]:
-        """获取所有模型的使用次数。"""
+        """获取所有模型累计的使用次数。"""
         query = "SELECT model_name, usage_count FROM ai_model_usage"
         return await self._execute(self._db_transaction, query, fetch="all")
+
+    async def get_model_usage_counts_today(self) -> List[sqlite3.Row]:
+        """获取今天所有模型的使用次数。"""
+        today_date_str = get_beijing_today_str()
+        query = (
+            "SELECT model_name, usage_count FROM daily_model_usage WHERE usage_date = ?"
+        )
+        return await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="all"
+        )
+
+    async def get_total_work_count_today(self) -> int:
+        """获取今天所有用户的总打工次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT SUM(work_count_today) as total FROM user_work_status WHERE last_count_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["total"] if result and result["total"] is not None else 0
+
+    async def get_total_sell_body_count_today(self) -> int:
+        """获取今天所有用户的总卖屁股次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT SUM(sell_body_count_today) as total FROM user_work_status WHERE last_count_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["total"] if result and result["total"] is not None else 0
+
+    async def update_blackjack_net_win_loss(self, amount: int) -> None:
+        """更新今天的21点游戏净输赢。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO blackjack_daily_stats (stat_date, net_win_loss)
+            VALUES (?, ?)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                net_win_loss = net_win_loss + excluded.net_win_loss;
+        """
+        await self._execute(
+            self._db_transaction, query, (today_date_str, amount), commit=True
+        )
+
+    async def get_blackjack_net_win_loss_today(self) -> int:
+        """获取今天的21点游戏净输赢。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT net_win_loss FROM blackjack_daily_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["net_win_loss"] if result else 0
 
 
 # --- 单例实例 ---

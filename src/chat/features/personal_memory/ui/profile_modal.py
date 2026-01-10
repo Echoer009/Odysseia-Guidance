@@ -5,12 +5,15 @@ log = logging.getLogger(__name__)
 
 PROFILE_MODAL_CUSTOM_ID = "personal_profile_edit_modal"
 
+
 class ProfileEditModal(discord.ui.Modal, title="创建你的个人记忆档案"):
     """
     一个模态框，用于让用户创建或编辑他们的个人档案。
     """
+
     def __init__(self, custom_id: str = PROFILE_MODAL_CUSTOM_ID):
         super().__init__(custom_id=custom_id)
+
     # 定义档案字段
     name = discord.ui.TextInput(
         label="你的称呼",
@@ -60,20 +63,25 @@ class ProfileEditModal(discord.ui.Modal, title="创建你的个人记忆档案")
             # 注意：在这种情况下，Cog 中的 on_modal_submit 可能已经调用了 defer，
             # 所以我们不能直接发送消息。这个错误会被 Cog 中的 on_modal_submit 捕获并处理。
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
         log.error(f"个人档案模态框发生错误: {error}", exc_info=True)
         if not interaction.response.is_done():
-            await interaction.response.send_message("发生了一个未知的错误，请联系管理员。", ephemeral=True)
+            await interaction.response.send_message(
+                "发生了一个未知的错误，请联系管理员。", ephemeral=True
+            )
 
 
 class ProfileEditButton(discord.ui.Button):
     """一个触发个人档案编辑模态框的按钮"""
+
     def __init__(self):
         super().__init__(
             label="创建/编辑我的档案",
             style=discord.ButtonStyle.primary,
             emoji="📝",
-            custom_id="profile_edit_button"
+            custom_id="profile_edit_button",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -83,6 +91,7 @@ class ProfileEditButton(discord.ui.Button):
 
 class ProfileEditView(discord.ui.View):
     """包含编辑档案按钮的视图"""
+
     def __init__(self, timeout=None):
         super().__init__(timeout=timeout)
         self.add_item(ProfileEditButton())
