@@ -1,6 +1,8 @@
 import discord
 import logging
 from typing import Dict, Any, List
+import httpx
+import base64
 
 # 假设 coin_service 的路径是正确的
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
@@ -62,13 +64,27 @@ async def get_user_profile(
         try:
             user = await bot.fetch_user(target_id)
             if user and user.display_avatar:
-                result["profile"]["avatar_url"] = str(user.display_avatar.url)
+                avatar_url = str(user.display_avatar.url)
+                result["profile"]["avatar_url"] = avatar_url
+
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(avatar_url)
+                    response.raise_for_status()
+                    image_bytes = response.content
+                    result["profile"]["avatar_image_base64"] = base64.b64encode(
+                        image_bytes
+                    ).decode("utf-8")
+
                 result["queries_successful"].append("avatar")
-                log.info(f"成功获取用户 {target_id} 的头像 URL。")
+                log.info(f"成功获取用户 {target_id} 的头像 URL 并下载了图片。")
             else:
                 result["errors"].append("User has no avatar.")
         except discord.NotFound:
             result["errors"].append("User not found on Discord for avatar query.")
+        except httpx.HTTPStatusError as e:
+            error_msg = f"下载头像时发生HTTP错误: {e}"
+            result["errors"].append(error_msg)
+            log.error(error_msg, exc_info=True)
         except Exception as e:
             error_msg = f"获取头像时发生未知错误: {str(e)}"
             result["errors"].append(error_msg)

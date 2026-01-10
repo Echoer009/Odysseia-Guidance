@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 import re
 import random
+import base64
 
 from PIL import Image
 import io
@@ -912,8 +913,35 @@ class GeminiService:
                     tool_name = result.function_response.name
                     # 现在这里是绝对安全的
                     original_result = result.function_response.response.get(
-                        "result", ""
+                        "result", {}
                     )
+
+                    # --- 新增：处理工具返回的头像图片 ---
+                    if isinstance(original_result, dict):
+                        profile = original_result.get("profile", {})
+                        if "avatar_image_base64" in profile:
+                            log.info(
+                                "检测到工具返回的 avatar_image_base64，正在处理为图片 Part。"
+                            )
+                            try:
+                                image_bytes = base64.b64decode(
+                                    profile["avatar_image_base64"]
+                                )
+                                # 创建一个新的图片 Part
+                                image_part = types.Part(
+                                    inline_data=types.Blob(
+                                        mime_type="image/png", data=image_bytes
+                                    )
+                                )
+                                tool_result_parts.append(image_part)
+                                # 从原始结果中移除，避免冗余
+                                del profile["avatar_image_base64"]
+                            except Exception as e:
+                                log.error(
+                                    f"处理 avatar_image_base64 时出错: {e}",
+                                    exc_info=True,
+                                )
+                    # --- 图片处理结束 ---
 
                     response_content: Dict[str, Any]
 
@@ -931,13 +959,15 @@ class GeminiService:
                         )
                         response_content = {"result": wrapped_result_str}
 
-                    new_response_part = types.Part.from_function_response(
-                        name=tool_name or "unknown_tool",
-                        response=response_content,
-                    )
-                    tool_result_parts.append(new_response_part)
-                elif isinstance(result, types.Part):
-                    tool_result_parts.append(result)
+                    # 只有在 response_content['result'] 真正有内容时才创建 FunctionResponse Part
+                    # 这样可以避免在只有图片的情况下，发送一个空的、无意义的文本结果 Part
+                    if response_content.get("result"):
+                        new_response_part = types.Part.from_function_response(
+                            name=tool_name or "unknown_tool",
+                            response=response_content,
+                        )
+                        tool_result_parts.append(new_response_part)
+
                 else:
                     log.warning(f"接收到未知的工具执行结果类型: {type(result)}")
 
