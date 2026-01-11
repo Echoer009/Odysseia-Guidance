@@ -897,7 +897,7 @@ class ChatDatabaseManager:
         )
 
         # 检查是否达到拉黑阈值
-        if current_warnings >= 3:
+        if current_warnings >= 1:
             log.info(
                 f"用户 {user_id} 在服务器 {guild_id} 达到3次警告，将被加入黑名单。"
             )

@@ -193,7 +193,7 @@ COOLDOWN_RATES = {
     "coffee": 5,  # 每分钟请求次数
 }
 # (min, max) 分钟
-BLACKLIST_BAN_DURATION_MINUTES = (3, 8)
+BLACKLIST_BAN_DURATION_MINUTES = (15, 30)
 
 # --- API 并发与密钥配置 ---
 MAX_CONCURRENT_REQUESTS = 50  # 同时处理的最大API请求数
