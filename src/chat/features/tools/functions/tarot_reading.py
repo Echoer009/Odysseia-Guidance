@@ -4,6 +4,7 @@ import io
 import discord
 
 from src.chat.features.tarot.services import tarot_service
+from src.chat.utils.database import chat_db_manager
 from src.chat.features.tarot.config.tarot_config import TarotConfig
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ async def tarot_reading(
             }
 
     try:
+        await chat_db_manager.increment_tarot_reading_count()
         image_data, cards = await tarot_service.perform_reading(question, spread_type)
 
         if image_data and cards:

@@ -51,6 +51,9 @@ async def issue_user_warning(
     try:
         target_id = int(user_id_str)
 
+        # --- 统计拉黑工具使用次数 ---
+        await chat_db_manager.increment_issue_user_warning_count()
+
         min_d, max_d = chat_config.BLACKLIST_BAN_DURATION_MINUTES
         ban_duration = random.randint(min_d, max_d)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)

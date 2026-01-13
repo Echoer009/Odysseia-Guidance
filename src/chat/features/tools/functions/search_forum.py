@@ -8,6 +8,7 @@ from src.chat.features.forum_search.services.forum_search_service import (
     forum_search_service,
 )
 from src.chat.config import chat_config as config
+from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ async def search_forum_threads(
     if not forum_search_service.is_ready():
         return ["论坛搜索服务当前不可用，请稍后再试。"]
 
+    await chat_db_manager.increment_forum_search_count()
     # 5. 执行搜索
     log.info(f"准备调用 forum_search_service.search。Limit: {limit}")
     import time

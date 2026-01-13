@@ -534,6 +534,26 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 每日综合统计表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_stats (
+                    stat_date TEXT PRIMARY KEY,
+                    issue_user_warning_count INTEGER NOT NULL DEFAULT 0,
+                    confession_count INTEGER NOT NULL DEFAULT 0,
+                    feeding_count INTEGER NOT NULL DEFAULT 0,
+                    tarot_reading_count INTEGER NOT NULL DEFAULT 0,
+                    forum_search_count INTEGER NOT NULL DEFAULT 0
+                );
+            """)
+
+            # --- 每日拉黑工具统计表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_issue_user_warning_stats (
+                    stat_date TEXT PRIMARY KEY,
+                    issue_user_warning_count INTEGER NOT NULL DEFAULT 0
+                );
+            """)
+
             conn.commit()
             log.info(f"数据库表在 {self.db_path} 同步初始化成功。")
         except sqlite3.Error as e:
@@ -1470,6 +1490,106 @@ class ChatDatabaseManager:
             self._db_transaction, query, (today_date_str,), fetch="one"
         )
         return result["net_win_loss"] if result else 0
+
+    async def increment_confession_count(self) -> None:
+        """增加今天的忏悔次数。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO daily_stats (stat_date, confession_count)
+            VALUES (?, 1)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                confession_count = confession_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (today_date_str,), commit=True)
+
+    async def get_confession_count_today(self) -> int:
+        """获取今天的忏悔次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT confession_count FROM daily_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["confession_count"] if result else 0
+
+    async def increment_feeding_count(self) -> None:
+        """增加今天的投喂次数。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO daily_stats (stat_date, feeding_count)
+            VALUES (?, 1)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                feeding_count = feeding_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (today_date_str,), commit=True)
+
+    async def get_feeding_count_today(self) -> int:
+        """获取今天的投喂次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT feeding_count FROM daily_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["feeding_count"] if result else 0
+
+    async def increment_tarot_reading_count(self) -> None:
+        """增加今天的塔罗牌占卜次数。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO daily_stats (stat_date, tarot_reading_count)
+            VALUES (?, 1)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                tarot_reading_count = tarot_reading_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (today_date_str,), commit=True)
+
+    async def get_tarot_reading_count_today(self) -> int:
+        """获取今天的塔罗牌占卜次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT tarot_reading_count FROM daily_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["tarot_reading_count"] if result else 0
+
+    async def increment_forum_search_count(self) -> None:
+        """增加今天的论坛搜索次数。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO daily_stats (stat_date, forum_search_count)
+            VALUES (?, 1)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                forum_search_count = forum_search_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (today_date_str,), commit=True)
+
+    async def get_forum_search_count_today(self) -> int:
+        """获取今天的论坛搜索次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT forum_search_count FROM daily_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["forum_search_count"] if result else 0
+
+    async def increment_issue_user_warning_count(self) -> None:
+        """增加今天的 'issue_user_warning' 工具使用次数。"""
+        today_date_str = get_beijing_today_str()
+        query = """
+            INSERT INTO daily_issue_user_warning_stats (stat_date, issue_user_warning_count)
+            VALUES (?, 1)
+            ON CONFLICT(stat_date) DO UPDATE SET
+                issue_user_warning_count = issue_user_warning_count + 1;
+        """
+        await self._execute(self._db_transaction, query, (today_date_str,), commit=True)
+
+    async def get_issue_user_warning_count_today(self) -> int:
+        """获取今天的 'issue_user_warning' 工具使用次数。"""
+        today_date_str = get_beijing_today_str()
+        query = "SELECT issue_user_warning_count FROM daily_issue_user_warning_stats WHERE stat_date = ?"
+        result = await self._execute(
+            self._db_transaction, query, (today_date_str,), fetch="one"
+        )
+        return result["issue_user_warning_count"] if result else 0
 
 
 # --- 单例实例 ---

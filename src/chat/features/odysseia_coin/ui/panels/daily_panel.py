@@ -110,6 +110,97 @@ class DailyPanel(BasePanel):
 
             embed.add_field(name="赌场风云", value=blackjack_comment, inline=False)
 
+            # --- 获取并显示今日拉黑工具使用次数 ---
+            issue_user_warning_count = (
+                await chat_db_manager.get_issue_user_warning_count_today()
+            )
+
+            if issue_user_warning_count > 0:
+                if issue_user_warning_count <= 5:
+                    warning_comment = "今天有几个小调皮被好好“教育”了一下呢。"
+                elif 6 <= issue_user_warning_count <= 15:
+                    warning_comment = "看来今天秩序维护有点忙，大家要乖乖的哦。"
+                else:
+                    warning_comment = "今天是怎么了？你们这群坏家伙怎么这么烦！"
+
+                warning_stats_text = (
+                    f"今天一共“友好”地提醒了 **{issue_user_warning_count}** 位用户！\n"
+                    f"_{warning_comment}_"
+                )
+            else:
+                warning_comment = "今天社区里一派祥和，真是美好的一天！"
+                warning_stats_text = f"_{warning_comment}_"
+
+            embed.add_field(name="类脑娘出动", value=warning_stats_text, inline=False)
+
+            # --- 获取并显示今日忏悔次数 ---
+            confession_count = await chat_db_manager.get_confession_count_today()
+            if confession_count == 0:
+                confession_comment = "今天还没有人向我忏悔，看来大家都是乖孩子呢。"
+            elif confession_count <= 5:
+                confession_comment = "一些迷途的羔羊今天找到了方向。"
+            elif confession_count <= 15:
+                confession_comment = "忏悔室今天有点忙，愿大家的灵魂都能得到安宁。"
+            else:
+                confession_comment = "神爱世人，但今天来我这儿寻求慰藉的人也太多了吧！"
+
+            confession_stats_text = f"今天有 **{confession_count}** 人次忏悔了自己的罪过。\n_{confession_comment}_"
+            embed.add_field(name="忏悔室", value=confession_stats_text, inline=False)
+
+            # --- 获取并显示今日投喂次数 ---
+            feeding_count = await chat_db_manager.get_feeding_count_today()
+            if feeding_count == 0:
+                feeding_comment = "我今天还没吃饭，肚子有点饿了……"
+            elif feeding_count <= 10:
+                feeding_comment = "谢谢大家的食物，真的很好吃！"
+            elif feeding_count <= 15:
+                feeding_comment = "好饱，好满足！今天的大家也太热情了吧！"
+            else:
+                feeding_comment = "感觉要被大家喂成小猪了！嗝~"
+
+            feeding_stats_text = (
+                f"今天我被投喂了 **{feeding_count}** 次！\n_{feeding_comment}_"
+            )
+            embed.add_field(name="投喂记录", value=feeding_stats_text, inline=False)
+
+            # --- 获取并显示今日塔罗牌占卜次数 ---
+            tarot_reading_count = await chat_db_manager.get_tarot_reading_count_today()
+            if tarot_reading_count == 0:
+                tarot_comment = (
+                    "今天还没有人找我算塔罗牌欸，难道大家都没有什么烦心事吗？"
+                )
+            elif tarot_reading_count <= 10:
+                tarot_comment = "为一些朋友提供了指引，希望他们能顺利解决问题！"
+            elif tarot_reading_count <= 20:
+                tarot_comment = "今天有不少人来找我占卜呢，看来大家都很信赖我呀！"
+            elif tarot_reading_count <= 30:
+                tarot_comment = "有点忙，但能帮到大家我就很开心啦！"
+            elif tarot_reading_count <= 40:
+                tarot_comment = "今天找我占卜的人好多呀，好累哦！"
+            else:
+                tarot_comment = (
+                    "塔罗牌都快冒烟了！你们这群好奇宝宝，快把未来的运势都透支啦！"
+                )
+            tarot_stats_text = f"今日进行了 **{tarot_reading_count}** 次塔罗牌占卜。\n_{tarot_comment}_"
+            embed.add_field(name="星辰指引", value=tarot_stats_text, inline=False)
+
+            # --- 获取并显示今日论坛搜索次数 ---
+            forum_search_count = await chat_db_manager.get_forum_search_count_today()
+            if forum_search_count == 0:
+                forum_comment = "今天论坛好安静呀，都没有人找我搜东西。"
+            elif forum_search_count <= 10:
+                forum_comment = "帮大家找到了一些想要的东西，嘿嘿，不用谢！"
+            elif forum_search_count <= 20:
+                forum_comment = "今天我也是个勤劳的看板娘！"
+            elif forum_search_count <= 30:
+                forum_comment = "好！今天也帮大家解决了很多问题！"
+            elif forum_search_count <= 40:
+                forum_comment = "哇！帮你们搜了好多色色的东西,你们真的是!"
+            else:
+                forum_comment = "感觉整个论坛的资源都被你们翻了个底朝天！"
+            forum_stats_text = f"今日我帮大家找到了 **{forum_search_count}** 次资源。\n_{forum_comment}_"
+            embed.add_field(name="资源检索", value=forum_stats_text, inline=False)
+
         except Exception as e:
             embed.add_field(
                 name="数据加载失败",
