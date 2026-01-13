@@ -11,8 +11,11 @@ import os
 import json
 import sqlite3
 import re
-import time
 from datetime import datetime
+from src.chat.features.admin_panel.services.db_services import (
+    get_parade_db_connection,
+    get_cursor,
+)
 import asyncio
 
 from src import config
@@ -440,163 +443,190 @@ class ReviewService:
             entry_type = entry["entry_type"]
             new_entry_id = None
 
-            if entry_type == "general_knowledge":
-                category_name = data["category_name"]
-                cursor.execute(
-                    "SELECT id FROM categories WHERE name = ?", (category_name,)
-                )
-                category_row = cursor.fetchone()
-                if category_row:
-                    category_id = category_row[0]
-                else:
-                    cursor.execute(
-                        "INSERT INTO categories (name) VALUES (?)", (category_name,)
+            parade_conn = None
+            try:
+                parade_conn = get_parade_db_connection()
+                if not parade_conn:
+                    raise Exception("无法获取 Parade DB 连接。")
+                parade_cursor = get_cursor(parade_conn)
+
+                if entry_type == "general_knowledge":
+                    # --- 准备写入 ParadeDB 的数据 ---
+                    title = data.get("title", "无标题")
+                    content_text = data.get("content_text", "")
+                    category_name = data.get("category_name", "通用知识")
+                    full_text = (
+                        f"标题: {title}\n类别: {category_name}\n内容: {content_text}"
                     )
-                    category_id = cursor.lastrowid
+                    source_metadata = {
+                        "category": category_name,
+                        "source": "community_submission",
+                        "contributor_id": str(entry["proposer_id"]),
+                        "original_submission": data,
+                    }
+                    external_id = f"pending_{pending_id}"
 
-                content_dict = {"description": data["content_text"]}
-                content_json = json.dumps(content_dict, ensure_ascii=False)
-                clean_title = re.sub(r"[^\w\u4e00-\u9fff]", "_", data["title"])[:50]
-                new_entry_id = f"{clean_title}_{int(time.time())}"
-
-                cursor.execute(
-                    "INSERT INTO general_knowledge (id, title, name, content_json, category_id, contributor_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-                    (
-                        new_entry_id,
-                        data["title"],
-                        data["name"],
-                        content_json,
-                        category_id,
-                        data.get("contributor_id"),
-                        "approved",
-                    ),
-                )
-                log.info(
-                    f"已创建通用知识条目 {new_entry_id} (源自审核 #{pending_id})。"
-                )
-                embed_title = "✅ 新知识Get！"
-                embed_description = f"大家的意见咱都收到啦！关于 **{data['title']}** 的新知识已经被我记在小本本上啦！"
-
-            elif entry_type == "community_member":
-                profile_user_id = data.get("discord_number_id")
-                if not profile_user_id:
-                    log.error(
-                        f"待批准的社区成员条目 #{pending_id} 缺少 discord_number_id，无法处理。"
-                    )
-                    conn.rollback()
-                    return
-
-                # --- 检查用户是否已有档案 ---
-                cursor.execute(
-                    "SELECT id FROM community_members WHERE discord_number_id = ?",
-                    (str(profile_user_id),),
-                )
-                existing_member = cursor.fetchone()
-
-                content_json_for_db = json.dumps(data, ensure_ascii=False)
-
-                if existing_member:
-                    # --- 更新现有档案 ---
-                    old_entry_id = existing_member["id"]
-                    log.info(
-                        f"检测到用户 {profile_user_id} 已有档案 (ID: {old_entry_id})，将执行更新操作。"
-                    )
-
-                    cursor.execute(
+                    # --- 执行插入 ---
+                    parade_cursor.execute(
                         """
-                        UPDATE community_members
-                        SET title = ?, content_json = ?, status = 'approved'
-                        WHERE id = ?
-                        """,
-                        (data["name"], content_json_for_db, old_entry_id),
-                    )
-                    log.info(
-                        f"已更新社区成员条目 {old_entry_id} (源自审核 #{pending_id})。"
-                    )
-                    new_entry_id = old_entry_id  # 后续RAG处理使用旧ID
-
-                    # 异步执行删除旧RAG索引的任务
-                    log.info(f"准备为旧档案 {old_entry_id} 删除过时的RAG索引...")
-                    task = asyncio.create_task(
-                        incremental_rag_service.delete_entry(old_entry_id)
-                    )
-                    self.background_tasks.add(task)
-                    task.add_done_callback(self._handle_task_result)
-
-                else:
-                    # --- 创建新档案 ---
-                    clean_name = re.sub(r"[^\w\u4e00-\u9fff]", "_", data["name"])[:50]
-                    new_entry_id = f"member_{clean_name}_{int(time.time())}"
-
-                    cursor.execute(
-                        """
-                        INSERT INTO community_members (id, title, discord_id, discord_number_id, content_json, status)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO general_knowledge.knowledge_documents
+                        (external_id, title, full_text, source_metadata, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                        RETURNING id
                         """,
                         (
-                            new_entry_id,
-                            data["name"],
-                            data.get("discord_id"),
-                            profile_user_id,
-                            content_json_for_db,
-                            "approved",
+                            external_id,
+                            title,
+                            full_text,
+                            json.dumps(source_metadata, ensure_ascii=False),
                         ),
                     )
+                    result = parade_cursor.fetchone()
+                    if not result:
+                        raise Exception("插入通用知识到 ParadeDB 后未能取回新 ID。")
+                    new_entry_id = result["id"]
                     log.info(
-                        f"已创建新的社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
+                        f"已创建通用知识条目 {new_entry_id} 到 ParadeDB (源自审核 #{pending_id})。"
+                    )
+                    embed_title = "✅ 新知识Get！"
+                    embed_description = f"大家的意见咱都收到啦！关于 **{data['title']}** 的新知识已经被我记在小本本上啦！"
+
+                elif entry_type == "community_member":
+                    profile_user_id = data.get("discord_number_id")
+                    if not profile_user_id:
+                        raise ValueError(
+                            f"社区成员条目 #{pending_id} 缺少 discord_number_id。"
+                        )
+
+                    # --- 检查用户是否已有档案 ---
+                    parade_cursor.execute(
+                        "SELECT id FROM community.member_profiles WHERE discord_id = %s",
+                        (str(profile_user_id),),
+                    )
+                    existing_member = parade_cursor.fetchone()
+
+                    # --- 准备数据 ---
+                    updated_name = data.get("name", "").strip()
+                    full_text = f"""
+名称: {updated_name}
+Discord ID: {profile_user_id}
+性格特点: {data.get("personality", "").strip()}
+背景信息: {data.get("background", "").strip()}
+喜好偏好: {data.get("preferences", "").strip()}
+                    """.strip()
+                    source_metadata = {
+                        "name": updated_name,
+                        "discord_id": str(profile_user_id),
+                        "personality": data.get("personality", "").strip(),
+                        "background": data.get("background", "").strip(),
+                        "preferences": data.get("preferences", "").strip(),
+                        "source": "community_submission",
+                        "contributor_id": str(entry["proposer_id"]),
+                        "original_submission": data,
+                    }
+
+                    if existing_member:
+                        # --- 更新现有档案 ---
+                        old_entry_id = existing_member["id"]
+                        log.info(
+                            f"检测到用户 {profile_user_id} 已有档案 (ID: {old_entry_id})，将执行更新操作。"
+                        )
+                        parade_cursor.execute(
+                            """
+                            UPDATE community.member_profiles
+                            SET title = %s, full_text = %s, source_metadata = %s, updated_at = NOW()
+                            WHERE id = %s
+                            """,
+                            (
+                                updated_name,
+                                full_text,
+                                json.dumps(source_metadata, ensure_ascii=False),
+                                old_entry_id,
+                            ),
+                        )
+                        new_entry_id = old_entry_id
+                        log.info(
+                            f"已更新社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
+                        )
+                        # 异步删除旧向量，后续会创建新的
+                        task = asyncio.create_task(
+                            incremental_rag_service.delete_entry(new_entry_id)
+                        )
+                        self.background_tasks.add(task)
+                        task.add_done_callback(self._handle_task_result)
+                    else:
+                        # --- 创建新档案 ---
+                        external_id = f"pending_{pending_id}"
+                        parade_cursor.execute(
+                            """
+                            INSERT INTO community.member_profiles (external_id, discord_id, title, full_text, source_metadata, created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+                            RETURNING id
+                            """,
+                            (
+                                external_id,
+                                str(profile_user_id),
+                                updated_name,
+                                full_text,
+                                json.dumps(source_metadata, ensure_ascii=False),
+                            ),
+                        )
+                        result = parade_cursor.fetchone()
+                        if not result:
+                            raise Exception("插入社区成员到 ParadeDB 后未能取回新 ID。")
+                        new_entry_id = result["id"]
+                        log.info(
+                            f"已创建新的社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
+                        )
+
+                    # --- 解锁个人记忆功能 ---
+                    if profile_user_id:
+                        log.info(f"正在为用户 {profile_user_id} 解锁个人记忆功能...")
+                        try:
+                            await personal_memory_service.unlock_feature(
+                                int(profile_user_id)
+                            )
+                            log.info(
+                                f"成功为用户 {profile_user_id} 解锁了个人记忆功能。"
+                            )
+                        except Exception as e:
+                            log.error(
+                                f"为用户 {profile_user_id} 自动解锁个人记忆功能时失败: {e}",
+                                exc_info=True,
+                            )
+
+                    embed_title = "✅ 新的名片已收录！"
+                    embed_description = (
+                        f"大家的意见咱都收到啦！ **{data['name']}** 我已经记住他们啦！"
                     )
 
-                # --- 解锁个人记忆功能 ---
-                if profile_user_id:
-                    log.info(f"正在为用户 {profile_user_id} 解锁个人记忆功能...")
-                    try:
-                        # 我们需要调用一个能接受 user_id 的函数
-                        await personal_memory_service.unlock_feature(
-                            int(profile_user_id)
-                        )
-                        log.info(f"成功为用户 {profile_user_id} 解锁了个人记忆功能。")
-                    except Exception as e:
-                        log.error(
-                            f"为用户 {profile_user_id} 自动解锁个人记忆功能时失败: {e}",
-                            exc_info=True,
-                        )
-                else:
-                    log.warning(
-                        f"社区成员条目 {new_entry_id} 缺少 'discord_number_id'，无法解锁个人记忆。"
-                    )
+                elif entry_type == "work_event":
+                    # work_event 仍然使用 SQLite，保持原样
+                    success = await self.work_db_service.add_custom_event(data)
+                    if success:
+                        new_entry_id = f"work_event_{data['name']}"  # 模拟ID
+                        embed_title = "✅ 新活儿来啦！"
+                        embed_description = f"好耶！**{data['name']}** 这个新事件已经被添加到事件池里啦，大家又有新活儿干了！"
+                    else:
+                        log.error(f"将自定义事件 #{pending_id} 添加到数据库时失败。")
+                        # 此处 conn 是 SQLite conn，所以 rollback 是正确的
+                        conn.rollback()
+                        return
 
-                nicknames = data.get("discord_nickname", [])
-                if isinstance(nicknames, str):
-                    nicknames = [
-                        nick.strip() for nick in nicknames.split(",") if nick.strip()
-                    ]
+                # --- 统一提交和收尾 ---
+                parade_conn.commit()
 
-                if nicknames:
-                    for nickname in nicknames:
-                        cursor.execute(
-                            "INSERT INTO member_discord_nicknames (member_id, nickname) VALUES (?, ?)",
-                            (new_entry_id, nickname),
-                        )
-                    log.info(f"为成员 {new_entry_id} 插入了 {len(nicknames)} 个昵称。")
-
-                embed_title = "✅ 新的名片已收录！"
-                embed_description = (
-                    f"大家的意见咱都收到啦！ **{data['name']}** 我已经记住他们啦！"
+            except Exception as e:
+                if parade_conn:
+                    parade_conn.rollback()
+                log.error(
+                    f"在 ParadeDB 中批准条目 #{pending_id} 时出错: {e}", exc_info=True
                 )
-
-            elif entry_type == "work_event":
-                success = await self.work_db_service.add_custom_event(data)
-                if success:
-                    new_entry_id = (
-                        f"work_event_{data['name']}"  # 模拟一个ID用于后续流程
-                    )
-                    embed_title = "✅ 新活儿来啦！"
-                    embed_description = f"好耶！**{data['name']}** 这个新事件已经被添加到事件池里啦，大家又有新活儿干了！"
-                else:
-                    log.error(f"将自定义事件 #{pending_id} 添加到数据库时失败。")
-                    # 可以选择在这里否决条目或重试
-                    conn.rollback()
-                    return
+                # re-raise to let the outer try-except handle SQLite rollback and message update
+                raise e
+            finally:
+                if parade_conn:
+                    parade_conn.close()
 
             if new_entry_id:
                 cursor.execute(

@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from chromadb.api.types import (
+    Embedding,
+    Metadata,
+    IDs,
+    Where,
+    Include,
+    GetResult,
+)
 
 import chromadb
 
@@ -38,13 +46,13 @@ class VectorDBService:
         """
         删除并重新创建集合，以确保数据完全同步。
         """
-        if not self.client:
+        if not self.client or not self.collection_name:
             log.error("VectorDB 客户端未初始化，无法重新创建集合。")
             return
 
         try:
             log.info(f"正在删除旧的集合: '{config.VECTOR_DB_COLLECTION_NAME}'...")
-            self.client.delete_collection(name=config.VECTOR_DB_COLLECTION_NAME)
+            self.client.delete_collection(name=self.collection_name)
             log.info("旧集合已删除。")
         except Exception as e:
             # 即使集合不存在，尝试删除也可能引发异常，但我们可以忽略它
@@ -62,8 +70,8 @@ class VectorDBService:
         self,
         ids: List[str],
         documents: List[str],
-        embeddings: List[List[float]],
-        metadatas: List[Dict[str, Any]],
+        embeddings: List[Embedding],
+        metadatas: List[Metadata],
     ):
         """
         向集合中添加或更新文档及其元数据。
@@ -74,7 +82,7 @@ class VectorDBService:
             embeddings: 与文档对应的嵌入向量列表。
             metadatas: 与文档对应的元数据字典列表。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法添加文档。")
             return
 
@@ -83,7 +91,10 @@ class VectorDBService:
             collection = self.client.get_or_create_collection(name=self.collection_name)
             # 使用 upsert 来添加新文档或更新现有文档，现在包含元数据
             collection.upsert(
-                ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
+                ids=ids,
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas,
             )
             log.info(
                 f"成功向集合 '{collection.name}' 中添加/更新了 {len(ids)} 个文档。"
@@ -98,7 +109,7 @@ class VectorDBService:
         Args:
             ids: 要删除的文档的唯一ID列表。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法删除文档。")
             return
 
@@ -114,11 +125,11 @@ class VectorDBService:
         except Exception as e:
             log.error(f"从 ChromaDB 删除文档时出错: {e}", exc_info=True)
 
-    def update(self, ids: List[str], metadatas: List[Dict[str, Any]]):
+    def update(self, ids: List[str], metadatas: List[Metadata]):
         """
         更新现有文档的元数据。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法更新元数据。")
             return
         try:
@@ -130,17 +141,25 @@ class VectorDBService:
 
     def get(
         self,
-        ids: List[str] = None,
-        where: Dict[str, Any] = None,
-        limit: int = None,
-        include: List[str] = None,
-    ) -> Dict[str, Any]:
+        ids: Optional[IDs] = None,
+        where: Optional[Where] = None,
+        limit: Optional[int] = None,
+        include: Include = ["metadatas", "documents"],
+    ) -> GetResult:
         """
         从集合中获取文档。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法获取文档。")
-            return {}
+            return {
+                "ids": [],
+                "embeddings": None,
+                "documents": [],
+                "metadatas": [],
+                "uris": [],
+                "data": None,
+                "included": [],
+            }
         try:
             log.info(
                 f"[VECTOR_DB] 准备调用 collection.get。参数 - where: {where}, limit: {limit}"
@@ -161,17 +180,25 @@ class VectorDBService:
             return results
         except Exception as e:
             log.error(f"从 ChromaDB 获取文档时出错: {e}", exc_info=True)
-            return {}
+            return {
+                "ids": [],
+                "embeddings": None,
+                "documents": [],
+                "metadatas": [],
+                "uris": [],
+                "data": None,
+                "included": [],
+            }
 
     def get_all_ids(self) -> List[str]:
         """获取集合中所有文档的ID。"""
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法获取ID。")
             return []
         try:
             collection = self.client.get_or_create_collection(name=self.collection_name)
-            results = collection.get(include=[])
-            return results.get("ids", [])
+            results = collection.get(include=[])  # include=[] is valid to just get ids
+            return results["ids"]
         except Exception as e:
             log.error(f"从 ChromaDB 获取所有ID时出错: {e}", exc_info=True)
             return []
@@ -186,14 +213,14 @@ class VectorDBService:
         Returns:
             一个包含所有匹配文档ID的列表。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法按元数据获取ID。")
             return []
         try:
             collection = self.client.get_or_create_collection(name=self.collection_name)
             # 使用 get 方法和 where 过滤器来查询
             results = collection.get(where=filter_dict, include=[])
-            return results.get("ids", [])
+            return results["ids"]
         except Exception as e:
             log.error(f"根据元数据 {filter_dict} 获取ID时出错: {e}", exc_info=True)
             return []
@@ -203,7 +230,7 @@ class VectorDBService:
         query_embedding: List[float],
         n_results: int = 3,
         max_distance: float = config.RAG_MAX_DISTANCE,
-        where_filter: Dict[str, Any] = None,
+        where_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         在集合中执行语义搜索，并根据距离阈值过滤结果。
@@ -216,7 +243,7 @@ class VectorDBService:
         Returns:
             一个包含搜索结果的字典列表，每个字典包含 'id', 'content', 'distance', 和 'metadata'。
         """
-        if not self.is_available():
+        if not self.client or not self.collection_name:
             log.error("VectorDB 服务不可用，无法执行搜索。")
             return []
 
@@ -242,21 +269,29 @@ class VectorDBService:
 
             # 解包并格式化结果
             unfiltered_results = []
-            if results and results["ids"] and results["ids"][0]:
-                ids = results["ids"][0]
-                documents = results["documents"][0]
-                distances = results["distances"][0]
-                metadatas = results["metadatas"][0]
+            # Safely unpack ChromaDB results, which are lists of lists
+            if results:
+                ids_list = results.get("ids", [])
+                documents_list = results.get("documents", [])
+                distances_list = results.get("distances", [])
+                metadatas_list = results.get("metadatas", [])
 
-                for i in range(len(ids)):
-                    unfiltered_results.append(
-                        {
-                            "id": ids[i],
-                            "content": documents[i],
-                            "distance": distances[i],
-                            "metadata": metadatas[i],
-                        }
-                    )
+                # We sent one query, so we expect one list of results
+                if ids_list and documents_list and distances_list and metadatas_list:
+                    ids = ids_list[0]
+                    documents = documents_list[0]
+                    distances = distances_list[0]
+                    metadatas = metadatas_list[0]
+
+                    for i in range(len(ids)):
+                        unfiltered_results.append(
+                            {
+                                "id": ids[i],
+                                "content": documents[i],
+                                "distance": distances[i],
+                                "metadata": metadatas[i],
+                            }
+                        )
 
             # 根据 max_distance 过滤结果
             filtered_results = [

@@ -116,6 +116,15 @@ TUTORIAL_RAG_CONFIG = {
     "MAX_PARENT_DOCS": 3,  # 最终返回给AI的父文档最大数量
 }
 
+# --- 世界之书 RAG 配置 ---
+WORLD_BOOK_RAG_CONFIG = {
+    "TOP_K_VECTOR": 20,
+    "TOP_K_FTS": 20,
+    "HYBRID_SEARCH_FINAL_K": 10,  # 世界之书返回更多chunks
+    "RRF_K": 60,
+    "MAX_PARENT_DOCS": 5,  # 世界之书返回更多父文档
+}
+
 # --- 模型生成配置 ---
 # 为不同的模型别名定义独立的生成参数。
 # Key 是我们在代码中使用的模型别名 (例如 "gemini-3-flash-custom")。
@@ -354,9 +363,9 @@ WORLD_BOOK_CONFIG = {
         # 审核时间结束后，通过所需的最低赞成票数
         "approval_threshold": 3,
         # 在审核期间，可立即通过的赞成票数
-        "instant_approval_threshold": 5,
+        "instant_approval_threshold": 10,
         # 在审核期间，可立即否决的反对票数
-        "rejection_threshold": 3,
+        "rejection_threshold": 5,
         # 投票使用的表情符号
         "vote_emoji": "✅",
         "reject_emoji": "❌",
@@ -368,7 +377,7 @@ WORLD_BOOK_CONFIG = {
         # 审核时间结束后，通过所需的最低赞成票数
         "approval_threshold": 2,
         # 在审核期间，可立即通过的赞成票数
-        "instant_approval_threshold": 3,
+        "instant_approval_threshold": 8,
         # 在审核期间，可立即否决的反对票数
         "rejection_threshold": 3,
         # 投票使用的表情符号

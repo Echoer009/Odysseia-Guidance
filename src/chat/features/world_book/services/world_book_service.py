@@ -8,7 +8,6 @@ import asyncio
 
 # 导入新的服务依赖
 from src.chat.services.gemini_service import GeminiService, gemini_service
-from src.chat.services.vector_db_service import VectorDBService, vector_db_service
 from src import config
 from src.chat.config import chat_config
 from src.chat.features.world_book.services.incremental_rag_service import (
@@ -27,10 +26,9 @@ class WorldBookService:
     同时支持通过 Discord ID 直接从 SQLite 数据库查找用户档案。
     """
 
-    def __init__(self, gemini_svc: GeminiService, vector_db_svc: VectorDBService):
+    def __init__(self, gemini_svc: GeminiService):
         self.gemini_service = gemini_svc
-        self.vector_db_service = vector_db_svc
-        log.info("WorldBookService (RAG + SQLite version) 初始化完成。")
+        log.info("WorldBookService (ParadeDB Hybrid Search version) 初始化完成。")
 
     def _get_db_connection(self):
         """建立并返回一个新的 SQLite 数据库连接。"""
@@ -103,9 +101,7 @@ class WorldBookService:
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
-        return (
-            self.vector_db_service.is_available() and self.gemini_service.is_available()
-        )
+        return self.gemini_service.is_available()
 
     async def find_entries(
         self,
@@ -171,22 +167,26 @@ class WorldBookService:
             if summarized_query:
                 log.info(f"RAG 总结查询成功: '{summarized_query}'")
             else:
-                # 如果总结失败，回退到使用格式化后的原始查询
+                # 如果总结失败，回退到使用清理后的原始查询
                 from src.chat.services.regex_service import regex_service
+                import re
 
                 clean_query = regex_service.clean_user_input(latest_query)
-                summarized_query = f"[{user_name}]: {clean_query}"
+                # 进一步移除 Discord 提及
+                summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
                 log.warning(
-                    f"RAG 查询总结失败，将回退到使用格式化的原始查询: '{summarized_query}'"
+                    f"RAG 查询总结失败，将回退到使用清理后的原始查询: '{summarized_query}'"
                 )
         else:
-            # 如果禁用了查询重写，直接使用格式化的原始查询
+            # 如果禁用了查询重写，直接使用清理后的原始查询
             from src.chat.services.regex_service import regex_service
+            import re
 
             clean_query = regex_service.clean_user_input(latest_query)
-            summarized_query = f"[{user_name}]: {clean_query}"
+            # 进一步移除 Discord 提及
+            summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
             log.info(
-                f"RAG查询重写功能已禁用，使用格式化的原始查询: '{summarized_query}'"
+                f"RAG查询重写功能已禁用，使用清理后的原始查询: '{summarized_query}'"
             )
 
         # 4. 确保查询字符串不为空
@@ -194,42 +194,40 @@ class WorldBookService:
             log.warning(f"最终查询为空，无法进行RAG搜索 (user_id: {user_id})")
             return []
 
-        # 3. 为总结出的查询生成嵌入
-        # 添加额外的空值检查，防止 clewdr 422 错误
-        if not summarized_query or not summarized_query.strip():
-            log.warning(
-                f"总结后的查询为空或只包含空白字符，跳过嵌入生成: '{summarized_query}'"
-            )
-            return []
-
-        query_embedding = await self.gemini_service.generate_embedding(
-            text=summarized_query, task_type="RETRIEVAL_QUERY"
-        )
-        log.debug(f"RAG 查询嵌入生成状态: {'成功' if query_embedding else '失败'}")
-
-        if not query_embedding:
-            log.error("无法为 RAG 查询生成嵌入。")
-            return []
-
-        # 4. 执行向量搜索
+        # 3. 执行混合搜索
         try:
-            search_results = self.vector_db_service.search(
-                query_embedding=query_embedding,
-                n_results=n_results,
-                max_distance=max_distance,
+            # 导入新的混合搜索服务
+            from src.chat.features.world_book.services.knowledge_search_service import (
+                knowledge_search_service,
             )
+
+            search_results = await knowledge_search_service.search(summarized_query)
 
             if search_results:
                 search_brief = [
-                    f"{r['id']}({r['distance']:.4f})" for r in search_results
+                    f"{r['id']}(score:{1 - r['distance']:.4f})" for r in search_results
                 ]
-                log.debug(f"RAG 搜索简报 (ID 和 距离): {search_brief}")
+                log.debug(f"知识库混合搜索简报 (ID 和 Score): {search_brief}")
             else:
-                log.debug("RAG 搜索未返回任何结果。")
+                log.debug("知识库混合搜索未返回任何结果。")
 
+            # 根据 max_distance 过滤结果 (虽然主要排序由RRF完成，但保留此逻辑作为补充)
+            # 注意：这里的 'distance' 是从 rrf_score 转换来的，所以阈值可能需要调整
+            # 0.5 的 distance 意味着 rrf_score > 0.5
+            # To-Do: 审查 RRF 分数转换逻辑，目前 distance 过滤不适用
+            # filtered_results = [
+            #     res for res in search_results if res["distance"] <= max_distance
+            # ]
+            #
+            # if len(filtered_results) < len(search_results):
+            #     log.info(
+            #         f"原始召回 {len(search_results)} 个结果, 距离阈值过滤后剩余 {len(filtered_results)} 个。"
+            #     )
+            #
+            # return filtered_results
             return search_results
         except Exception as e:
-            log.error(f"在 RAG 搜索过程中发生错误: {e}", exc_info=True)
+            log.error(f"在知识库混合搜索过程中发生错误: {e}", exc_info=True)
             return []
 
     def add_general_knowledge(
@@ -238,7 +236,7 @@ class WorldBookService:
         name: str,
         content_text: str,
         category_name: str,
-        contributor_id: int = None,
+        contributor_id: Optional[int] = None,
     ) -> bool:
         """
         向 general_knowledge 表添加一个新的知识条目。
@@ -254,82 +252,84 @@ class WorldBookService:
             bool: 添加成功返回 True，否则返回 False
         """
         log.info(
-            f"尝试添加通用知识条目: title='{title}', name='{name}', category='{category_name}'"
+            f"尝试向 ParadeDB 添加通用知识条目: title='{title}', name='{name}', category='{category_name}'"
         )
-        conn = self._get_db_connection()
+
+        # 直接使用 RAG 服务的数据库连接
+        conn = incremental_rag_service._get_parade_connection()
         if not conn:
-            log.error("数据库连接不可用，无法添加知识条目。")
+            log.error("ParadeDB 连接不可用，无法添加知识条目。")
             return False
 
         try:
-            cursor = conn.cursor()
+            from psycopg2.extras import DictCursor
 
-            # 1. 检查或创建类别
-            cursor.execute("SELECT id FROM categories WHERE name = ?", (category_name,))
-            category_row = cursor.fetchone()
+            cursor = conn.cursor(cursor_factory=DictCursor)
 
-            if category_row:
-                category_id = category_row[0]
-                log.debug(f"类别 '{category_name}' 已存在，ID: {category_id}")
-            else:
-                # 如果类别不存在，则创建新类别
-                cursor.execute(
-                    "INSERT INTO categories (name) VALUES (?)", (category_name,)
-                )
-                category_id = cursor.lastrowid
-                log.info(f"创建了新类别: {category_name} (ID: {category_id})")
+            # 1. 检查或创建类别 (假设 category_id=5 存在)
+            # 在 ParadeDB 中，我们暂时不处理动态类别创建，简化逻辑
+            category_id = 5  # 假设 "通用知识" 类别 ID 为 5
+            log.debug(f"使用固定的类别 ID: {category_id}")
 
             # 2. 准备内容数据
-            # 根据 build_vector_index.py 中的处理方式，我们需要将内容组织成字典格式
-            # 这里我们简单地将文本内容作为 "description" 字段
             content_dict = {"description": content_text}
-            content_json = json.dumps(content_dict, ensure_ascii=False)
-            log.debug(f"知识条目内容 JSON: {content_json}")
+            content_json_str = json.dumps(content_dict, ensure_ascii=False)
 
-            # 3. 生成唯一的条目 ID
-            # 使用标题和时间戳生成一个唯一ID
+            # 3. 准备 source_metadata
             import time
             import re
 
-            # 清理标题，只保留字母、数字、中文和下划线，用作ID的一部分
-            clean_title = re.sub(r"[^\w\u4e00-\u9fff]", "_", title)[:50]  # 限制长度
-            entry_id = f"{clean_title}_{int(time.time())}"
-            log.debug(f"生成的知识条目 ID: {entry_id}")
+            clean_title = re.sub(r"[^\w\u4e00-\u9fff]", "_", title)[:50]
+            external_id = f"{clean_title}_{int(time.time())}"
 
-            # 4. 插入新条目
+            source_metadata = {
+                "id": external_id,
+                "title": title,
+                "name": name,
+                "content_json": content_json_str,
+                "category_id": category_id,
+                "contributor_id": contributor_id,
+                "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "approved",
+            }
+            source_metadata_str = json.dumps(source_metadata, ensure_ascii=False)
+
+            # 4. 插入新条目并获取返回的 id
             cursor.execute(
                 """
-                INSERT INTO general_knowledge (id, title, name, content_json, category_id, contributor_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-            """,
-                (entry_id, title, name, content_json, category_id, contributor_id),
+                INSERT INTO general_knowledge.knowledge_documents (external_id, title, full_text, source_metadata, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, NOW(), NOW())
+                RETURNING id
+                """,
+                (external_id, title, content_json_str, source_metadata_str),
             )
 
-            conn.commit()
-            log.info(f"成功添加知识条目: {entry_id} ({title}) 到类别 {category_name}")
+            new_entry = cursor.fetchone()
+            if not new_entry or "id" not in new_entry:
+                raise Exception("未能获取新插入条目的 ID。")
 
-            # 异步调用增量RAG服务，将新条目添加到向量数据库
-            log.info(f"正在为新知识条目 {entry_id} 创建异步向量化任务...")
+            new_id = new_entry["id"]
+            conn.commit()
+            log.info(f"成功添加知识条目: ID={new_id} ({title})")
+
+            # 异步调用增量RAG服务，使用正确的整数 ID
+            log.info(f"正在为新知识条目 ID={new_id} 创建异步向量化任务...")
             asyncio.create_task(
-                incremental_rag_service.process_general_knowledge(entry_id)
+                incremental_rag_service.process_general_knowledge(str(new_id))
             )
 
             return True
 
-        except sqlite3.Error as e:
-            log.error(f"添加知识条目时发生数据库错误: {e}", exc_info=True)
-            if conn:
-                conn.rollback()
-            return False
         except Exception as e:
-            log.error(f"添加知识条目时发生未知错误: {e}", exc_info=True)
+            log.error(f"添加知识条目到 ParadeDB 时发生错误: {e}", exc_info=True)
             if conn:
                 conn.rollback()
             return False
         finally:
-            if conn:
-                conn.close()
+            if cursor:
+                cursor.close()
+            # 注意：不在这里关闭连接，因为连接由 RAG 服务管理
 
 
 # 使用已导入的全局服务实例来创建 WorldBookService 的单例
-world_book_service = WorldBookService(gemini_service, vector_db_service)
+world_book_service = WorldBookService(gemini_service)

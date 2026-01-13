@@ -1,12 +1,12 @@
 import logging
 from typing import Dict, Any
-import sqlite3
 import os
 import asyncio
 from functools import wraps
+import json
 
-from src import config
-from src.chat.services.vector_db_service import vector_db_service
+import psycopg2
+from psycopg2.extras import DictCursor
 
 
 def async_retry(retries=3, delay=5):
@@ -179,6 +179,19 @@ def _build_text_slang(entry: dict) -> str:
     return "\n".join(text_parts)
 
 
+def _build_text_general_knowledge(entry: dict) -> str:
+    """为"通用知识"类别构建结构化文本。"""
+    name = entry.get("name", entry.get("title", ""))
+    text_parts = [f"类别: 通用知识", f"名称: {name}"]
+
+    content_dict = entry.get("content", {})
+    if isinstance(content_dict, dict) and content_dict.get("description"):
+        text_parts.append("描述:")
+        text_parts.append(f" - {content_dict['description']}")
+
+    return "\n".join(text_parts)
+
+
 def build_document_text(entry: dict) -> str:
     """
     根据条目的类别，调用相应的函数来构建用于嵌入的文本文档。
@@ -193,6 +206,7 @@ def build_document_text(entry: dict) -> str:
         "社区文化": lambda e: _build_text_generic(e, "社区文化"),
         "社区大事件": lambda e: _build_text_generic(e, "社区大事件"),
         "俚语": _build_text_slang,
+        "通用知识": _build_text_general_knowledge,
     }
 
     builder_func = builders.get(category)
@@ -221,8 +235,7 @@ class IncrementalRAGService:
 
     def __init__(self):
         self.gemini_service = None
-        self.vector_db_service = vector_db_service
-        self.db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
+        self.parade_conn = None
 
     def _get_gemini_service(self):
         """延迟导入 Gemini 服务以避免循环导入。"""
@@ -235,17 +248,29 @@ class IncrementalRAGService:
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
         gemini_service = self._get_gemini_service()
-        return self.vector_db_service.is_available() and gemini_service.is_available()
+        return gemini_service.is_available()
 
-    def _get_db_connection(self):
-        """获取数据库连接"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            return conn
-        except sqlite3.Error as e:
-            log.error(f"连接到世界书数据库失败: {e}", exc_info=True)
-            return None
+    def _get_parade_connection(self):
+        """获取 Parade DB 连接"""
+        if self.parade_conn is None:
+            try:
+                if os.getenv("RUNNING_IN_DOCKER"):
+                    db_host = "odysseia_pg_db"
+                else:
+                    db_host = "localhost"
+
+                self.parade_conn = psycopg2.connect(
+                    dbname=os.getenv("POSTGRES_DB", "braingirl_db"),
+                    user=os.getenv("POSTGRES_USER", "user"),
+                    password=os.getenv("POSTGRES_PASSWORD", "password"),
+                    host=db_host,
+                    port=os.getenv("DB_PORT", "5432"),
+                )
+                log.debug("成功连接到 Parade DB")
+            except Exception as e:
+                log.error(f"连接到 Parade DB 失败: {e}", exc_info=True)
+                return None
+        return self.parade_conn
 
     @async_retry(retries=3, delay=5)
     async def process_community_member(self, member_id: str) -> bool:
@@ -274,8 +299,8 @@ class IncrementalRAGService:
         rag_entry = self._build_rag_entry_from_member(member_data)
         log.debug(f"为社区成员 {member_id} 构建RAG条目: {rag_entry.get('id')}")
 
-        # 处理并添加到向量数据库
-        success = await self._process_single_entry(rag_entry)
+        # 处理并添加到 Parade DB 向量数据库
+        success = await self._process_single_entry_to_parade(rag_entry, "community")
 
         if success:
             log.info(f"成功将社区成员档案 {member_id} 添加到向量数据库")
@@ -285,45 +310,106 @@ class IncrementalRAGService:
         return success
 
     def _get_community_member_data(self, member_id: str) -> Dict[str, Any] | None:
-        """从数据库获取社区成员数据"""
-        conn = self._get_db_connection()
+        """从 Parade DB 获取社区成员数据"""
+        conn = self._get_parade_connection()
         if not conn:
             return None
 
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=DictCursor)
             cursor.execute(
-                "SELECT id, title, discord_number_id, content_json FROM community_members WHERE id = ?",
+                """
+                SELECT id, external_id, discord_id, title, full_text, source_metadata
+                FROM community.member_profiles
+                WHERE id = %s
+                """,
                 (member_id,),
             )
+
             member_row = cursor.fetchone()
 
             if member_row:
                 member_dict = dict(member_row)
+                log.debug(f"从 Parade DB 获取社区成员 {member_id} 成功")
 
-                # 解析content_json
-                import json
+                # 解析 full_text 字段
+                full_text = member_dict.get("full_text", "")
+                if full_text:
+                    try:
+                        cleaned_full_text = full_text.strip()
+                        if cleaned_full_text.startswith("{"):
+                            content_data = json.loads(cleaned_full_text)
+                        elif '{"name":' in cleaned_full_text:
+                            # 提取 JSON 部分
+                            json_start = cleaned_full_text.find("{")
+                            json_end = cleaned_full_text.rfind("}") + 1
+                            if json_start >= 0 and json_end > json_start:
+                                json_str = cleaned_full_text[json_start:json_end]
+                                content_data = json.loads(json_str)
+                            else:
+                                content_data = {}
+                        else:
+                            content_data = {}
 
-                if member_dict.get("content_json"):
-                    member_dict["content"] = json.loads(member_dict["content_json"])
-                    del member_dict["content_json"]
+                        member_dict["content"] = content_data
+                    except (json.JSONDecodeError, TypeError) as e:
+                        log.warning(
+                            f"解析 community.member_profiles #{member_id} 的 full_text 失败: {e}"
+                        )
+                        member_dict["content"] = {}
 
-                # 获取关联的昵称
-                cursor.execute(
-                    "SELECT nickname FROM member_discord_nicknames WHERE member_id = ?",
-                    (member_id,),
-                )
-                nicknames = [row["nickname"] for row in cursor.fetchall()]
-                member_dict["discord_nickname"] = nicknames
-                log.debug(f"获取社区成员 {member_id} 的昵称: {nicknames}")
+                # 解析 source_metadata 字段
+                source_metadata = member_dict.get("source_metadata")
+                if source_metadata and not member_dict.get("content"):
+                    try:
+                        if isinstance(source_metadata, str):
+                            # 尝试解析为 JSON
+                            try:
+                                metadata = json.loads(source_metadata)
+                            except json.JSONDecodeError:
+                                # 如果不是标准 JSON，尝试使用 ast.literal_eval 解析 Python 字典
+                                import ast
+
+                                metadata = ast.literal_eval(source_metadata)
+                        else:
+                            metadata = source_metadata
+
+                        # 从 source_metadata 的 content_json 字段中提取数据
+                        if "content_json" in metadata:
+                            content_json_str = metadata["content_json"]
+                            if isinstance(content_json_str, str):
+                                content_data = json.loads(content_json_str)
+                            else:
+                                content_data = content_json_str
+                            member_dict["content"] = content_data
+                        else:
+                            # 如果没有 content_json，使用 metadata 本身
+                            member_dict["content"] = metadata
+                    except (
+                        json.JSONDecodeError,
+                        TypeError,
+                        ValueError,
+                        SyntaxError,
+                    ) as e:
+                        log.warning(
+                            f"解析 community.member_profiles #{member_id} 的 source_metadata 失败: {e}"
+                        )
+                        member_dict["content"] = {}
+
+                # 如果没有解析出 content，创建一个空的
+                if "content" not in member_dict:
+                    member_dict["content"] = {}
+
+                # 获取昵称（如果有的话）
+                member_dict["discord_nickname"] = []
 
                 return member_dict
 
         except Exception as e:
-            log.error(f"获取社区成员数据时出错: {e}", exc_info=True)
+            log.error(f"从 Parade DB 获取社区成员数据时出错: {e}", exc_info=True)
         finally:
-            if conn:
-                conn.close()
+            if cursor:
+                cursor.close()
 
         return None
 
@@ -349,23 +435,26 @@ class IncrementalRAGService:
         log.debug(f"构建的社区成员 RAG 条目: {rag_entry['id']}")
         return rag_entry
 
-    async def _process_single_entry(self, entry: Dict[str, Any]) -> bool:
+    async def _process_single_entry_to_parade(
+        self, entry: Dict[str, Any], table_type: str
+    ) -> bool:
         """
-        处理单个知识条目，生成嵌入并添加到向量数据库
+        处理单个知识条目，生成嵌入并添加到 Parade DB 向量数据库
 
         Args:
             entry: 知识条目字典
+            table_type: 表类型，'community' 或 'general_knowledge'
 
         Returns:
             bool: 处理成功返回True，否则返回False
         """
         if not self.is_ready():
-            log.warning(f"RAG服务尚未准备就绪，无法处理条目 {entry.get('id')}")
+            log.warning(f"Gemini 服务尚未准备就绪，无法处理条目 {entry.get('id')}")
             return False
 
         try:
             entry_id = entry.get("id", "未知ID")
-            log.debug(f"开始处理单个条目: {entry_id}")
+            log.debug(f"开始处理单个条目到 Parade DB: {entry_id}")
 
             # 构建文档文本
             document_text = build_document_text(entry)
@@ -383,54 +472,130 @@ class IncrementalRAGService:
 
             log.debug(f"条目 {entry_id} 被分割成 {len(chunks)} 个块")
 
-            # 为每个块生成嵌入并添加到向量数据库
-            ids_to_add = []
-            documents_to_add = []
-            embeddings_to_add = []
-            metadatas_to_add = []
+            # 首先删除旧的向量数据
+            await self._delete_entry_from_parade(entry_id, table_type)
 
-            for chunk_index, chunk_content in enumerate(chunks):
-                chunk_id = f"{entry_id}:{chunk_index}"
-                log.debug(f"正在为块 {chunk_id} 生成嵌入向量...")
+            # 为每个块生成嵌入并添加到 Parade DB
+            success_count = 0
+            conn = self._get_parade_connection()
+            if not conn:
+                return False
 
-                # 生成嵌入向量
-                gemini_service = self._get_gemini_service()
-                embedding = await gemini_service.generate_embedding(
-                    text=chunk_content,
-                    title=entry.get("title", entry_id),
-                    task_type="retrieval_document",
-                )
+            cursor = conn.cursor()
 
-                if embedding:
-                    ids_to_add.append(chunk_id)
-                    documents_to_add.append(chunk_content)
-                    embeddings_to_add.append(embedding)
-                    metadatas_to_add.append(entry.get("metadata", {}))
-                    log.debug(f"成功为块 {chunk_id} 生成嵌入向量")
+            try:
+                for chunk_index, chunk_content in enumerate(chunks):
+                    log.debug(f"正在为块 {chunk_index} 生成嵌入向量...")
+
+                    # 生成嵌入向量
+                    gemini_service = self._get_gemini_service()
+                    embedding = await gemini_service.generate_embedding(
+                        text=chunk_content,
+                        title=entry.get("title", entry_id),
+                        task_type="retrieval_document",
+                    )
+
+                    if not embedding:
+                        log.error(f"无法为块 {chunk_index} 生成嵌入向量")
+                        raise Exception(f"无法为块 {chunk_index} 生成嵌入向量")
+
+                    # 将嵌入向量转换为 PostgreSQL vector 类型要求的格式
+                    # vector 类型需要数组格式，如 '[0.1, 0.2, 0.3]'
+                    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
+                    if table_type == "community":
+                        # 插入到 community.member_chunks 表
+                        cursor.execute(
+                            """
+                            INSERT INTO community.member_chunks
+                            (profile_id, chunk_index, chunk_text, embedding)
+                            VALUES (%s, %s, %s, %s::vector)
+                            """,
+                            (entry_id, chunk_index, chunk_content, embedding_str),
+                        )
+                    else:  # general_knowledge
+                        # 插入到 general_knowledge.knowledge_chunks 表
+                        cursor.execute(
+                            """
+                            INSERT INTO general_knowledge.knowledge_chunks
+                            (document_id, chunk_index, chunk_text, embedding)
+                            VALUES (%s, %s, %s, %s::vector)
+                            """,
+                            (entry_id, chunk_index, chunk_content, embedding_str),
+                        )
+
+                    success_count += 1
+                    log.debug(f"成功为块 {chunk_index} 生成嵌入向量并存入 Parade DB")
+
+                conn.commit()
+                cursor.close()
+
+                if success_count > 0:
+                    log.info(
+                        f"成功将 {success_count} 个文档块添加到 Parade DB 向量数据库，条目 {entry_id} 处理完成。"
+                    )
+                    return True
                 else:
-                    log.error(f"无法为块 {chunk_id} 生成嵌入向量")
+                    log.warning(
+                        f"没有成功生成任何嵌入向量，条目 {entry_id} 未添加到 Parade DB 向量数据库"
+                    )
+                    return False
 
-            # 批量添加到向量数据库
-            if ids_to_add:
-                log.debug(f"尝试将 {len(ids_to_add)} 个文档块添加到向量数据库...")
-                self.vector_db_service.add_documents(
-                    ids=ids_to_add,
-                    documents=documents_to_add,
-                    embeddings=embeddings_to_add,
-                    metadatas=metadatas_to_add,
-                )
-                log.info(
-                    f"成功将 {len(ids_to_add)} 个文档块添加到向量数据库，条目 {entry_id} 处理完成。"
-                )
-                return True
-            else:
-                log.warning(
-                    f"没有成功生成任何嵌入向量，条目 {entry_id} 未添加到向量数据库"
-                )
+            except Exception as e:
+                log.error(f"处理条目 {entry_id} 时发生错误: {e}", exc_info=True)
+                if conn:
+                    conn.rollback()
+                if cursor:
+                    cursor.close()
                 return False
 
         except Exception as e:
             log.error(f"处理条目 {entry_id} 时发生错误: {e}", exc_info=True)
+            return False
+
+    async def _delete_entry_from_parade(self, entry_id: str, table_type: str) -> bool:
+        """
+        从 Parade DB 向量数据库中删除与指定条目ID相关的所有文档块。
+
+        Args:
+            entry_id: 要删除的主条目ID
+            table_type: 表类型，'community' 或 'general_knowledge'
+
+        Returns:
+            bool: 删除成功返回True，否则返回False
+        """
+        try:
+            conn = self._get_parade_connection()
+            if not conn:
+                return False
+
+            cursor = conn.cursor()
+
+            if table_type == "community":
+                cursor.execute(
+                    "DELETE FROM community.member_chunks WHERE profile_id = %s",
+                    (entry_id,),
+                )
+                log.info(
+                    f"从 community.member_chunks 表中删除了与 profile_id {entry_id} 相关的所有文档块"
+                )
+            else:  # general_knowledge
+                cursor.execute(
+                    "DELETE FROM general_knowledge.knowledge_chunks WHERE document_id = %s",
+                    (entry_id,),
+                )
+                log.info(
+                    f"从 general_knowledge.knowledge_chunks 表中删除了与 document_id {entry_id} 相关的所有文档块"
+                )
+
+            conn.commit()
+            cursor.close()
+            return True
+
+        except Exception as e:
+            log.error(
+                f"从 Parade DB 删除条目 {entry_id} 的向量时发生错误: {e}", exc_info=True
+            )
             return False
 
     @async_retry(retries=3, delay=5)
@@ -460,8 +625,10 @@ class IncrementalRAGService:
         rag_entry = self._build_rag_entry_from_general_knowledge(entry_data)
         log.debug(f"为通用知识条目 {entry_id} 构建RAG条目: {rag_entry.get('id')}")
 
-        # 处理并添加到向量数据库
-        success = await self._process_single_entry(rag_entry)
+        # 处理并添加到 Parade DB 向量数据库
+        success = await self._process_single_entry_to_parade(
+            rag_entry, "general_knowledge"
+        )
 
         if success:
             log.info(f"成功将通用知识条目 {entry_id} 添加到向量数据库")
@@ -471,32 +638,83 @@ class IncrementalRAGService:
         return success
 
     def _get_general_knowledge_data(self, entry_id: str) -> Dict[str, Any] | None:
-        """从数据库获取通用知识条目数据"""
-        conn = self._get_db_connection()
+        """从 Parade DB 获取通用知识条目数据"""
+        conn = self._get_parade_connection()
         if not conn:
             return None
 
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=DictCursor)
             cursor.execute(
-                "SELECT gk.id, gk.title, gk.name, gk.content_json, c.name as category_name "
-                "FROM general_knowledge gk "
-                "LEFT JOIN categories c ON gk.category_id = c.id "
-                "WHERE gk.id = ?",
+                """
+                SELECT id, external_id, title, full_text, source_metadata
+                FROM general_knowledge.knowledge_documents
+                WHERE id = %s
+                """,
                 (entry_id,),
             )
+
             entry_row = cursor.fetchone()
 
             if entry_row:
                 entry_dict = dict(entry_row)
-                log.debug(f"从数据库获取通用知识条目 {entry_id} 成功。")
+                log.debug(f"从 Parade DB 获取通用知识条目 {entry_id} 成功")
+
+                # 解析 full_text 字段
+                full_text = entry_dict.get("full_text", "")
+                if full_text:
+                    try:
+                        cleaned_full_text = full_text.strip()
+                        if cleaned_full_text.startswith("{"):
+                            content_data = json.loads(cleaned_full_text)
+                        else:
+                            # 如果不是 JSON，直接作为文本内容
+                            content_data = {"description": cleaned_full_text}
+                        entry_dict["content"] = content_data
+                    except (json.JSONDecodeError, TypeError) as e:
+                        log.warning(
+                            f"解析 general_knowledge.knowledge_documents #{entry_id} 的 full_text 失败: {e}"
+                        )
+                        entry_dict["content"] = {"description": cleaned_full_text}
+
+                # 解析 source_metadata 字段
+                source_metadata = entry_dict.get("source_metadata")
+                if source_metadata and not entry_dict.get("content"):
+                    try:
+                        if isinstance(source_metadata, str):
+                            # 尝试解析为 JSON
+                            try:
+                                metadata = json.loads(source_metadata)
+                            except json.JSONDecodeError:
+                                # 如果不是标准 JSON，尝试使用 ast.literal_eval 解析 Python 字典
+                                import ast
+
+                                metadata = ast.literal_eval(source_metadata)
+                        else:
+                            metadata = source_metadata
+                        entry_dict["content"] = metadata
+                    except (
+                        json.JSONDecodeError,
+                        TypeError,
+                        ValueError,
+                        SyntaxError,
+                    ) as e:
+                        log.warning(
+                            f"解析 general_knowledge.knowledge_documents #{entry_id} 的 source_metadata 失败: {e}"
+                        )
+                        entry_dict["content"] = {}
+
+                # 如果没有解析出 content，创建一个空的
+                if "content" not in entry_dict:
+                    entry_dict["content"] = {}
+
                 return entry_dict
 
         except Exception as e:
-            log.error(f"获取通用知识条目数据时出错: {e}", exc_info=True)
+            log.error(f"从 Parade DB 获取通用知识条目数据时出错: {e}", exc_info=True)
         finally:
-            if conn:
-                conn.close()
+            if cursor:
+                cursor.close()
 
         return None
 
@@ -504,27 +722,28 @@ class IncrementalRAGService:
         self, entry_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """将通用知识数据构建为RAG条目格式"""
-        # 从 content_json 中提取内容文本
-        content_text = ""
-        if entry_data.get("content_json"):
-            try:
-                import json
+        content = entry_data.get("content", {})
 
-                content_dict = json.loads(entry_data["content_json"])
-                content_text = content_dict.get("description", "")
-            except (json.JSONDecodeError, TypeError):
-                content_text = entry_data.get("content_json", "")
+        source_metadata = {}
+        raw_source_metadata = entry_data.get("source_metadata")
+        if isinstance(raw_source_metadata, str):
+            try:
+                source_metadata = json.loads(raw_source_metadata)
+            except json.JSONDecodeError:
+                pass
+        elif isinstance(raw_source_metadata, dict):
+            source_metadata = raw_source_metadata
 
         rag_entry = {
-            "id": f"db_{entry_data['id']}",
-            "title": entry_data.get("title", entry_data.get("name", entry_data["id"])),
-            "name": entry_data.get("name", entry_data["id"]),
-            "content": content_text,
+            "id": entry_data["id"],
+            "title": entry_data.get("title", ""),
+            "name": source_metadata.get("name", entry_data.get("title", "")),
+            "content": content,
             "metadata": {
-                "category": entry_data.get("category_name", "通用知识"),
+                "category": "通用知识",
                 "source": "database",
-                "contributor_id": entry_data.get("contributor_id"),
-                "created_at": entry_data.get("created_at"),
+                "contributor_id": source_metadata.get("contributor_id"),
+                "created_at": str(entry_data.get("created_at", "")),
             },
         }
         log.debug(f"构建的通用知识 RAG 条目: {rag_entry['id']}")
@@ -532,70 +751,40 @@ class IncrementalRAGService:
 
     async def delete_entry(self, entry_id: str) -> bool:
         """
-        从向量数据库中删除与指定条目ID相关的所有文档块。
+        从 Parade DB 向量数据库中删除与指定条目ID相关的所有文档块。
 
         Args:
-            entry_id: 要删除的主条目ID (例如 community_members 的 id)。
+            entry_id: 要删除的主条目ID
 
         Returns:
-            bool: 删除成功返回True，否则返回False。
+            bool: 删除成功返回True，否则返回False
         """
         try:
-            # ChromaDB 的 get 方法可以按 ID 前缀过滤
-            # 我们需要找到所有以 "entry_id:" 开头的文档
-            # 注意：ChromaDB 的 get() 方法目前不直接支持前缀搜索。
-            # 我们需要获取所有文档然后自己过滤，或者使用 where 查询。
-            # 一个更高效的方法是，如果知道分块数量，就直接生成ID。
-            # 但我们不知道，所以采用 where 查询。
-
-            # 为了避免潜在的SQL注入风险（尽管这里不是SQL），我们使用 where 子句
-            # ChromaDB 的 ID 是字符串，所以 entry_id 必须是字符串
-            str_entry_id = str(entry_id)
-
-            # 使用 get 方法获取与主 ID 相关的所有条目
-            # 我们只需要 id 字段来执行删除
-            # 备用策略：获取集合中的所有ID，然后在本地进行过滤。
-            # 这在集合很大时效率很低。
             log.info(
-                f"开始在向量数据库中删除与 entry_id '{entry_id}' 相关的所有文档块。"
-            )
-            all_ids = self.vector_db_service.get_all_ids()
-            log.info(f"从向量数据库获取了 {len(all_ids)} 个ID进行检查。")
-
-            # 检查原始 ID 和带 'db_' 前缀的 ID
-            prefixed_id = f"db_{str_entry_id}"
-
-            # 新增日志：打印将要用于匹配的 entry_id
-            log.info(f"将使用以下前缀进行匹配: '{str_entry_id}:' 和 '{prefixed_id}:'")
-
-            ids_to_delete = [
-                doc_id
-                for doc_id in all_ids
-                if doc_id.startswith(f"{str_entry_id}:")
-                or doc_id.startswith(f"{prefixed_id}:")
-            ]
-
-            # 新增日志：打印匹配结果
-            log.info(
-                f"匹配前缀后，找到 {len(ids_to_delete)} 个待删除的ID: {ids_to_delete}"
+                f"开始在 Parade DB 向量数据库中删除与 entry_id '{entry_id}' 相关的所有文档块。"
             )
 
-            if not ids_to_delete:
+            # 尝试从 community.member_chunks 表中删除
+            community_success = await self._delete_entry_from_parade(
+                entry_id, "community"
+            )
+
+            # 尝试从 general_knowledge.knowledge_chunks 表中删除
+            knowledge_success = await self._delete_entry_from_parade(
+                entry_id, "general_knowledge"
+            )
+
+            # 如果至少有一个表删除成功，或者两个表都没有数据（也视为成功）
+            if community_success or knowledge_success:
+                log.info(
+                    f"成功从 Parade DB 向量数据库中删除了与条目 {entry_id} 相关的文档块。"
+                )
+                return True
+            else:
                 log.warning(
-                    f"在向量数据库中没有找到与条目 {entry_id} 相关的文档块可供删除。"
+                    f"在 Parade DB 向量数据库中没有找到与条目 {entry_id} 相关的文档块可供删除。"
                 )
                 return True  # 认为操作成功，因为目标状态（不存在）已达成
-
-            log.debug(
-                f"找到 {len(ids_to_delete)} 个与条目 {entry_id} 相关的文档块，准备删除: {ids_to_delete}"
-            )
-
-            self.vector_db_service.delete_documents(ids=ids_to_delete)
-
-            log.info(
-                f"成功删除了与条目 {entry_id} 相关的 {len(ids_to_delete)} 个文档块。"
-            )
-            return True
 
         except Exception as e:
             log.error(f"删除条目 {entry_id} 的向量时发生错误: {e}", exc_info=True)

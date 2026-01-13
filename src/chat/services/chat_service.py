@@ -2,7 +2,8 @@
 
 import discord
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+import discord.abc
 
 # 导入所需的服务
 from src.chat.services.gemini_service import gemini_service
@@ -14,7 +15,6 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
-from src.chat.config import chat_config
 from src.chat.config.chat_config import PERSONAL_MEMORY_CONFIG, DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
@@ -41,9 +41,11 @@ class ChatService:
             return False
 
         # 2. 频道/分类设置检查
-        effective_config = await chat_settings_service.get_effective_channel_config(
-            message.channel
-        )
+        effective_config = {}
+        if isinstance(message.channel, discord.abc.GuildChannel):
+            effective_config = await chat_settings_service.get_effective_channel_config(
+                message.channel
+            )
 
         if not effective_config.get("is_chat_enabled", True):
             # 检查是否满足通行许可的例外条件
@@ -96,7 +98,7 @@ class ChatService:
         processed_data: Dict[str, Any],
         guild_name: str,
         location_name: str,
-    ) -> str:
+    ) -> Optional[str]:
         """
         处理聊天消息，生成并返回AI的最终回复。
 
@@ -111,9 +113,11 @@ class ChatService:
         guild_id = message.guild.id if message.guild else 0
 
         # --- 获取最新的有效配置 ---
-        effective_config = await chat_settings_service.get_effective_channel_config(
-            message.channel
-        )
+        effective_config = {}
+        if isinstance(message.channel, discord.abc.GuildChannel):
+            effective_config = await chat_settings_service.get_effective_channel_config(
+                message.channel
+            )
 
         # --- 个人记忆消息计数 ---
         # --- 个人记忆处理 ---
@@ -121,7 +125,7 @@ class ChatService:
         personal_summary = None
         has_personal_memory = user_profile and user_profile["has_personal_memory"]
 
-        if has_personal_memory:
+        if has_personal_memory and user_profile:
             personal_summary = user_profile["personal_summary"]
             # 在所有对话中进行消息计数和触发总结
             log.debug(f"--- 个人记忆诊断: 用户 {author.id} ---")
@@ -189,14 +193,11 @@ class ChatService:
                 guild_id=guild_id,
                 user_name=author.display_name,
                 conversation_history=channel_context,
-                n_results=chat_config.RAG_N_RESULTS_DEFAULT,
             )
 
             # --- 新增：集中获取所有上下文数据 ---
             affection_status = await affection_service.get_affection_status(author.id)
-            user_profile_data = world_book_service.get_profile_by_discord_id(
-                str(author.id)
-            )
+            user_profile_data = dict(user_profile) if user_profile else None
 
             # 3. --- 好感度与奖励更新（前置） ---
             try:
