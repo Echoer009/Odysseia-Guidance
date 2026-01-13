@@ -20,7 +20,7 @@ alembic
 
 # Data Processing & AI
 langchain-text-splitters
-numpy
+numpy==1.26.4
 
 # Web UI 依赖
 fastapi
