@@ -2,12 +2,19 @@ import asyncio
 import sqlite3
 import os
 import logging
+import sys
+
+# --- 动态添加项目根目录到 sys.path ---
+# 这使得脚本可以从任何位置运行，并且能够正确地找到 src 模块
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# --- 路径设置结束 ---
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-# 确保在运行此脚本之前，PYTHONPATH 包含项目根目录
-# 例如: export PYTHONPATH=.
 from src.database.database import AsyncSessionLocal
 from src.database.models import (
     GeneralKnowledgeDocument,
