@@ -10,9 +10,7 @@ import re
 from src.chat.services.chat_service import chat_service
 from src.chat.services.message_processor import message_processor
 
-# 导入上下文服务以设置 bot 实例
-from src.chat.services.context_service import context_service
-from src.chat.services.context_service_test import context_service_test  # 导入测试服务
+# 导入上下文服务
 
 # 导入数据库管理器以进行黑名单检查和斜杠命令
 from src.chat.utils.database import chat_db_manager
@@ -28,9 +26,7 @@ class AIChatCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # 将bot实例传递给需要它的服务
-        context_service.set_bot_instance(bot)
-        context_service_test.set_bot_instance(bot)  # 为测试服务也设置bot实例
+        # 服务实例的注入已由 main.py 统一处理，此处不再需要
 
     def _get_text_length_without_emojis(self, text: str) -> int:
         """计算移除Discord自定义表情后的文本长度。"""
@@ -109,8 +105,16 @@ class AIChatCog(commands.Cog):
                     > MESSAGE_SETTINGS["DM_THRESHOLD"]
                 ):
                     try:
+                        # 优雅地处理频道类型，避免 Pylance 错误
+                        channel_mention = (
+                            message.channel.mention
+                            if isinstance(
+                                message.channel, (discord.TextChannel, discord.Thread)
+                            )
+                            else "你们的私信"
+                        )
                         await message.author.send(
-                            f"刚刚在 {message.channel.mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
+                            f"刚刚在 {channel_mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
                         )
                         log.info(
                             f"回复因过长已通过私信发送给 {message.author.display_name}"
@@ -150,9 +154,12 @@ class AIChatCog(commands.Cog):
                     else "未知频道"
                 )
                 location_name = f"{parent_channel_name} -> {message.channel.name}"
-            else:
-                # 否则，直接显示频道名
+            elif isinstance(message.channel, discord.abc.GuildChannel):
+                # 确保是服务器频道再获取名字
                 location_name = message.channel.name
+            else:
+                # 否则（如私信），提供一个默认值
+                location_name = "私信中"
 
             final_response = await chat_service.handle_chat_message(
                 message, processed_data, guild_name, location_name

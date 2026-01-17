@@ -15,12 +15,12 @@ log = logging.getLogger(__name__)
 class ContextServiceTest:
     """上下文管理服务测试版本，用于对比新的上下文处理逻辑"""
 
-    def __init__(self):
-        self.bot: Optional[commands.Bot] = None
-
-    def set_bot_instance(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        log.info("ContextServiceTest 已设置 bot 实例。")
+        if bot:
+            log.info("ContextServiceTest 已通过构造函数设置 bot 实例。")
+        else:
+            log.warning("ContextServiceTest 初始化时未收到有效的 bot 实例。")
 
     async def get_formatted_channel_history_new(
         self,
@@ -38,7 +38,7 @@ class ContextServiceTest:
             log.error("ContextServiceTest 的 bot 实例未设置，无法获取频道消息历史。")
             return []
 
-        channel = self.bot.get_channel(channel_id) or self.bot.get_thread(channel_id)
+        channel = self.bot.get_channel(channel_id)
         if not channel:
             try:
                 # 作为备用方案，尝试通过API获取，这可以找到公开帖子
@@ -64,31 +64,54 @@ class ContextServiceTest:
 
         history_parts = []
         try:
-            guild_id = channel.guild.id if channel.guild else 0
-            anchor_message_id = await chat_db_manager.get_channel_memory_anchor(
-                guild_id, channel_id
-            )
+            history_messages = []
 
-            after_message = None
-            fetch_limit = limit
-            if anchor_message_id:
-                try:
-                    after_message = discord.Object(id=anchor_message_id)
-                    log.info(
-                        f"找到频道 {channel_id} 的记忆锚点: {anchor_message_id}，将从此消息之后开始获取历史。"
+            # --- 混合读取逻辑 ---
+            cached_msgs = []
+            api_messages = []
+
+            # 1. 从缓存中获取所有可用的当前频道消息
+            if self.bot and self.bot.cached_messages:
+                cached_msgs = [
+                    m for m in self.bot.cached_messages if m.channel.id == channel_id
+                ]
+                # 确保缓存消息按时间从旧到新排序
+                cached_msgs.sort(key=lambda m: m.created_at)
+
+            # 2. 判断是否需要调用 API
+            if len(cached_msgs) >= limit:
+                # 缓存完全满足需求
+                history_messages = cached_msgs[-limit:]
+                log.info(
+                    f"[上下文服务-Test] 缓存命中。从缓存中获取 {len(history_messages)} 条消息。API 调用: 0。"
+                )
+            else:
+                # 缓存不足或为空，需要 API 补充
+                remaining_limit = limit - len(cached_msgs)
+                before_message = None
+                if cached_msgs:
+                    # 如果缓存中有消息，就从最老的一条消息之前开始获取
+                    before_message = discord.Object(id=cached_msgs[0].id)
+
+                log.info(
+                    f"[上下文服务-Test] 缓存找到 {len(cached_msgs)} 条，需要从 API 获取 {remaining_limit} 条。"
+                )
+
+                # 从 API 获取缺失的消息
+                api_messages = [
+                    msg
+                    async for msg in channel.history(
+                        limit=remaining_limit, before=before_message
                     )
-                except Exception as e:
-                    log.error(
-                        f"创建 discord.Object 失败，锚点ID {anchor_message_id} 可能无效: {e}"
-                    )
+                ]
+                # API 返回的是从新到旧，需要反转以匹配时间顺序
+                api_messages.reverse()
 
-            history_messages = [
-                msg
-                async for msg in channel.history(limit=fetch_limit, after=after_message)
-            ]
-
-            if not after_message:
-                history_messages.reverse()
+                # 合并两部分消息
+                history_messages = api_messages + cached_msgs
+                log.info(
+                    f"[上下文服务-Test] 本次获取: 缓存 {len(cached_msgs)} 条, API {len(api_messages)} 条。总计 {len(history_messages)} 条。"
+                )
 
             # 处理历史消息
             for msg in history_messages:
@@ -162,4 +185,29 @@ class ContextServiceTest:
 
 
 # 全局实例
-context_service_test = ContextServiceTest()
+# 修改：不再立即创建实例，而是等待 bot 对象被创建后再初始化
+_context_service_test_instance: Optional["ContextServiceTest"] = None
+
+
+def initialize_context_service_test(bot: commands.Bot):
+    """
+    全局初始化函数。必须在应用程序启动时调用一次。
+    """
+    global _context_service_test_instance
+    if _context_service_test_instance is None:
+        _context_service_test_instance = ContextServiceTest(bot)
+        log.info("全局 ContextServiceTest 实例已成功初始化。")
+    else:
+        log.warning("尝试重复初始化 ContextServiceTest 实例，已跳过。")
+
+
+def get_context_service() -> "ContextServiceTest":
+    """
+    获取 ContextServiceTest 的单例实例。
+    如果实例尚未初始化，将引发 RuntimeError。
+    """
+    if _context_service_test_instance is None:
+        raise RuntimeError(
+            "ContextServiceTest 尚未初始化。请确保在应用启动时调用 initialize_context_service_test。"
+        )
+    return _context_service_test_instance

@@ -8,7 +8,6 @@ import re  # 导入正则表达式模块
 from src import config
 from src.chat.config import chat_config  # 导入 chat_config
 from src.chat.utils.database import chat_db_manager
-from src.chat.services.regex_service import regex_service
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class ContextService:
     async def get_user_conversation_history(
         self, user_id: int, guild_id: int
     ) -> List[Dict]:
-        """从数据库获取用户的对话历史（5轮）"""
+        """从数据库获取用户的对话历史"""
         context = await chat_db_manager.get_ai_conversation_context(user_id, guild_id)
         if context and context.get("conversation_history"):
             return context["conversation_history"]
@@ -36,16 +35,12 @@ class ContextService:
     async def update_user_conversation_history(
         self, user_id: int, guild_id: int, user_message: str, ai_response: str
     ):
-        """更新用户的对话历史到数据库（5轮）"""
+        """更新用户的对话历史到数据库"""
         current_history = await self.get_user_conversation_history(user_id, guild_id)
 
         # 添加上一轮对话
         current_history.append({"role": "user", "parts": [user_message]})
         current_history.append({"role": "model", "parts": [ai_response]})
-
-        # 限制上下文长度，保留最近5轮对话
-        if len(current_history) > 10:  # 5轮对话 (每轮2条消息)
-            current_history = current_history[-10:]
 
         await chat_db_manager.update_ai_conversation_context(
             user_id, guild_id, current_history
@@ -123,6 +118,7 @@ class ContextService:
             limit (int): 获取的消息数量上限。
             exclude_message_id (Optional[int]): 需要从历史记录中排除的特定消息ID。
         """
+        log.info(f"--- 开始获取频道 {channel_id} 的历史记录 ---")
         if not self.bot:
             log.error("ContextService 的 bot 实例未设置，无法获取频道消息历史。")
             return []
@@ -137,37 +133,53 @@ class ContextService:
         model_messages_buffer = []
 
         try:
-            # 检查是否存在记忆锚点
-            guild_id = channel.guild.id if channel.guild else 0
-            anchor_message_id = await chat_db_manager.get_channel_memory_anchor(
-                guild_id, channel_id
-            )
+            history_messages = []
+            # --- 混合读取逻辑 ---
+            cached_msgs = []
+            api_messages = []
 
-            after_message = None
-            fetch_limit = limit
-            if anchor_message_id:
-                try:
-                    after_message = discord.Object(id=anchor_message_id)
-                    # 增加 limit 以确保在锚点之后的第一条消息也能被捕获
-                    fetch_limit = limit + 1
-                    log.info(
-                        f"找到频道 {channel_id} 的记忆锚点: {anchor_message_id}，将从此消息之后开始获取历史。"
+            # 1. 从缓存中获取所有可用的当前频道消息
+            if self.bot and self.bot.cached_messages:
+                cached_msgs = [
+                    m for m in self.bot.cached_messages if m.channel.id == channel_id
+                ]
+                # 确保缓存消息按时间从旧到新排序
+                cached_msgs.sort(key=lambda m: m.created_at)
+
+            # 2. 判断是否需要调用 API
+            if len(cached_msgs) >= limit:
+                # 缓存完全满足需求
+                history_messages = cached_msgs[-limit:]
+                log.info(
+                    f"[上下文服务] 缓存命中。从缓存中获取 {len(history_messages)} 条消息。API 调用: 0。"
+                )
+            else:
+                # 缓存不足或为空，需要 API 补充
+                remaining_limit = limit - len(cached_msgs)
+                before_message = None
+                if cached_msgs:
+                    # 如果缓存中有消息，就从最老的一条消息之前开始获取
+                    before_message = discord.Object(id=cached_msgs[0].id)
+
+                log.info(
+                    f"[上下文服务] 缓存找到 {len(cached_msgs)} 条，需要从 API 获取 {remaining_limit} 条。"
+                )
+
+                # 从 API 获取缺失的消息
+                api_messages = [
+                    msg
+                    async for msg in channel.history(
+                        limit=remaining_limit, before=before_message
                     )
-                except Exception as e:
-                    log.error(
-                        f"创建 discord.Object 失败，锚点ID {anchor_message_id} 可能无效: {e}"
-                    )
+                ]
+                # API 返回的是从新到旧，需要反转以匹配时间顺序
+                api_messages.reverse()
 
-            # 使用 after 参数获取历史记录，返回的是从旧到新
-            history_messages = [
-                msg
-                async for msg in channel.history(limit=fetch_limit, after=after_message)
-            ]
-
-            # 只有在没有使用 'after' (即从最新消息开始获取) 时，返回的列表才是从新到旧的，才需要反转。
-            # 使用 'after' 时，列表已经是从旧到新了。
-            if not after_message:
-                history_messages.reverse()
+                # 合并两部分消息
+                history_messages = api_messages + cached_msgs
+                log.info(
+                    f"[上下文服务] 本次获取: 缓存 {len(cached_msgs)} 条, API {len(api_messages)} 条。总计 {len(history_messages)} 条。"
+                )
 
             for msg in history_messages:
                 # 根据用户要求，不再过滤任何机器人消息
@@ -280,7 +292,7 @@ class ContextService:
         content = re.sub(r"https?://cdn\.discordapp\.com\S+", "", content)
 
         # 3. 将用户提及 <@USER_ID> 替换为 @USERNAME
-        log.info(f"[Mention Clean] ----- Start Mention Cleaning -----")
+        log.info("[Mention Clean] ----- Start Mention Cleaning -----")
         log.info(f"[Mention Clean] Initial content: '{content}'")
         log.info(f"[Mention Clean] Guild available: {bool(guild)}")
 
@@ -324,7 +336,7 @@ class ContextService:
                 "[Mention Clean] No guild object provided, skipping mention replacement."
             )
 
-        log.info(f"[Mention Clean] ----- End Mention Cleaning -----")
+        log.info("[Mention Clean] ----- End Mention Cleaning -----")
 
         # 4. 移除自定义表情符号 (例如 <:name:id> 或 <a:name:id>)
         content = re.sub(r"<a?:\w+:\d+>", "", content)

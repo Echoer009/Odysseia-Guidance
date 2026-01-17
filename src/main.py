@@ -217,6 +217,9 @@ class GuidanceBot(commands.Bot):
         if config.PROXY_URL:
             init_kwargs["proxy"] = config.PROXY_URL
 
+        # 设置消息缓存数量
+        init_kwargs["max_messages"] = 10000
+
         super().__init__(**init_kwargs)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -464,6 +467,11 @@ async def main():
     # 在机器人启动时，将 bot 实例注入到 GeminiService 中
     # 这是确保工具能够访问 Discord API 的关键步骤
     gemini_service.set_bot(bot)
+    # 为 context_service_test 注入 bot 实例，使其能够访问缓存
+    # 为 context_service_test 注入 bot 实例，使其能够访问缓存
+    from src.chat.services.context_service_test import initialize_context_service_test
+
+    initialize_context_service_test(bot)
     # 初始化所有需要的服务实例
     work_db_service = WorkDBService()
     # 初始化审核服务，并将 bot 和其他服务实例注入

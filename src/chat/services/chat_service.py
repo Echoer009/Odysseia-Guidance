@@ -7,7 +7,7 @@ import discord.abc
 
 # 导入所需的服务
 from src.chat.services.gemini_service import gemini_service
-from src.chat.services.context_service_test import context_service_test  # 导入测试服务
+from src.chat.services.context_service_test import get_context_service  # 导入测试服务
 from src.chat.features.world_book.services.world_book_service import world_book_service
 from src.chat.features.affection.service.affection_service import affection_service
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
@@ -169,7 +169,7 @@ class ChatService:
             # 获取频道历史上下文
             # 使用新的测试上下文服务
             channel_context = (
-                await context_service_test.get_formatted_channel_history_new(
+                await get_context_service().get_formatted_channel_history_new(
                     message.channel.id,
                     author.id,
                     guild_id,
