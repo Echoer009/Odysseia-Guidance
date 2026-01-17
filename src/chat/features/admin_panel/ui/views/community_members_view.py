@@ -226,13 +226,17 @@ class CommunityMembersView(BaseTableView):
                 styled_full_text_lines.append(line)
 
         embed.add_field(
-            name="Full Text", value="\n".join(styled_full_text_lines), inline=False
+            name="Full Text",
+            value=self._truncate_field_value("\n".join(styled_full_text_lines)),
+            inline=False,
         )
 
         # 2. 显示格式化后的 Source Metadata
         formatted_metadata_str = f"```json\n{json.dumps(formatted_data['source_metadata'], indent=2, ensure_ascii=False)}\n```"
         embed.add_field(
-            name="Source Metadata", value=formatted_metadata_str, inline=False
+            name="Source Metadata",
+            value=self._truncate_field_value(formatted_metadata_str),
+            inline=False,
         )
 
         # 3. 显示其他数据库原始元数据以供参考

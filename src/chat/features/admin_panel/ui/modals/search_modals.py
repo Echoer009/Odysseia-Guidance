@@ -98,13 +98,13 @@ class SearchUserModal(discord.ui.Modal):
         target_user_db_id = None
         target_index = -1
         try:
-            cursor = conn.cursor()
+            cursor = db_services.get_cursor(conn)
             cursor.execute(
-                "SELECT id, discord_number_id FROM community_members ORDER BY id DESC"
+                "SELECT id, discord_id FROM community.member_profiles ORDER BY id DESC"
             )
             all_users = cursor.fetchall()
             for i, user in enumerate(all_users):
-                if str(user["discord_number_id"]) == user_id_str:
+                if str(user["discord_id"]) == user_id_str:
                     target_index = i
                     target_user_db_id = user["id"]
                     break
@@ -387,7 +387,7 @@ class SearchCommunityMemberModal(discord.ui.Modal):
                 # SQLite 查询（旧表结构）
                 cursor.execute(
                     f"""
-                    SELECT * FROM community_members
+                    SELECT * FROM community.member_profiles
                     WHERE title LIKE {placeholder} OR content_json LIKE {placeholder}
                     ORDER BY id DESC
                     """,
