@@ -8,6 +8,7 @@ from functools import wraps
 from concurrent.futures import ThreadPoolExecutor
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import re
 import base64
 
@@ -1515,7 +1516,7 @@ class GeminiService:
             total_tokens = input_tokens + output_tokens
 
             # 获取当前日期并更新数据库
-            usage_date = datetime.utcnow().date()
+            usage_date = datetime.now(ZoneInfo("Asia/Shanghai")).date()
             async with AsyncSessionLocal() as session:
                 usage_record = await token_usage_service.get_token_usage(
                     session, usage_date
