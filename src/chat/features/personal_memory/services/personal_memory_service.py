@@ -1,10 +1,8 @@
-import discord
 import logging
-import json
 import sqlite3
 import os
 from typing import Dict
-from datetime import datetime, timezone
+from datetime import datetime
 
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import (
@@ -12,10 +10,6 @@ from src.chat.config.chat_config import (
     PROMPT_CONFIG,
     SUMMARY_MODEL,
     GEMINI_SUMMARY_GEN_CONFIG,
-)
-from src.chat.features.personal_memory.ui.profile_modal import ProfileEditView
-from src.chat.features.world_book.services.incremental_rag_service import (
-    incremental_rag_service,
 )
 
 # 新增导入，用于获取频道历史
@@ -40,163 +34,6 @@ class PersonalMemoryService:
         except sqlite3.Error as e:
             log.error(f"连接到世界书数据库失败: {e}", exc_info=True)
             return None
-
-    async def start_approval_process(
-        self, channel: discord.TextChannel, user: discord.Member
-    ):
-        """
-        当用户购买商品后，在当前频道开始社区审核流程。
-        """
-        approval_emoji = PERSONAL_MEMORY_CONFIG["APPROVAL_EMOJI"]
-        approval_threshold = PERSONAL_MEMORY_CONFIG["APPROVAL_THRESHOLD"]
-
-        embed = discord.Embed(
-            title="【社区投票】激活个人记忆功能",
-            description=f"**{user.display_name}** 希望激活个人记忆功能。\n\n"
-            f"点击下方的 {approval_emoji} 表情为TA投票！\n"
-            f"当票数达到 **{approval_threshold}** 票时，功能将自动激活。",
-            color=discord.Color.gold(),
-        )
-        embed.add_field(name="申请人", value=user.mention, inline=True)
-        embed.add_field(name="需要票数", value=f"{approval_threshold} 票", inline=True)
-        # 将用户ID存储在footer中，以便后续在reaction事件中解析
-        embed.set_footer(text=f"申请用户ID: {user.id}")
-
-        try:
-            message = await channel.send(embed=embed)
-            await message.add_reaction(str(approval_emoji))
-            # 将消息ID和当前时间戳添加到追踪字典中
-            now = datetime.now(timezone.utc)
-            self.approval_message_ids[message.id] = now
-            log.info(
-                f"已在频道 {channel.id} 为用户 {user.id} 发起个人记忆功能激活投票，消息ID: {message.id} 已添加至监听列表，时间: {now}。"
-            )
-        except discord.Forbidden:
-            log.error(
-                f"机器人没有权限在频道 {channel.name} (ID: {channel.id}) 中发送消息或添加反应。"
-            )
-        except Exception as e:
-            log.error(f"在发起投票时发生未知错误: {e}", exc_info=True)
-
-    async def unlock_personal_memory_for_user(self, user: discord.Member):
-        """在数据库中为用户解锁功能，并提示他们创建档案。"""
-        query = "UPDATE users SET has_personal_memory = 1 WHERE user_id = ?"
-        await self.db_manager._execute(
-            self.db_manager._db_transaction, query, (user.id,), commit=True
-        )
-        log.info(f"已为用户 {user.id} 解锁个人记忆功能。")
-
-        # 解锁后，向用户发送私信，引导他们创建档案
-        await self.prompt_user_for_profile(user)
-
-    async def prompt_user_for_profile(self, user: discord.Member):
-        """向用户发送私信，提示他们创建或编辑个人档案。"""
-        embed = discord.Embed(
-            title="恭喜！个人记忆功能已激活！",
-            description="你的个人记忆功能已通过社区投票并成功激活。\n\n"
-            "为了让类脑娘更好地记住你，请点击下方的按钮，创建你的专属个人档案。\n"
-            "这份档案将成为你们长期交流的基础。",
-            color=discord.Color.green(),
-        )
-        embed.set_footer(text="你可以随时通过指令来更新你的档案。")
-
-        view = ProfileEditView()
-
-        try:
-            await user.send(embed=embed, view=view)
-            log.info(f"已向用户 {user.id} 发送创建个人档案的提示。")
-        except discord.Forbidden:
-            log.warning(f"无法向用户 {user.id} 发送私信。可能用户关闭了私信权限。")
-        except Exception as e:
-            log.error(f"向用户 {user.id} 发送档案提示时发生错误: {e}", exc_info=True)
-
-    async def save_user_profile(self, user_id: int, profile_data: Dict[str, str]):
-        """将用户提交的个人档案保存到世界书数据库的community_members表中，并触发RAG同步。"""
-        # 构建社区成员数据
-        member_data = {
-            "name": profile_data.get("name", "未提供"),
-            "personality": profile_data.get("personality", "未提供"),
-            "background": profile_data.get("background", "未提供"),
-            "preferences": profile_data.get("preferences", "未提供"),
-        }
-
-        content_json = json.dumps(member_data, ensure_ascii=False)
-
-        conn = self._get_world_book_connection()
-        if not conn:
-            log.error("无法连接到世界书数据库，无法保存用户档案")
-            return
-
-        rag_update_id = None
-        is_update = False
-
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id FROM community_members WHERE discord_number_id = ?",
-                (str(user_id),),
-            )
-            existing_member = cursor.fetchone()
-
-            if existing_member:
-                is_update = True
-                rag_update_id = existing_member["id"]
-                cursor.execute(
-                    "UPDATE community_members SET title = ?, content_json = ? WHERE discord_number_id = ?",
-                    (
-                        profile_data.get("name", "匿名"),
-                        content_json,
-                        str(user_id),
-                    ),
-                )
-                log.info(f"已更新用户 {user_id} 在世界书数据库中的社区成员档案。")
-            else:
-                is_update = False
-                rag_update_id = f"user_{user_id}"
-                cursor.execute(
-                    "INSERT INTO community_members (id, title, discord_number_id, content_json) VALUES (?, ?, ?, ?)",
-                    (
-                        rag_update_id,
-                        profile_data.get("name", "匿名"),
-                        str(user_id),
-                        content_json,
-                    ),
-                )
-                log.info(f"已为用户 {user_id} 在世界书数据库中创建社区成员档案。")
-
-            conn.commit()
-        except sqlite3.Error as e:
-            log.error(f"保存用户档案到世界书数据库时出错: {e}", exc_info=True)
-            conn.rollback()
-            rag_update_id = None  # 如果数据库操作失败，则不尝试RAG同步
-        finally:
-            conn.close()
-
-        # --- RAG 同步 (在数据库连接关闭后执行) ---
-        if rag_update_id:
-            try:
-                if is_update:
-                    log.info(
-                        f"开始为用户 {user_id} 的个人档案触发RAG更新 (ID: {rag_update_id})。"
-                    )
-                    await incremental_rag_service.delete_entry(rag_update_id)
-                    await incremental_rag_service.process_community_member(
-                        rag_update_id
-                    )
-                    log.info(f"成功为用户 {user_id} 的个人档案触发RAG更新。")
-                else:
-                    log.info(
-                        f"开始为用户 {user_id} 的新个人档案触发RAG创建 (ID: {rag_update_id})。"
-                    )
-                    await incremental_rag_service.process_community_member(
-                        rag_update_id
-                    )
-                    log.info(f"成功为用户 {user_id} 的新个人档案触发RAG创建。")
-            except Exception as e:
-                log.error(
-                    f"在保存用户档案后进行RAG同步时出错 (ID: {rag_update_id}): {e}",
-                    exc_info=True,
-                )
 
     async def increment_and_check_message_count(
         self, user_id: int, guild_id: int
