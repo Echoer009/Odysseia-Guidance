@@ -12,6 +12,10 @@ from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
+from src.database.services.token_usage_service import token_usage_service
+from src.database.database import AsyncSessionLocal
+from src.database.models import TokenUsage
+from datetime import datetime
 from src.chat.features.chat_settings.ui.warm_up_settings_view import WarmUpSettingsView
 from src.chat.features.chat_settings.ui.components import PaginatedSelect
 from src.chat.services.event_service import event_service
@@ -34,11 +38,18 @@ class ChatSettingsView(View):
         self.channel_paginator: Optional[PaginatedSelect] = None
         self.factions: Optional[List[Dict[str, Any]]] = None
         self.selected_faction: Optional[str] = None
+        self.token_usage: Optional[TokenUsage] = None
 
     async def _initialize(self):
         """异步获取设置并构建UI。"""
+        if not self.guild:
+            return
         self.settings = await self.service.get_guild_settings(self.guild.id)
         self.model_usage_counts = await self.service.get_model_usage_counts()
+        async with AsyncSessionLocal() as session:
+            self.token_usage = await token_usage_service.get_token_usage(
+                session, datetime.utcnow().date()
+            )
         self.factions = event_service.get_event_factions()
         self.selected_faction = event_service.get_selected_faction()
         self._create_paginators()
@@ -53,6 +64,8 @@ class ChatSettingsView(View):
 
     def _create_paginators(self):
         """创建分页器实例。"""
+        if not self.guild:
+            return
         category_options = [
             SelectOption(label=c.name, value=str(c.id))
             for c in sorted(self.guild.categories, key=lambda c: c.position)
@@ -176,6 +189,14 @@ class ChatSettingsView(View):
                 row=0,
             )
         )
+        self.add_item(
+            Button(
+                label="今日 Token 统计",
+                style=ButtonStyle.secondary,
+                custom_id="show_token_usage",
+                row=0,
+            )
+        )
 
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
@@ -183,7 +204,7 @@ class ChatSettingsView(View):
         await interaction.response.edit_message(view=self)
 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        custom_id = interaction.data.get("custom_id")
+        custom_id = interaction.data.get("custom_id") if interaction.data else None
 
         if custom_id == "global_chat_toggle":
             await self.on_global_toggle(interaction)
@@ -191,22 +212,30 @@ class ChatSettingsView(View):
             await self.on_warm_up_toggle(interaction)
         elif custom_id == "warm_up_settings":
             await self.on_warm_up_settings(interaction)
-        elif self.category_paginator and self.category_paginator.handle_pagination(
-            custom_id
+        elif (
+            self.category_paginator
+            and custom_id
+            and self.category_paginator.handle_pagination(custom_id)
         ):
             await self._update_view(interaction)
-        elif self.channel_paginator and self.channel_paginator.handle_pagination(
-            custom_id
+        elif (
+            self.channel_paginator
+            and custom_id
+            and self.channel_paginator.handle_pagination(custom_id)
         ):
             await self._update_view(interaction)
         elif custom_id == "ai_model_settings":
             await self.on_ai_model_settings(interaction)
+        elif custom_id == "show_token_usage":
+            await self.on_show_token_usage(interaction)
 
         return True
 
     async def on_global_toggle(self, interaction: Interaction):
         current_state = self.settings.get("global", {}).get("chat_enabled", True)
         new_state = not current_state
+        if not self.guild:
+            return
         await self.service.db_manager.update_global_chat_config(
             self.guild.id, chat_enabled=new_state
         )
@@ -215,6 +244,8 @@ class ChatSettingsView(View):
     async def on_warm_up_toggle(self, interaction: Interaction):
         current_state = self.settings.get("global", {}).get("warm_up_enabled", True)
         new_state = not current_state
+        if not self.guild:
+            return
         await self.service.db_manager.update_global_chat_config(
             self.guild.id, warm_up_enabled=new_state
         )
@@ -222,6 +253,12 @@ class ChatSettingsView(View):
 
     async def on_warm_up_settings(self, interaction: Interaction):
         """切换到暖贴频道设置视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
         await interaction.response.defer()
         warm_up_view = await WarmUpSettingsView.create(interaction, self.message)
         await interaction.edit_original_response(
@@ -231,6 +268,10 @@ class ChatSettingsView(View):
 
     async def on_faction_select(self, interaction: Interaction):
         """处理派系选择事件。"""
+        if not interaction.data or "values" not in interaction.data:
+            await interaction.response.defer()
+            return
+
         selected_faction_id = interaction.data["values"][0]
 
         if selected_faction_id == "_default":
@@ -240,16 +281,17 @@ class ChatSettingsView(View):
 
         await self._update_view(interaction)
 
-    async def on_entity_select(self, interaction: Interaction):
+    async def on_entity_select(self, interaction: Interaction, values: List[str]):
         """统一处理频道和分类的选择事件。"""
-        if (
-            not interaction.data["values"]
-            or interaction.data["values"][0] == "disabled"
-        ):
+        if not values or values[0] == "disabled":
             await interaction.response.defer()
             return
 
-        entity_id = int(interaction.data["values"][0])
+        entity_id = int(values[0])
+        if not self.guild:
+            await interaction.response.defer()
+            return
+
         entity = self.guild.get_channel(entity_id)
         if not entity:
             await interaction.response.send_message("找不到该项目。", ephemeral=True)
@@ -287,6 +329,9 @@ class ChatSettingsView(View):
     ):
         """处理模态窗口提交的数据并保存。"""
         try:
+            if not self.guild:
+                await interaction.followup.send("❌ 服务器信息丢失。", ephemeral=True)
+                return
             await self.service.set_entity_settings(
                 guild_id=self.guild.id,
                 entity_id=entity_id,
@@ -297,8 +342,11 @@ class ChatSettingsView(View):
                 cooldown_limit=settings.get("cooldown_limit"),
             )
 
-            entity = self.guild.get_channel(entity_id)
-            entity_name = entity.name if entity else f"ID: {entity_id}"
+            if not self.guild:
+                entity_name = f"ID: {entity_id}"
+            else:
+                entity = self.guild.get_channel(entity_id)
+                entity_name = entity.name if entity else f"ID: {entity_id}"
 
             is_chat_enabled = settings.get("is_chat_enabled")
             enabled_str = "继承"
@@ -361,3 +409,30 @@ class ChatSettingsView(View):
             on_submit_callback=modal_callback,
         )
         await interaction.response.send_modal(modal)
+
+    async def on_show_token_usage(self, interaction: Interaction):
+        """显示今天的 Token 使用情况。"""
+        if not self.token_usage:
+            await interaction.response.send_message(
+                "今天还没有 Token 使用记录。", ephemeral=True
+            )
+            return
+
+        input_tokens = self.token_usage.input_tokens or 0
+        output_tokens = self.token_usage.output_tokens or 0
+        total_tokens = self.token_usage.total_tokens or 0
+        call_count = self.token_usage.call_count or 0
+        average_per_call = total_tokens // call_count if call_count > 0 else 0
+        usage_date = self.token_usage.date.strftime("%Y-%m-%d")
+
+        embed = discord.Embed(
+            title=f"📊 今日 Token 統計 ({usage_date})",
+            color=discord.Color.blue(),
+        )
+        embed.add_field(name="📥 Input", value=f"{input_tokens:,}", inline=False)
+        embed.add_field(name="📤 Output", value=f"{output_tokens:,}", inline=False)
+        embed.add_field(name="📈 Total", value=f"{total_tokens:,}", inline=False)
+        embed.add_field(name="🔢 呼叫次數", value=str(call_count), inline=False)
+        embed.add_field(name="📊 平均每次", value=f"{average_per_call:,}", inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)

@@ -10,7 +10,7 @@ from sqlalchemy import (
     Index,
     func,
 )
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
 from pgvector.sqlalchemy import HALFVEC
 
 # --- 全局配置 ---
@@ -272,3 +272,23 @@ class CommunityMemberChunk(Base):
 
     def __repr__(self):
         return f"<CommunityMemberChunk(id={self.id}, profile_id={self.profile_id}, chunk_index={self.chunk_index})>"
+
+
+class TokenUsage(Base):
+    """
+    记录每天的Token使用情况。
+    """
+
+    __tablename__ = "token_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    date: Mapped[datetime.datetime] = mapped_column(
+        nullable=False, unique=True, default=datetime.datetime.utcnow
+    )
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    total_tokens: Mapped[int] = mapped_column(default=0)
+    call_count: Mapped[int] = mapped_column(default=0)
+
+    def __repr__(self):
+        return f"<TokenUsage(date={self.date}, total_tokens={self.total_tokens})>"

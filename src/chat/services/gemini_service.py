@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from datetime import datetime
 import re
-import random
 import base64
 
 from PIL import Image
@@ -23,8 +22,6 @@ from google.genai import errors as genai_errors
 # 导入数据库管理器和提示词配置
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config as app_config
-from src.chat.services.event_service import event_service
-from src.chat.services.regex_service import regex_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.key_rotation_service import (
@@ -37,6 +34,8 @@ from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
 from src.chat.utils.image_utils import sanitize_image
+from src.database.services.token_usage_service import token_usage_service
+from src.database.database import AsyncSessionLocal
 
 
 log = logging.getLogger(__name__)
@@ -65,8 +64,180 @@ if not invalid_key_logger.handlers:
     invalid_key_logger.addHandler(fh)
 
 
+def _api_key_handler(func: Callable) -> Callable:
+    """
+    一个装饰器，用于优雅地处理 API 密钥的获取、释放和重试逻辑。
+    实现了两层重试：
+    1. 外层循环：持续获取可用密钥，如果所有密钥都在冷却，则会等待。
+    2. 内层循环：对获取到的单个密钥，在遇到可重试错误时，会根据配置进行多次尝试。
+    """
+
+    @wraps(func)
+    async def wrapper(self: "GeminiService", *args, **kwargs):
+        while True:
+            key_obj = None
+            try:
+                key_obj = await self.key_rotation_service.acquire_key()
+                client = self._create_client_with_key(key_obj.key)
+
+                failure_penalty = 25  # 默认的失败惩罚
+                key_should_be_cooled_down = False
+                key_is_invalid = False
+
+                max_attempts = app_config.API_RETRY_CONFIG["MAX_ATTEMPTS_PER_KEY"]
+                for attempt in range(max_attempts):
+                    try:
+                        log.info(
+                            f"使用密钥 ...{key_obj.key[-4:]} (尝试 {attempt + 1}/{max_attempts}) 调用 {func.__name__}"
+                        )
+
+                        # 将 client 作为关键字参数传递给原始函数
+                        kwargs["client"] = client
+                        result = await func(self, *args, **kwargs)
+
+                        safety_penalty = 0
+                        is_blocked_by_safety = False
+                        if isinstance(result, types.GenerateContentResponse):
+                            safety_penalty = self._handle_safety_ratings(
+                                result, key_obj.key
+                            )
+                            if (
+                                not result.parts
+                                and result.prompt_feedback
+                                and result.prompt_feedback.block_reason
+                            ):
+                                is_blocked_by_safety = True
+
+                        if is_blocked_by_safety:
+                            log.warning(
+                                f"密钥 ...{key_obj.key[-4:]} 因安全策略被阻止 (原因: {result.prompt_feedback.block_reason if result.prompt_feedback else '未知'})。将进入冷却且不扣分。"
+                            )
+                            failure_penalty = 0  # 明确设置为0，不扣分
+                            key_should_be_cooled_down = True
+                            break
+
+                        await self.key_rotation_service.release_key(
+                            key_obj.key, success=True, safety_penalty=safety_penalty
+                        )
+                        return result
+
+                    except (
+                        genai_errors.ClientError,
+                        genai_errors.ServerError,
+                    ) as e:
+                        error_str = str(e)
+                        match = re.match(r"(\d{3})", error_str)
+                        status_code = int(match.group(1)) if match else None
+
+                        is_retryable = status_code in [429, 503]
+                        if (
+                            not is_retryable
+                            and isinstance(e, genai_errors.ServerError)
+                            and "503" in error_str
+                        ):
+                            is_retryable = True
+                            status_code = 503
+
+                        if is_retryable:
+                            log.warning(
+                                f"密钥 ...{key_obj.key[-4:]} 遇到可重试错误 (状态码: {status_code})。"
+                            )
+                            if attempt < max_attempts - 1:
+                                delay = app_config.API_RETRY_CONFIG[
+                                    "RETRY_DELAY_SECONDS"
+                                ]
+                                log.info(f"等待 {delay} 秒后重试。")
+                                await asyncio.sleep(delay)
+                            else:
+                                log.warning(
+                                    f"密钥 ...{key_obj.key[-4:]} 的所有 {max_attempts} 次重试均失败。将进入冷却。"
+                                )
+                                # --- 渐进式惩罚逻辑 ---
+                                base_penalty = 10
+                                consecutive_failures = (
+                                    key_obj.consecutive_failures + 1
+                                )  # +1 是因为本次失败也要计算在内
+                                failure_penalty = base_penalty * consecutive_failures
+                                log.warning(
+                                    f"密钥 ...{key_obj.key[-4:]} 已连续失败 {consecutive_failures} 次。"
+                                    f"本次惩罚分值: {failure_penalty}"
+                                )
+                                key_should_be_cooled_down = True
+
+                        elif status_code == 403 or (
+                            status_code == 400
+                            and "API_KEY_INVALID" in error_str.upper()
+                        ):
+                            log.error(
+                                f"密钥 ...{key_obj.key[-4:]} 无效 (状态码: {status_code})。将施加毁灭性惩罚。"
+                            )
+                            failure_penalty = 101  # 毁灭性惩罚
+                            key_should_be_cooled_down = True
+                            break  # 直接跳出重试循环
+
+                        else:
+                            log.error(
+                                f"使用密钥 ...{key_obj.key[-4:]} 时发生意外的致命API错误 (状态码: {status_code}): {e}",
+                                exc_info=True,
+                            )
+                            if isinstance(e, genai_errors.ServerError):
+                                # 对于服务器错误，也采用渐进式惩罚
+                                base_penalty = 15  # 服务器错误的基础惩罚可以稍高
+                                consecutive_failures = key_obj.consecutive_failures + 1
+                                failure_penalty = base_penalty * consecutive_failures
+                                log.warning(
+                                    f"密钥 ...{key_obj.key[-4:]} 遭遇服务器错误，已连续失败 {consecutive_failures} 次。"
+                                    f"本次惩罚分值: {failure_penalty}"
+                                )
+                                key_should_be_cooled_down = True
+                                break
+                            else:
+                                await self.key_rotation_service.release_key(
+                                    key_obj.key, success=True
+                                )
+                                return (
+                                    "抱歉，AI服务遇到了一个意料之外的错误，请稍后再试。"
+                                )
+
+                    except Exception as e:
+                        log.error(
+                            f"使用密钥 ...{key_obj.key[-4:]} 时发生未知错误: {e}",
+                            exc_info=True,
+                        )
+                        await self.key_rotation_service.release_key(
+                            key_obj.key, success=True
+                        )
+                        if func.__name__ == "generate_embedding":
+                            return None
+                        return "呜哇，有点晕嘞，等我休息一会儿 <伤心>"
+
+                if key_is_invalid:
+                    continue
+
+                if key_should_be_cooled_down:
+                    await self.key_rotation_service.release_key(
+                        key_obj.key, success=False, failure_penalty=failure_penalty
+                    )
+
+            except NoAvailableKeyError:
+                log.error(
+                    "所有API密钥均不可用，且 acquire_key 未能成功等待。这是异常情况。"
+                )
+                return "啊啊啊服务器要爆炸啦！现在有点忙不过来，你过一会儿再来找我玩吧！<生气>"
+
+    return wrapper
+
+
 class GeminiService:
     """Gemini AI 服务类，使用数据库存储用户对话上下文"""
+
+    SAFETY_PENALTY_MAP: Dict[str, int] = {
+        "HARM_PROBABILITY_UNSPECIFIED": 0,
+        "NEGLIGIBLE": 0,
+        "LOW": 5,
+        "MEDIUM": 15,
+        "HIGH": 30,
+    }
 
     def __init__(self):
         self.bot = None  # 用于存储 Discord Bot 实例
@@ -123,7 +294,7 @@ class GeminiService:
         )
 
         # 2. 实例化工具服务，并传入工具映射
-        self.tool_service = ToolService(bot=None, tool_map=self.tool_map)
+        self.tool_service = ToolService(bot=self.bot, tool_map=self.tool_map)
 
         log.info("--- 工具加载完成 (模块化) ---")
         log.info(
@@ -195,7 +366,9 @@ class GeminiService:
                 return {
                     "type": "image",
                     "mime_type": obj.inline_data.mime_type,
-                    "data_size": len(obj.inline_data.data),
+                    "data_size": len(obj.inline_data.data)
+                    if obj.inline_data and obj.inline_data.data
+                    else 0,
                 }
         elif isinstance(obj, Image.Image):
             return f"<PIL.Image object: mode={obj.mode}, size={obj.size}>"
@@ -208,29 +381,32 @@ class GeminiService:
     def _serialize_parts_for_logging_full(content: types.Content):
         """自定义序列化函数，用于完整记录 Content 对象。"""
         serialized_parts = []
-        for part in content.parts:
-            if part.text:
-                serialized_parts.append({"type": "text", "content": part.text})
-            elif part.inline_data:
-                serialized_parts.append(
-                    {
-                        "type": "image",
-                        "mime_type": part.inline_data.mime_type,
-                        "data_size": len(part.inline_data.data),
-                        "data_preview": part.inline_data.data[:50].hex()
-                        + "...",  # 记录数据前50字节的十六进制预览
-                    }
-                )
-            elif part.file_data:
-                serialized_parts.append(
-                    {
-                        "type": "file",
-                        "mime_type": part.file_data.mime_type,
-                        "file_uri": part.file_data.file_uri,
-                    }
-                )
-            else:
-                serialized_parts.append({"type": "unknown_part", "content": str(part)})
+        if content.parts:
+            for part in content.parts:
+                if part.text:
+                    serialized_parts.append({"type": "text", "content": part.text})
+                elif part.inline_data and part.inline_data.data:
+                    serialized_parts.append(
+                        {
+                            "type": "image",
+                            "mime_type": part.inline_data.mime_type,
+                            "data_size": len(part.inline_data.data),
+                            "data_preview": part.inline_data.data[:50].hex()
+                            + "...",  # 记录数据前50字节的十六进制预览
+                        }
+                    )
+                elif part.file_data:
+                    serialized_parts.append(
+                        {
+                            "type": "file",
+                            "mime_type": part.file_data.mime_type,
+                            "file_uri": part.file_data.file_uri,
+                        }
+                    )
+                else:
+                    serialized_parts.append(
+                        {"type": "unknown_part", "content": str(part)}
+                    )
         return {"role": content.role, "parts": serialized_parts}
 
     # --- Refactored generate_response and its helpers ---
@@ -300,8 +476,14 @@ class GeminiService:
         if candidate.safety_ratings:
             for rating in candidate.safety_ratings:
                 # 将枚举值转换为字符串键
-                category_name = rating.category.name.replace("HARM_CATEGORY_", "")
-                severity_name = rating.probability.name
+                category_name = (
+                    rating.category.name.replace("HARM_CATEGORY_", "")
+                    if rating.category
+                    else "UNKNOWN"
+                )
+                severity_name = (
+                    rating.probability.name if rating.probability else "UNKNOWN"
+                )
 
                 penalty = self.SAFETY_PENALTY_MAP.get(severity_name, 0)
                 if penalty > 0:
@@ -310,171 +492,6 @@ class GeminiService:
                     )
                     total_penalty += penalty
         return total_penalty
-
-    def _api_key_handler(func: Callable) -> Callable:
-        """
-        一个装饰器，用于优雅地处理 API 密钥的获取、释放和重试逻辑。
-        实现了两层重试：
-        1. 外层循环：持续获取可用密钥，如果所有密钥都在冷却，则会等待。
-        2. 内层循环：对获取到的单个密钥，在遇到可重试错误时，会根据配置进行多次尝试。
-        """
-
-        @wraps(func)
-        async def wrapper(self: "GeminiService", *args, **kwargs):
-            while True:
-                key_obj = None
-                try:
-                    key_obj = await self.key_rotation_service.acquire_key()
-                    client = self._create_client_with_key(key_obj.key)
-
-                    failure_penalty = 25  # 默认的失败惩罚
-                    key_should_be_cooled_down = False
-                    key_is_invalid = False
-
-                    max_attempts = app_config.API_RETRY_CONFIG["MAX_ATTEMPTS_PER_KEY"]
-                    for attempt in range(max_attempts):
-                        try:
-                            log.info(
-                                f"使用密钥 ...{key_obj.key[-4:]} (尝试 {attempt + 1}/{max_attempts}) 调用 {func.__name__}"
-                            )
-
-                            result = await func(self, *args, client=client, **kwargs)
-
-                            safety_penalty = 0
-                            is_blocked_by_safety = False
-                            if isinstance(result, types.GenerateContentResponse):
-                                safety_penalty = self._handle_safety_ratings(
-                                    result, key_obj.key
-                                )
-                                if (
-                                    not result.parts
-                                    and result.prompt_feedback
-                                    and result.prompt_feedback.block_reason
-                                ):
-                                    is_blocked_by_safety = True
-
-                            if is_blocked_by_safety:
-                                log.warning(
-                                    f"密钥 ...{key_obj.key[-4:]} 因安全策略被阻止 (原因: {result.prompt_feedback.block_reason})。将进入冷却且不扣分。"
-                                )
-                                failure_penalty = 0  # 明确设置为0，不扣分
-                                key_should_be_cooled_down = True
-                                break
-
-                            await self.key_rotation_service.release_key(
-                                key_obj.key, success=True, safety_penalty=safety_penalty
-                            )
-                            return result
-
-                        except (
-                            genai_errors.ClientError,
-                            genai_errors.ServerError,
-                        ) as e:
-                            error_str = str(e)
-                            match = re.match(r"(\d{3})", error_str)
-                            status_code = int(match.group(1)) if match else None
-
-                            is_retryable = status_code in [429, 503]
-                            if (
-                                not is_retryable
-                                and isinstance(e, genai_errors.ServerError)
-                                and "503" in error_str
-                            ):
-                                is_retryable = True
-                                status_code = 503
-
-                            if is_retryable:
-                                log.warning(
-                                    f"密钥 ...{key_obj.key[-4:]} 遇到可重试错误 (状态码: {status_code})。"
-                                )
-                                if attempt < max_attempts - 1:
-                                    delay = app_config.API_RETRY_CONFIG[
-                                        "RETRY_DELAY_SECONDS"
-                                    ]
-                                    log.info(f"等待 {delay} 秒后重试。")
-                                    await asyncio.sleep(delay)
-                                else:
-                                    log.warning(
-                                        f"密钥 ...{key_obj.key[-4:]} 的所有 {max_attempts} 次重试均失败。将进入冷却。"
-                                    )
-                                    # --- 渐进式惩罚逻辑 ---
-                                    base_penalty = 10
-                                    consecutive_failures = (
-                                        key_obj.consecutive_failures + 1
-                                    )  # +1 是因为本次失败也要计算在内
-                                    failure_penalty = (
-                                        base_penalty * consecutive_failures
-                                    )
-                                    log.warning(
-                                        f"密钥 ...{key_obj.key[-4:]} 已连续失败 {consecutive_failures} 次。"
-                                        f"本次惩罚分值: {failure_penalty}"
-                                    )
-                                    key_should_be_cooled_down = True
-
-                            elif status_code == 403 or (
-                                status_code == 400
-                                and "API_KEY_INVALID" in error_str.upper()
-                            ):
-                                log.error(
-                                    f"密钥 ...{key_obj.key[-4:]} 无效 (状态码: {status_code})。将施加毁灭性惩罚。"
-                                )
-                                failure_penalty = 101  # 毁灭性惩罚
-                                key_should_be_cooled_down = True
-                                break  # 直接跳出重试循环
-
-                            else:
-                                log.error(
-                                    f"使用密钥 ...{key_obj.key[-4:]} 时发生意外的致命API错误 (状态码: {status_code}): {e}",
-                                    exc_info=True,
-                                )
-                                if isinstance(e, genai_errors.ServerError):
-                                    # 对于服务器错误，也采用渐进式惩罚
-                                    base_penalty = 15  # 服务器错误的基础惩罚可以稍高
-                                    consecutive_failures = (
-                                        key_obj.consecutive_failures + 1
-                                    )
-                                    failure_penalty = (
-                                        base_penalty * consecutive_failures
-                                    )
-                                    log.warning(
-                                        f"密钥 ...{key_obj.key[-4:]} 遭遇服务器错误，已连续失败 {consecutive_failures} 次。"
-                                        f"本次惩罚分值: {failure_penalty}"
-                                    )
-                                    key_should_be_cooled_down = True
-                                    break
-                                else:
-                                    await self.key_rotation_service.release_key(
-                                        key_obj.key, success=True
-                                    )
-                                    return "抱歉，AI服务遇到了一个意料之外的错误，请稍后再试。"
-
-                        except Exception as e:
-                            log.error(
-                                f"使用密钥 ...{key_obj.key[-4:]} 时发生未知错误: {e}",
-                                exc_info=True,
-                            )
-                            await self.key_rotation_service.release_key(
-                                key_obj.key, success=True
-                            )
-                            if func.__name__ == "generate_embedding":
-                                return None
-                            return "呜哇，有点晕嘞，等我休息一会儿 <伤心>"
-
-                    if key_is_invalid:
-                        continue
-
-                    if key_should_be_cooled_down:
-                        await self.key_rotation_service.release_key(
-                            key_obj.key, success=False, failure_penalty=failure_penalty
-                        )
-
-                except NoAvailableKeyError:
-                    log.error(
-                        "所有API密钥均不可用，且 acquire_key 未能成功等待。这是异常情况。"
-                    )
-                    return "啊啊啊服务器要爆炸啦！现在有点忙不过来，你过一会儿再来找我玩吧！<生气>"
-
-        return wrapper
 
     async def generate_response(
         self,
@@ -605,6 +622,8 @@ class GeminiService:
         此方法不使用密钥轮换，直接根据配置创建客户端。
         失败时会抛出异常，由调用方 (generate_response) 处理回退逻辑。
         """
+        if not model_name:
+            raise ValueError("调用自定义端点时需要提供 model_name。")
         endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
         if not endpoint_config or not all(
             [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
@@ -855,16 +874,19 @@ class GeminiService:
                     contents=conversation_history,
                     config=gen_config,
                 )
-                if response and (response.parts or response.function_calls):
+                if response and (
+                    (response.candidates and response.candidates[0].content)
+                    or (hasattr(response, "function_calls") and response.function_calls)
+                ):
                     break
                 log.warning(f"模型返回空响应 (尝试 {attempt + 1}/2)。将在1秒后重试...")
                 if attempt < 1:
                     await asyncio.sleep(1)
 
             if log_detailed:
-                if response.candidates:
+                if response and response.candidates:
                     candidate = response.candidates[0]
-                    if candidate.content and candidate.content.parts:
+                    if candidate and candidate.content and candidate.content.parts:
                         for part in candidate.content.parts:
                             if hasattr(part, "thought") and part.thought:
                                 thinking_was_used = True
@@ -872,7 +894,11 @@ class GeminiService:
                                 log.info(part.text)
                                 log.info("---------------------------------")
 
-            function_calls = response.function_calls
+            function_calls = (
+                response.function_calls
+                if response and hasattr(response, "function_calls")
+                else None
+            )
 
             if not function_calls:
                 if log_detailed:
@@ -891,7 +917,12 @@ class GeminiService:
             for call in function_calls:
                 called_tool_names.append(call.name)
 
-            if response.candidates and response.candidates[0].content:
+            if (
+                response
+                and response.candidates
+                and response.candidates[0].content
+                and response.candidates[0].content.parts
+            ):
                 conversation_history.append(response.candidates[0].content)
 
             if log_detailed:
@@ -1020,10 +1051,10 @@ class GeminiService:
                 log.warning("已达到最大工具调用限制，流程终止。")
                 return "哎呀，我好像陷入了一个复杂的思考循环里，我们换个话题聊聊吧！"
 
-        if response.parts:
+        if response and response.parts:
             final_thought = ""
             final_text = ""
-            for part in response.parts:
+            for part in response.parts or []:
                 if hasattr(part, "thought") and part.thought:
                     thinking_was_used = True
                     final_thought += part.text
@@ -1049,8 +1080,15 @@ class GeminiService:
                 formatted_response = await self._post_process_response(
                     raw_ai_response, user_id, guild_id
                 )
+                # --- 新增：记录 Token 使用情况 ---
+                await self._record_token_usage(
+                    client=client,
+                    model_name=api_model_name or self.default_model_name,
+                    input_contents=conversation_history,
+                    output_text=raw_ai_response,
+                )
                 total_tokens = 0
-                if response.usage_metadata:
+                if response and response.usage_metadata:
                     total_tokens = response.usage_metadata.total_token_count
 
                 log.info("--- Gemini API 请求摘要 ---")
@@ -1071,7 +1109,11 @@ class GeminiService:
 
                 return formatted_response
 
-        elif response.prompt_feedback and response.prompt_feedback.block_reason:
+        elif (
+            response
+            and response.prompt_feedback
+            and response.prompt_feedback.block_reason
+        ):
             try:
                 conversation_for_log = json.dumps(
                     GeminiService._serialize_for_logging(final_conversation),
@@ -1080,19 +1122,20 @@ class GeminiService:
                 )
                 full_response_for_log = str(response)
                 log.warning(
-                    f"用户 {user_id} 的请求被安全策略阻止，原因: {response.prompt_feedback.block_reason}\n"
+                    f"用户 {user_id} 的请求被安全策略阻止，原因: {response.prompt_feedback.block_reason if response.prompt_feedback else '未知'}\n"
                     f"--- 完整的对话历史 ---\n{conversation_for_log}\n"
                     f"--- 完整的 API 响应 ---\n{full_response_for_log}"
                 )
             except Exception as log_e:
                 log.error(f"序列化被阻止的请求用于日志记录时出错: {log_e}")
                 log.warning(
-                    f"用户 {user_id} 的请求被安全策略阻止，原因: {response.prompt_feedback.block_reason} (详细内容记录失败)"
+                    f"用户 {user_id} 的请求被安全策略阻止，原因: {response.prompt_feedback.block_reason if response.prompt_feedback else '未知'} (详细内容记录失败)"
                 )
             return "呜啊! 这个太色情啦,我不看我不看"
         else:
             log.warning(f"未能为用户 {user_id} 生成有效回复。")
             return "哎呀，我好像没太明白你的意思呢～可以再说清楚一点吗？✨"
+        return "哎呀，我好像没太明白你的意思呢～可以再说清楚一点吗？✨"
 
     @_api_key_handler
     async def generate_embedding(
@@ -1136,7 +1179,7 @@ class GeminiService:
     async def generate_text(
         self,
         prompt: str,
-        temperature: float = None,
+        temperature: Optional[float] = None,
         model_name: Optional[str] = None,
         client: Any = None,
     ) -> Optional[str]:
@@ -1308,7 +1351,7 @@ class GeminiService:
         self,
         latest_query: str,
         user_name: str,
-        conversation_history: Optional[List[Dict[str, any]]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
         根据用户的最新发言和可选的对话历史，生成一个用于RAG搜索的独立查询。
@@ -1448,6 +1491,56 @@ class GeminiService:
             )
 
         return None
+
+    async def _record_token_usage(
+        self,
+        client: Any,  # 使用 Any 来避免 Pylance 对动态 client 的错误
+        model_name: str,
+        input_contents: List[types.Content],
+        output_text: str,
+    ):
+        """记录 API 调用的 Token 使用情况到数据库。"""
+        try:
+            # 分别计算输入和输出的 Token
+            # 使用 type: ignore 来抑制 Pylance 无法推断 client.aio.models 的错误
+            input_token_response = await client.aio.models.count_tokens(  # type: ignore
+                model=model_name, contents=input_contents
+            )
+            output_token_response = await client.aio.models.count_tokens(  # type: ignore
+                model=model_name, contents=[output_text]
+            )
+
+            input_tokens = input_token_response.total_tokens
+            output_tokens = output_token_response.total_tokens
+            total_tokens = input_tokens + output_tokens
+
+            # 获取当前日期并更新数据库
+            usage_date = datetime.utcnow().date()
+            async with AsyncSessionLocal() as session:
+                usage_record = await token_usage_service.get_token_usage(
+                    session, usage_date
+                )
+                if usage_record:
+                    await token_usage_service.update_token_usage(
+                        session,
+                        usage_record,
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    )
+                else:
+                    await token_usage_service.create_token_usage(
+                        session,
+                        usage_date,
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    )
+            log.info(
+                f"Token usage recorded: Input={input_tokens}, Output={output_tokens}, Total={total_tokens}"
+            )
+        except Exception as e:
+            log.error(f"Failed to record token usage: {e}", exc_info=True)
 
 
 # 全局实例

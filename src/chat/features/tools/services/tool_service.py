@@ -13,7 +13,7 @@ class ToolService:
     它使用一个从工具名称到可调用函数的映射来查找和运行适当的工具。
     """
 
-    def __init__(self, bot: discord.Client, tool_map: Dict[str, Callable]):
+    def __init__(self, bot: Optional[discord.Client], tool_map: Dict[str, Callable]):
         """
         初始化 ToolService。
 
