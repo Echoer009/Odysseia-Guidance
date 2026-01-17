@@ -104,8 +104,15 @@ class ReviewService:
         # 从数据库记录中获取提交所在的频道ID
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
+        if not channel:
+            log.warning(
+                f"无法找到频道 ID {review_channel_id}，审核无法发起（可能已被删除或机器人无权访问）。"
+            )
+            return
+        if not isinstance(channel, discord.abc.Messageable):
+            log.warning(
+                f"频道 ID {review_channel_id} (类型: {type(channel)}) 不是一个可消息频道，审核无法发起。"
+            )
             return
 
         review_message = await channel.send(embed=embed)
@@ -185,8 +192,15 @@ class ReviewService:
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
+        if not channel:
+            log.warning(
+                f"无法找到频道 ID {review_channel_id}，审核无法发起（可能已被删除或机器人无权访问）。"
+            )
+            return
+        if not isinstance(channel, discord.abc.Messageable):
+            log.warning(
+                f"频道 ID {review_channel_id} (类型: {type(channel)}) 不是一个可消息频道，审核无法发起。"
+            )
             return
 
         review_message = await channel.send(embed=embed)
@@ -265,8 +279,15 @@ class ReviewService:
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            log.error(f"频道 ID {review_channel_id} 不是一个有效的文本频道。")
+        if not channel:
+            log.warning(
+                f"无法找到频道 ID {review_channel_id}，审核无法发起（可能已被删除或机器人无权访问）。"
+            )
+            return
+        if not isinstance(channel, discord.abc.Messageable):
+            log.warning(
+                f"频道 ID {review_channel_id} (类型: {type(channel)}) 不是一个可消息频道，审核无法发起。"
+            )
             return
 
         review_message = await channel.send(embed=embed)
@@ -337,7 +358,7 @@ class ReviewService:
     async def handle_vote(self, payload: discord.RawReactionActionEvent):
         """处理来自Cog的投票事件"""
         channel = self.bot.get_channel(payload.channel_id)
-        if not isinstance(channel, discord.TextChannel):
+        if not isinstance(channel, discord.abc.Messageable):
             return
 
         try:
@@ -796,9 +817,15 @@ Discord ID: {profile_user_id}
                         continue
 
                     channel = self.bot.get_channel(entry["channel_id"])
-                    if not isinstance(channel, discord.TextChannel):
+                    if not channel:
                         log.warning(
-                            f"频道 {entry['channel_id']} 不是文本频道，无法处理过期条目 #{entry['id']}"
+                            f"无法找到频道 {entry['channel_id']}，无法处理过期条目 #{entry['id']}。该条目可能需要手动清理。"
+                        )
+                        continue
+
+                    if not isinstance(channel, discord.abc.Messageable):
+                        log.warning(
+                            f"频道 {entry['channel_id']} (类型: {type(channel)}) 不是可消息频道，无法处理过期条目 #{entry['id']}"
                         )
                         continue
 

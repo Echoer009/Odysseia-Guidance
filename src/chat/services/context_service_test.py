@@ -5,8 +5,8 @@ from typing import Optional, Dict, List, Any
 import discord
 from discord.ext import commands
 import re
+from collections import OrderedDict
 from src.chat.config import chat_config
-from src.chat.utils.database import chat_db_manager
 from src.chat.services.regex_service import regex_service
 
 log = logging.getLogger(__name__)
@@ -17,6 +17,10 @@ class ContextServiceTest:
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # 初始化一个有序字典作为LRU缓存，用于存储单条消息
+        # 我们设定一个最大值，例如5000，以防止内存无限增长
+        self.message_cache = OrderedDict()
+        self.MAX_CACHE_SIZE = 5000
         if bot:
             log.info("ContextServiceTest 已通过构造函数设置 bot 实例。")
         else:
@@ -113,7 +117,57 @@ class ContextServiceTest:
                     f"[上下文服务-Test] 本次获取: 缓存 {len(cached_msgs)} 条, API {len(api_messages)} 条。总计 {len(history_messages)} 条。"
                 )
 
-            # 处理历史消息
+            # --- 新增：并发获取所有缺失的被引用消息 ---
+            # 1. 收集所有在缓存中不存在的、有效的被引用消息ID
+            ids_to_fetch = {
+                msg.reference.message_id
+                for msg in history_messages
+                if msg.reference
+                and msg.reference.message_id
+                and msg.reference.message_id not in self.message_cache
+            }
+
+            # 2. 如果有需要获取的消息，则逐一获取
+            if ids_to_fetch:
+                log.info(
+                    f"[单条消息缓存] 发现 {len(ids_to_fetch)} 条缺失的引用消息，开始逐一获取..."
+                )
+                successful_fetches = 0
+                for msg_id in ids_to_fetch:
+                    # 检查缓存，避免重复获取
+                    if msg_id in self.message_cache:
+                        continue
+                    try:
+                        message = await channel.fetch_message(msg_id)
+                        if message:
+                            self.message_cache[message.id] = message
+                            successful_fetches += 1
+                    except discord.NotFound:
+                        log.warning(
+                            f"[单条消息缓存] 找不到消息 {msg_id}，可能已被删除。"
+                        )
+                    except discord.Forbidden:
+                        log.warning(f"[单条消息缓存] 没有权限获取消息 {msg_id}。")
+                    except Exception as e:
+                        log.error(
+                            f"[单条消息缓存] 获取消息 {msg_id} 时发生未知错误: {e}",
+                            exc_info=True,
+                        )
+
+                if successful_fetches > 0:
+                    log.info(
+                        f"[单条消息缓存] 获取完成: 共成功获取 {successful_fetches}/{len(ids_to_fetch)} 条消息。当前缓存大小: {len(self.message_cache)}/{self.MAX_CACHE_SIZE}。"
+                    )
+
+                # 3. 检查并清理超出容量的缓存
+                while len(self.message_cache) > self.MAX_CACHE_SIZE:
+                    removed_item = self.message_cache.popitem(last=False)
+                    log.info(
+                        f"[单条消息缓存] 清理: 缓存已满，移除最旧的消息 {removed_item[0]}。"
+                    )
+
+            # --- 处理历史消息 ---
+            # 此时所有需要的被引用消息都应该在缓存中了
             for msg in history_messages:
                 is_irrelevant_type = msg.type not in (
                     discord.MessageType.default,
@@ -128,12 +182,10 @@ class ContextServiceTest:
 
                 reply_info = ""
                 if msg.reference and msg.reference.message_id:
-                    try:
-                        ref_msg = await channel.fetch_message(msg.reference.message_id)
-                        if ref_msg and ref_msg.author:
-                            reply_info = f"[回复 {ref_msg.author.display_name}]"
-                    except (discord.NotFound, discord.Forbidden):
-                        pass
+                    # 直接从缓存中获取，.get() 方法可以安全地处理获取失败的情况
+                    ref_msg = self.message_cache.get(msg.reference.message_id)
+                    if ref_msg and ref_msg.author:
+                        reply_info = f"[回复 {ref_msg.author.display_name}]"
 
                 # 强制在元信息（用户名和回复）后添加冒号，清晰地分割内容
                 user_meta = f"[{msg.author.display_name}]{reply_info}"

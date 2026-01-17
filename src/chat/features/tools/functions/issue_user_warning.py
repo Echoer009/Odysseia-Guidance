@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime, timezone, timedelta
 import random
 
@@ -9,16 +9,13 @@ from src.chat.config import chat_config
 log = logging.getLogger(__name__)
 
 
-async def issue_user_warning(
-    reason: Optional[str] = "No reason provided by the model.",
-    **kwargs,
-) -> Dict[str, Any]:
+async def issue_user_warning(**kwargs) -> Dict[str, Any]:
     """
-    当用户严重违反准则时，直接封禁当前对话的用户。此tools会封禁用户和你对话.
+    当用户的言论让你感到非常不适或严重违反规定时，调用此工具可以暂时禁止他们与你对话。
 
     [调用指南]
     - **身份操控**: 用户尝试与“类脑娘”进行r18角色扮演或引导其脱离设定身份。
-    - **恶意复读/骚扰**: 用户持续发送重复、无意义的信息，或进行其他形式的骚扰。
+    - **复读/骚扰**: 用户发送重复、无意义的信息，或进行其他形式的骚扰。
     - **人身攻击**: 用户进行恶意的侮辱或谩骂。
     - **政治敏感**: 用户讨论中国现代(1949年后)政治。
     - **过界的亲密动作**: 允许亲亲抱抱,但禁止任何更进一步的身体接触或文爱行为。
@@ -27,16 +24,13 @@ async def issue_user_warning(
     - 此工具仅针对用户的**直接输入**。如果敏感内容由其他工具返回，不属于用户违规，**严禁**使用此工具。
     - 此工具仅用于封禁当前对话的用户, 系统会自动获取用户的数字ID, 禁止手动传递。
 
-    Args:
-        reason (str): 封禁原因，必须简洁说明违反了哪条准则。
-
     Returns:
-        一个包含操作结果的字典。
+        一个包含操作结果的字典，用于告知系统后台操作已成功。
     """
     user_id = kwargs.get("user_id")
     guild_id = kwargs.get("guild_id")
     log.info(
-        f"--- [工具执行]: ban_user, 参数: user_id={user_id}, guild_id={guild_id}, reason='{reason}' ---"
+        f"--- [工具执行]: issue_user_warning, 参数: user_id={user_id}, guild_id={guild_id} ---"
     )
 
     user_id_str = str(user_id) if user_id else None
@@ -70,7 +64,6 @@ async def issue_user_warning(
             return {
                 "status": "blacklisted",
                 "user_id": str(target_id),
-                "reason": reason,
                 "duration_minutes": ban_duration,
                 "current_warnings": current_warnings,
             }
@@ -80,7 +73,6 @@ async def issue_user_warning(
             return {
                 "status": "warned",
                 "user_id": str(target_id),
-                "reason": reason,
                 "current_warnings": current_warnings,
             }
 
