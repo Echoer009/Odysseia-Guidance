@@ -125,6 +125,7 @@ class SubmissionService:
 
         if pending_id:
             # 调用 ReviewService 来启动审核流程
+            assert review_service is not None
             asyncio.create_task(review_service.start_review(pending_id))
             log.info(f"通用知识提交成功，待审核ID: {pending_id}。已启动审核流程。")
 
@@ -153,6 +154,7 @@ class SubmissionService:
 
         if pending_id:
             # 异步启动审核流程，不阻塞当前交互
+            assert review_service is not None
             asyncio.create_task(review_service.start_review(pending_id))
             log.info(
                 f"已为社区成员档案 '{member_data.get('name')}' (pending_id: {pending_id}) 创建审核任务。"
@@ -175,8 +177,12 @@ class SubmissionService:
         item_id = purchase_info.get("item_id")
         price = purchase_info.get("price")
 
+        if not item_id or not price:
+            log.error(f"个人档案购买信息不完整: item_id={item_id}, price={price}")
+            return False, "❌ 内部错误：商品信息不完整，无法完成购买。"
+
         # 1. 扣款
-        success, message, new_balance, _, _ = await coin_service.purchase_item(
+        success, message, new_balance, _, _, _ = await coin_service.purchase_item(
             user_id=interaction.user.id,
             guild_id=interaction.guild.id if interaction.guild else 0,
             item_id=item_id,
@@ -207,7 +213,7 @@ class SubmissionService:
 
         if not pending_id:
             # 如果创建失败，必须退款
-            await coin_service.add_balance(
+            await coin_service.add_coins(
                 user_id=interaction.user.id,
                 amount=price,
                 reason=f"个人档案提交审核失败自动退款 (item_id: {item_id})",
@@ -218,6 +224,7 @@ class SubmissionService:
             return False, "❌ 提交审核时发生错误，你的购买费用已自动退还。"
 
         # 5. 启动审核流程
+        assert review_service is not None
         asyncio.create_task(review_service.start_review(pending_id))
         log.info(
             f"已为用户 {interaction.user.id} 的个人档案 (pending_id: {pending_id}) 创建审核任务。"
@@ -240,6 +247,7 @@ class SubmissionService:
         )
 
         if pending_id:
+            assert review_service is not None
             asyncio.create_task(review_service.start_review(pending_id))
             log.info(
                 f"自定义工作事件提交成功，待审核ID: {pending_id}。已启动审核流程。"
