@@ -17,6 +17,7 @@ BLOCK_THREAD_REPLIES_EFFECT_ID = "block_thread_replies"
 ENABLE_THREAD_COMMENTOR_EFFECT_ID = "enable_thread_commentor"
 ENABLE_THREAD_REPLIES_EFFECT_ID = "enable_thread_replies"
 SELL_BODY_EVENT_SUBMISSION_EFFECT_ID = "submit_sell_body_event"
+CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID = "clear_personal_memory"
 
 
 class CoinService:
@@ -284,30 +285,16 @@ class CoinService:
 
         elif item_target == "self" and item_effect:
             # --- 给自己用且有立即效果的物品 ---
-            if item_effect == "coffee_chat_cooldown":
-                from datetime import timedelta
-
-                expires_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-                update_query = """
-                    INSERT INTO user_coins (user_id, coffee_effect_expires_at)
-                    VALUES (?, ?)
-                    ON CONFLICT(user_id) DO UPDATE SET
-                        coffee_effect_expires_at = excluded.coffee_effect_expires_at;
-                """
-                await chat_db_manager._execute(
-                    chat_db_manager._db_transaction,
-                    update_query,
-                    (user_id, expires_at.isoformat()),
-                    commit=True,
-                )
-                log.info(
-                    f"用户 {user_id} 购买了咖啡，聊天冷却效果持续到 {expires_at.isoformat()}"
+            if item_effect == CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID:
+                # 清除用户的个人记忆
+                from src.chat.features.personal_memory.services.personal_memory_service import (
+                    personal_memory_service,
                 )
 
+                await personal_memory_service.clear_personal_memory(user_id)
                 return (
                     True,
-                    f"你使用了 **{item['name']}**，花费了 {total_cost} 类脑币。在接下来的24小时内，你与类脑娘的对话冷却时间将大幅缩短！",
+                    f"一道耀眼的闪光后，类脑娘关于 **{item['name']}** 的记忆...呃，不对，是类脑娘关于你的记忆被清除了。你们可以重新开始了。",
                     new_balance,
                     False,
                     False,
@@ -330,12 +317,6 @@ class CoinService:
                         False,
                     )
                 else:
-                    # 用户尚未拥有该功能，扣除500个类脑币并解锁功能
-                    from src.chat.features.personal_memory.services.personal_memory_service import (
-                        personal_memory_service,
-                    )
-
-                    await personal_memory_service.unlock_feature(user_id)
                     return (
                         True,
                         f"你已成功解锁 **{item['name']}**！现在类脑娘将开始为你记录个人记忆。",
@@ -497,26 +478,6 @@ class CoinService:
             (user_id, item_id, quantity),
             commit=True,
         )
-
-    async def get_user_cooldown_type(self, user_id: int) -> str:
-        """
-        获取用户的冷却类型 ('default' 或 'coffee')。
-        """
-        query = "SELECT coffee_effect_expires_at FROM user_coins WHERE user_id = ?"
-        result = await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (user_id,), fetch="one"
-        )
-
-        if result and result["coffee_effect_expires_at"]:
-            try:
-                expires_at = datetime.fromisoformat(result["coffee_effect_expires_at"])
-                if expires_at > datetime.now(timezone.utc):
-                    return "coffee"
-            except (ValueError, TypeError):
-                # 如果日期格式不正确或为 None，则忽略
-                pass
-
-        return "default"
 
     async def has_withered_sunflower(self, user_id: int) -> bool:
         """检查用户是否拥有枯萎向日葵（即是否禁用了暖贴功能）"""

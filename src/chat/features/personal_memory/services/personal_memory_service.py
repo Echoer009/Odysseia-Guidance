@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from sqlalchemy.future import select
 from sqlalchemy import update
 from src.database.database import AsyncSessionLocal
@@ -134,7 +135,9 @@ class PersonalMemoryService:
                 log.debug(f"在 ParadeDB 中未找到用户 {user_id} 的摘要。")
                 return "该用户当前没有个人记忆摘要。"
 
-    async def update_summary_and_reset_history(self, user_id: int, new_summary: str):
+    async def update_summary_and_reset_history(
+        self, user_id: int, new_summary: Optional[str]
+    ):
         """
         在 ParadeDB 中更新摘要，同时重置个人消息计数和对话历史。
         """
@@ -151,6 +154,15 @@ class PersonalMemoryService:
                 )
                 await session.execute(stmt)
                 log.info(f"为用户 {user_id} 更新了记忆摘要，并重置了计数和历史。")
+
+    async def clear_personal_memory(self, user_id: int):
+        """
+        清除指定用户的个人记忆摘要、对话历史和消息计数。
+        """
+        log.info(f"正在为用户 {user_id} 清除个人记忆...")
+        # 传入None和空字符串都可以,数据库有做处理
+        await self.update_summary_and_reset_history(user_id, None)
+        log.info(f"用户 {user_id} 的个人记忆已清除。")
 
 
 # 单例实例

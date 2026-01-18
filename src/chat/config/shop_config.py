@@ -14,6 +14,7 @@ from src.chat.features.odysseia_coin.service.coin_service import (
     ENABLE_THREAD_COMMENTOR_EFFECT_ID,
     ENABLE_THREAD_REPLIES_EFFECT_ID,
     SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
+    CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
 )
 
 SHOP_ITEMS = [
@@ -51,20 +52,20 @@ SHOP_ITEMS = [
         ENABLE_THREAD_REPLIES_EFFECT_ID,
     ),
     (
-        "咖啡",
-        "喝下后你感觉精力变强了一点...不过好像只有24h",
-        50,
-        "食品-给自己",
-        "self",
-        "coffee_chat_cooldown",
-    ),
-    (
         "名片",
         "输入你的信息,并解锁与类脑娘的专属长期记忆,让她真正地记住你。",
         100,
         "物品-给自己",
         "self",
         PERSONAL_MEMORY_ITEM_EFFECT_ID,
+    ),
+    (
+        "黑衣人的记忆消除器",
+        "“看这里。”咔嚓一声，一道闪光之后，类脑娘会忘记所有关于你的个人记忆。别担心，这玩意不防墨镜，但也许能防止你社会性死亡。",
+        500,
+        "物品-给自己",
+        "self",
+        CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
     ),
     (
         "知识纸条",
