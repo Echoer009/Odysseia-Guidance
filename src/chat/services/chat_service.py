@@ -15,7 +15,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
-from src.chat.config.chat_config import PERSONAL_MEMORY_CONFIG, DEBUG_CONFIG
+from src.chat.config.chat_config import DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
@@ -120,45 +120,12 @@ class ChatService:
             )
 
         # --- 个人记忆消息计数 ---
-        # --- 个人记忆处理 ---
-        user_profile = await chat_db_manager.get_user_profile(author.id)
+        user_profile_data = await world_book_service.get_profile_by_discord_id(
+            author.id
+        )
         personal_summary = None
-        has_personal_memory = user_profile and user_profile["has_personal_memory"]
-
-        if has_personal_memory and user_profile:
-            personal_summary = user_profile["personal_summary"]
-            # 在所有对话中进行消息计数和触发总结
-            log.debug(f"--- 个人记忆诊断: 用户 {author.id} ---")
-            log.debug(
-                f"步骤 1: 检查 has_personal_memory 状态。值为: {has_personal_memory}"
-            )
-
-            # 在所有对话中进行消息计数和触发总结
-            log.debug(f"用户 {author.id} 已启用个人记忆，开始计数。")
-            new_count = await personal_memory_service.increment_and_check_message_count(
-                author.id, guild_id
-            )
-            log.debug(f"步骤 2: 消息计数器更新。新计数值为: {new_count}")
-
-            summary_threshold = PERSONAL_MEMORY_CONFIG["summary_threshold"]
-            log.debug(
-                f"步骤 3: 检查是否达到阈值。当前计数: {new_count}, 阈值: {summary_threshold}"
-            )
-
-            if new_count >= summary_threshold:
-                log.info(
-                    f"用户 {author.id} 在 guild_id {guild_id} 的个人消息已达到 {new_count} 条，触发总结。"
-                )
-                await personal_memory_service.summarize_and_save_memory(
-                    author.id, guild_id
-                )
-                await personal_memory_service.reset_message_count(author.id, guild_id)
-            else:
-                log.debug(
-                    f"用户 {author.id} 在 guild_id {guild_id} 的个人消息计数 {new_count} 尚未达到阈值 {summary_threshold}，不触发总结。"
-                )
-
-        # 移除了对未开启个人记忆的私聊消息的特殊处理
+        if user_profile_data:
+            personal_summary = user_profile_data.get("personal_summary")
 
         user_content = processed_data["user_content"]
         replied_content = processed_data["replied_content"]
@@ -197,7 +164,6 @@ class ChatService:
 
             # --- 新增：集中获取所有上下文数据 ---
             affection_status = await affection_service.get_affection_status(author.id)
-            user_profile_data = dict(user_profile) if user_profile else None
 
             # 3. --- 好感度与奖励更新（前置） ---
             try:
@@ -244,6 +210,16 @@ class ChatService:
             if not ai_response:
                 log.info(f"AI服务未返回回复（可能由于冷却），跳过用户 {author.id}。")
                 return None
+
+            # --- 新增：调用新的个人记忆服务 ---
+            # 在获得AI回复后，记录这次对话并根据需要触发总结
+            if user_profile_data:
+                await personal_memory_service.update_and_conditionally_summarize_memory(
+                    user_id=author.id,
+                    user_name=author.display_name,
+                    user_content=user_content,
+                    ai_response=ai_response,
+                )
 
             # 更新新系统的CD
             await chat_settings_service.update_user_cooldown(

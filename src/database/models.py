@@ -222,6 +222,11 @@ class CommunityMemberProfile(Base):
     source_metadata = Column(JSON, nullable=True, comment="存储原始的、完整的成员档案")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    personal_summary = Column(Text, nullable=True, comment="个人记忆")
+    history = Column(JSON, nullable=True, comment="用于生成最近一次个人记忆")
+    personal_message_count = Column(
+        Integer, nullable=False, default=0, server_default="0", comment="个人消息计数"
+    )
 
     # 与分块的一对多关系
     chunks = relationship("CommunityMemberChunk", back_populates="profile")

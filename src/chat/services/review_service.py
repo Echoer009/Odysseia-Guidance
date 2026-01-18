@@ -25,9 +25,6 @@ from src.chat.features.world_book.services.incremental_rag_service import (
 )
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.work_game.services.work_db_service import WorkDBService
-from src.chat.features.personal_memory.services.personal_memory_service import (
-    personal_memory_service,
-)
 
 log = logging.getLogger(__name__)
 
@@ -218,7 +215,7 @@ class ReviewService:
         name = data.get("name", "未知姓名")
 
         # --- 判断是自我介绍还是他人介绍 ---
-        is_self_introduction = str(data.get("discord_number_id")) == str(proposer.id)
+        is_self_introduction = str(data.get("discord_id")) == str(proposer.id)
 
         if is_self_introduction:
             title = "✨ 一份新的自我介绍！"
@@ -513,10 +510,10 @@ class ReviewService:
                     embed_description = f"大家的意见咱都收到啦！关于 **{data['title']}** 的新知识已经被我记在小本本上啦！"
 
                 elif entry_type == "community_member":
-                    profile_user_id = data.get("discord_number_id")
+                    profile_user_id = data.get("discord_id")
                     if not profile_user_id:
                         raise ValueError(
-                            f"社区成员条目 #{pending_id} 缺少 discord_number_id。"
+                            f"社区成员条目 #{pending_id} 缺少 discord_id。"
                         )
 
                     # --- 检查用户是否已有档案 ---
@@ -599,22 +596,6 @@ Discord ID: {profile_user_id}
                         log.info(
                             f"已创建新的社区成员条目 {new_entry_id} (源自审核 #{pending_id})。"
                         )
-
-                    # --- 解锁个人记忆功能 ---
-                    if profile_user_id:
-                        log.info(f"正在为用户 {profile_user_id} 解锁个人记忆功能...")
-                        try:
-                            await personal_memory_service.unlock_feature(
-                                int(profile_user_id)
-                            )
-                            log.info(
-                                f"成功为用户 {profile_user_id} 解锁了个人记忆功能。"
-                            )
-                        except Exception as e:
-                            log.error(
-                                f"为用户 {profile_user_id} 自动解锁个人记忆功能时失败: {e}",
-                                exc_info=True,
-                            )
 
                     embed_title = "✅ 新的名片已收录！"
                     embed_description = (
@@ -819,8 +800,14 @@ Discord ID: {profile_user_id}
                     channel = self.bot.get_channel(entry["channel_id"])
                     if not channel:
                         log.warning(
-                            f"无法找到频道 {entry['channel_id']}，无法处理过期条目 #{entry['id']}。该条目可能需要手动清理。"
+                            f"无法找到频道 {entry['channel_id']}，无法处理过期条目 #{entry['id']}。这是一个过时的数据，将直接删除。"
                         )
+                        # 直接从数据库中删除这个过时的条目
+                        cursor.execute(
+                            "DELETE FROM pending_entries WHERE id = ?", (entry["id"],)
+                        )
+                        conn.commit()
+                        log.info(f"已删除过时的待审核条目 #{entry['id']}。")
                         continue
 
                     if not isinstance(channel, discord.abc.Messageable):

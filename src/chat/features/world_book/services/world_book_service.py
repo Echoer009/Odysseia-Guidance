@@ -1,6 +1,5 @@
 import logging
 from typing import Optional, List, Dict, Any
-import sqlite3
 import json
 import os
 
@@ -29,75 +28,6 @@ class WorldBookService:
     def __init__(self, gemini_svc: GeminiService):
         self.gemini_service = gemini_svc
         log.info("WorldBookService (ParadeDB Hybrid Search version) 初始化完成。")
-
-    def _get_db_connection(self):
-        """建立并返回一个新的 SQLite 数据库连接。"""
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            return conn
-        except sqlite3.Error as e:
-            log.error(f"连接到世界书数据库 '{DB_PATH}' 失败: {e}", exc_info=True)
-            return None
-
-    def get_profile_by_discord_id(self, discord_id: str) -> Optional[Dict[str, Any]]:
-        """
-        根据 Discord 数字 ID 精确查找社区成员的档案。
-
-        Args:
-            discord_id: 用户的 Discord 数字 ID (字符串格式)。
-
-        Returns:
-            如果找到匹配的成员，则返回该成员的完整条目字典，否则返回 None。
-        """
-        if not discord_id:
-            return None
-
-        conn = self._get_db_connection()
-        if not conn:
-            return None
-
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM community_members WHERE discord_number_id = ?",
-                (str(discord_id),),
-            )
-            member_row = cursor.fetchone()
-
-            if not member_row:
-                return None
-
-            member_dict = dict(member_row)
-            log.debug(
-                f"成功通过 Discord ID '{discord_id}' 找到了社区成员 '{member_dict.get('id')}' 的档案。"
-            )
-            log.debug(f"数据库原始数据 (member_row): {member_row}")
-
-            # 获取关联的昵称
-            cursor.execute(
-                "SELECT nickname FROM member_discord_nicknames WHERE member_id = ?",
-                (member_dict["id"],),
-            )
-            nicknames = [row["nickname"] for row in cursor.fetchall()]
-            member_dict["discord_nickname"] = nicknames
-
-            # 解析 content_json
-            if member_dict.get("content_json"):
-                member_dict["content"] = json.loads(member_dict["content_json"])
-                del member_dict["content_json"]
-
-            log.debug(f"解析后的用户档案 (member_dict): {member_dict}")
-            return member_dict
-        except sqlite3.Error as e:
-            log.error(
-                f"通过 Discord ID '{discord_id}' 查找档案时发生数据库错误: {e}",
-                exc_info=True,
-            )
-            return None
-        finally:
-            if conn:
-                conn.close()
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
@@ -146,48 +76,14 @@ class WorldBookService:
                 history_for_rag.pop()
                 log.debug("已为RAG总结移除系统注入的上下文提示。")
 
-        # --- RAG 查询总结 ---
-        if config.RAG_QUERY_REWRITING_ENABLED:
-            # 1. 准备对话历史，最多取最近3轮
-            history_for_summary = (
-                history_for_rag[-3:] if len(history_for_rag) > 3 else history_for_rag
-            )
-            log.info(
-                f"准备为RAG总结查询。原始查询: '{latest_query}', 使用对话历史轮数: {len(history_for_summary)}"
-            )
+        # RAG 查询重写功能已根据用户要求移除，直接使用清理后的原始查询
+        from src.chat.services.regex_service import regex_service
+        import re
 
-            # 2. 调用总结服务
-            summarized_query = await self.gemini_service.summarize_for_rag(
-                latest_query=latest_query,
-                user_name=user_name,
-                conversation_history=history_for_summary,
-            )
-
-            # 3. 处理总结结果
-            if summarized_query:
-                log.info(f"RAG 总结查询成功: '{summarized_query}'")
-            else:
-                # 如果总结失败，回退到使用清理后的原始查询
-                from src.chat.services.regex_service import regex_service
-                import re
-
-                clean_query = regex_service.clean_user_input(latest_query)
-                # 进一步移除 Discord 提及
-                summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
-                log.warning(
-                    f"RAG 查询总结失败，将回退到使用清理后的原始查询: '{summarized_query}'"
-                )
-        else:
-            # 如果禁用了查询重写，直接使用清理后的原始查询
-            from src.chat.services.regex_service import regex_service
-            import re
-
-            clean_query = regex_service.clean_user_input(latest_query)
-            # 进一步移除 Discord 提及
-            summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
-            log.info(
-                f"RAG查询重写功能已禁用，使用清理后的原始查询: '{summarized_query}'"
-            )
+        clean_query = regex_service.clean_user_input(latest_query)
+        # 进一步移除 Discord 提及
+        summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
+        log.info(f"原始查询: '{summarized_query}'")
 
         # 4. 确保查询字符串不为空
         if not summarized_query.strip():
@@ -326,9 +222,66 @@ class WorldBookService:
                 conn.rollback()
             return False
         finally:
-            if cursor:
+            if "cursor" in locals() and cursor:
                 cursor.close()
             # 注意：不在这里关闭连接，因为连接由 RAG 服务管理
+
+    async def get_profile_by_discord_id(
+        self, discord_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        通过 Discord ID 从 ParadeDB 的 community.member_profiles 表中获取用户档案。
+
+        Args:
+            discord_id: 用户的 Discord ID。
+
+        Returns:
+            一个包含用户档案数据的字典，如果找不到则返回 None。
+        """
+        log.info(f"正在从 ParadeDB 查询 discord_id 为 {discord_id} 的用户档案...")
+        conn = incremental_rag_service._get_parade_connection()
+        if not conn:
+            log.error("ParadeDB 连接不可用，无法获取用户档案。")
+            return None
+
+        try:
+            # 使用异步游标
+            from psycopg2.extras import RealDictCursor
+            import psycopg2
+
+            # 创建一个新的游标
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        discord_id,
+                        title,
+                        personal_summary,
+                        source_metadata
+                    FROM community.member_profiles
+                    WHERE discord_id = %s
+                    """,
+                    (str(discord_id),),  # 查询参数需要是元组
+                )
+                profile = cursor.fetchone()
+
+            if profile:
+                log.info(f"成功找到 discord_id {discord_id} 的用户档案。")
+                # 将 RealDictRow 转换为普通字典以便序列化
+                return dict(profile)
+            else:
+                log.warning(
+                    f"在 ParadeDB 中未找到 discord_id {discord_id} 的用户档案。"
+                )
+                return None
+
+        except psycopg2.Error as e:
+            log.error(f"从 ParadeDB 查询用户档案时发生数据库错误: {e}", exc_info=True)
+            return None
+        except Exception as e:
+            log.error(f"查询用户档案时发生未知错误: {e}", exc_info=True)
+            return None
+        # 注意：我们不在这里关闭连接或游标，假设连接池会管理它
 
 
 # 使用已导入的全局服务实例来创建 WorldBookService 的单例

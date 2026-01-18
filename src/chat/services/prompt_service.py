@@ -189,28 +189,44 @@ class PromptService:
 
         user_profile_prompt = ""
         if user_profile_data:
-            profile_content = user_profile_data.get("content", {})
-            if isinstance(profile_content, dict):
-                # 定义不应透露给 AI 的内部字段
-                EXCLUDED_FIELDS = [
-                    "discord_id",
-                    "discord_number_id",
-                    "uploaded_by",
-                    "uploaded_by_name",
-                    "update_target_id",
-                    "purchase_info",
-                    "item_id",
-                    "price",
-                    "attitude",
-                ]
-                profile_details = [
-                    f"{key}: {value}"
-                    for key, value in profile_content.items()
-                    if value and value != "未提供" and key not in EXCLUDED_FIELDS
-                ]
-                if profile_details:
-                    # 移除内部重复的标题，信息将在外部标题下统一呈现
-                    user_profile_prompt = "\n\n" + "\n".join(profile_details)
+            # 1. 优雅地合并数据源：优先使用顶层数据，然后是嵌套的JSON数据
+            source_data = {}
+            source_metadata = user_profile_data.get("source_metadata")
+            if isinstance(source_metadata, dict):
+                content_json_str = source_metadata.get("content_json")
+                if isinstance(content_json_str, str):
+                    try:
+                        source_data.update(json.loads(content_json_str))
+                    except json.JSONDecodeError:
+                        log.warning(
+                            f"解析用户档案 'content_json' 失败: {content_json_str}"
+                        )
+
+            # 顶层数据覆盖JSON数据，确保最终一致性
+            source_data.update(user_profile_data)
+
+            # 2. 定义字段映射并提取
+            profile_map = {
+                "名称": source_data.get("title") or source_data.get("name"),
+                "个性": source_data.get("personality"),
+                "背景": source_data.get("background"),
+                "偏好": source_data.get("preferences"),
+            }
+
+            # 3. 格式化并清理
+            profile_details = []
+            for display_name, value in profile_map.items():
+                if not value or value == "未提供":
+                    continue
+
+                # 对背景字段进行特殊清理
+                if display_name == "背景" and isinstance(value, str):
+                    value = value.replace("\\n", "\n").replace('\\"', '"').strip()
+
+                profile_details.append(f"{display_name}: {value}")
+
+            if profile_details:
+                user_profile_prompt = "\n" + "\n".join(profile_details)
 
         if affection_prompt or user_profile_prompt:
             # 如果存在好感度信息，为其添加“态度”标签并换行；否则为空字符串
