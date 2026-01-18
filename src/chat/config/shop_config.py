@@ -15,6 +15,7 @@ from src.chat.features.odysseia_coin.service.coin_service import (
     ENABLE_THREAD_REPLIES_EFFECT_ID,
     SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
     CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
+    VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID,
 )
 
 SHOP_ITEMS = [
@@ -66,6 +67,14 @@ SHOP_ITEMS = [
         "物品-给自己",
         "self",
         CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
+    ),
+    (
+        "午后闲谈",
+        "阳光正好，不如和她闲聊一会儿？她会告诉你，在你们相处的这段时间里，她悄悄记下的，关于你的那些印象与回忆。",
+        50,
+        "物品-给自己",
+        "self",
+        VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID,
     ),
     (
         "知识纸条",

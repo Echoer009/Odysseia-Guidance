@@ -527,6 +527,7 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
             new_balance,
             should_show_modal,
             should_generate_gift_response,
+            embed_data,
         ) = await coin_service.purchase_item(
             interaction.user.id,
             interaction.guild.id if interaction.guild else 0,
@@ -534,7 +535,14 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
         )
 
         final_message = message
-        if success and should_generate_gift_response:
+        if success and embed_data:
+            embed = discord.Embed(
+                title=embed_data["title"],
+                description=embed_data["description"],
+                color=discord.Color.blue(),
+            )
+            await interaction.followup.send(message, embed=embed, ephemeral=True)
+        elif success and should_generate_gift_response:
             gift_service = GiftService(gemini_service, affection_service)
             try:
                 ai_response = await gift_service.generate_gift_response(
@@ -546,8 +554,9 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
                 final_message += (
                     "\n\n（AI 在想感谢语时遇到了点小麻烦，但你的心意已经收到了！）"
                 )
-
-        await interaction.followup.send(final_message, ephemeral=True)
+            await interaction.followup.send(final_message, ephemeral=True)
+        else:
+            await interaction.followup.send(final_message, ephemeral=True)
 
         if success:
             self.view.balance = new_balance

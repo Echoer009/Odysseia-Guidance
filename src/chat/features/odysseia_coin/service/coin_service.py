@@ -18,6 +18,7 @@ ENABLE_THREAD_COMMENTOR_EFFECT_ID = "enable_thread_commentor"
 ENABLE_THREAD_REPLIES_EFFECT_ID = "enable_thread_replies"
 SELL_BODY_EVENT_SUBMISSION_EFFECT_ID = "submit_sell_body_event"
 CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID = "clear_personal_memory"
+VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID = "view_personal_memory"
 
 
 class CoinService:
@@ -227,14 +228,14 @@ class CoinService:
 
     async def purchase_item(
         self, user_id: int, guild_id: int, item_id: int, quantity: int = 1
-    ) -> tuple[bool, str, Optional[int], bool, bool]:
+    ) -> tuple[bool, str, Optional[int], bool, bool, Optional[dict]]:
         """
         处理用户购买商品的逻辑。
-        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, should_generate_gift_response: bool)。
+        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, should_generate_gift_response: bool, embed_data: Optional[dict])。
         """
         item = await self.get_item_by_id(item_id)
         if not item:
-            return False, "找不到该商品。", None, False, False
+            return False, "找不到该商品。", None, False, False, None
 
         total_cost = item["price"] * quantity
         current_balance = await self.get_balance(user_id)
@@ -246,6 +247,7 @@ class CoinService:
                 None,
                 False,
                 False,
+                None,
             )
 
         # 扣款并记录（仅当费用大于0时）
@@ -254,7 +256,7 @@ class CoinService:
             reason = f"购买 {quantity}x {item['name']}"
             new_balance = await self.remove_coins(user_id, total_cost, reason)
             if new_balance is None:
-                return False, "购买失败，无法扣除类脑币。", None, False, False
+                return False, "购买失败，无法扣除类脑币。", None, False, False, None
 
         # 根据物品目标执行不同操作
         item_target = item["target"]
@@ -272,7 +274,7 @@ class CoinService:
 
             if gift_success:
                 # 购买成功，返回空消息，并标记需要生成AI回应
-                return True, "", new_balance, False, True
+                return True, "", new_balance, False, True, None
             else:
                 # 送礼失败，回滚交易
                 await self.add_coins(
@@ -281,7 +283,7 @@ class CoinService:
                 log.warning(
                     f"用户 {user_id} 送礼失败，已返还 {total_cost} 类脑币。原因: {gift_message}"
                 )
-                return False, gift_message, current_balance, False, False
+                return False, gift_message, current_balance, False, False, None
 
         elif item_target == "self" and item_effect:
             # --- 给自己用且有立即效果的物品 ---
@@ -298,6 +300,26 @@ class CoinService:
                     new_balance,
                     False,
                     False,
+                    None,
+                )
+            elif item_effect == VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID:
+                # 查看用户的个人记忆
+                from src.chat.features.personal_memory.services.personal_memory_service import (
+                    personal_memory_service,
+                )
+
+                summary = await personal_memory_service.get_memory_summary(user_id)
+                embed_data = {
+                    "title": "午后闲谈",
+                    "description": f"经过一次愉快的闲谈，你得知了在她心中，你的印象是这样的：\n\n>>> {summary}",
+                }
+                return (
+                    True,
+                    "你与类脑娘进行了一次成功的“午后闲谈”。",
+                    new_balance,
+                    False,
+                    False,
+                    embed_data,
                 )
             elif item_effect == PERSONAL_MEMORY_ITEM_EFFECT_ID:
                 # 检查用户是否已经拥有个人记忆功能
@@ -315,6 +337,7 @@ class CoinService:
                         new_balance,
                         True,
                         False,
+                        None,
                     )
                 else:
                     return (
@@ -323,6 +346,7 @@ class CoinService:
                         new_balance,
                         True,
                         False,
+                        None,
                     )
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
                 # 购买"知识纸条"商品，需要弹出模态窗口
@@ -332,6 +356,7 @@ class CoinService:
                     new_balance,
                     True,
                     False,
+                    None,
                 )
             elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
                 # 购买"社区成员档案上传"商品，需要弹出模态窗口
@@ -341,6 +366,7 @@ class CoinService:
                     new_balance,
                     True,
                     False,
+                    None,
                 )
             elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
                 # 购买“拉皮条”商品，需要弹出模态窗口
@@ -350,6 +376,7 @@ class CoinService:
                     new_balance,
                     True,
                     False,
+                    None,
                 )
             elif item_effect == DISABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“枯萎向日葵”，禁用暖贴功能
@@ -360,6 +387,7 @@ class CoinService:
                     new_balance,
                     False,
                     False,
+                    None,
                 )
             elif item_effect == BLOCK_THREAD_REPLIES_EFFECT_ID:
                 query = """
@@ -376,6 +404,7 @@ class CoinService:
                     new_balance,
                     False,
                     False,
+                    None,
                 )
             elif item_effect == ENABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“魔法向日葵”，重新启用暖贴功能
@@ -386,6 +415,7 @@ class CoinService:
                     new_balance,
                     False,
                     False,
+                    None,
                 )
             elif item_effect == ENABLE_THREAD_REPLIES_EFFECT_ID:
                 # 购买“通行许可”，重新启用帖子回复并设置默认CD
@@ -415,6 +445,7 @@ class CoinService:
                     new_balance,
                     True,
                     False,
+                    None,
                 )
             else:
                 # 其他未知效果，暂时先放入背包
@@ -425,6 +456,7 @@ class CoinService:
                     new_balance,
                     False,
                     False,
+                    None,
                 )
         else:
             # --- 普通物品，放入背包 ---
@@ -435,6 +467,7 @@ class CoinService:
                 new_balance,
                 False,
                 False,
+                None,
             )
 
     async def purchase_event_item(
