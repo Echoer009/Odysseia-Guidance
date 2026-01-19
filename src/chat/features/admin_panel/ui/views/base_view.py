@@ -5,6 +5,8 @@ import logging
 import os
 import sqlite3
 from typing import List, Optional, Any, cast, Mapping, Union
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from src import config
 from src.chat.features.admin_panel.services import db_services
@@ -12,9 +14,16 @@ from src.chat.features.admin_panel.ui.modals.utility_modals import JumpToPageMod
 from src.chat.features.world_book.services.incremental_rag_service import (
     incremental_rag_service,
 )
-from src.chat.utils.database import DB_PATH as CHAT_DB_PATH
+from src.chat.utils.database import DB_PATH as CHAT_DB_PATH, get_database_url
+from src.database.models import CommunityMemberProfile, GeneralKnowledgeDocument
 
 log = logging.getLogger(__name__)
+
+# 表名到 SQLAlchemy 模型的映射
+TABLE_TO_MODEL_MAP = {
+    "community.member_profiles": CommunityMemberProfile,
+    "general_knowledge.knowledge_documents": GeneralKnowledgeDocument,
+}
 
 
 class BaseTableView(discord.ui.View):
@@ -230,44 +239,67 @@ class BaseTableView(discord.ui.View):
         confirm_view = discord.ui.View(timeout=60)
 
         async def confirm_callback(interaction: discord.Interaction):
-            conn = self._get_db_connection()
-            if not conn:
-                return await interaction.response.edit_message(
-                    content="数据库连接失败。", view=None
+            if not self.current_table:
+                log.error("delete_item called without a current_table defined.")
+                await interaction.response.edit_message(
+                    content="错误：未指定要操作的表。", view=None
                 )
-            try:
-                cursor = db_services.get_cursor(conn)
-                pk = self._get_primary_key_column()
+                return
 
-                # 根据数据库类型选择正确的参数占位符
-                placeholder = "%s" if self.db_type == "parade" else "?"
-                sql = f"DELETE FROM {self.current_table} WHERE {pk} = {placeholder}"
+            model_class = TABLE_TO_MODEL_MAP.get(self.current_table)
 
-                cursor.execute(sql, (item_id,))
-
-                conn.commit()
-                log.info(
-                    f"管理员 {interaction.user.display_name} 删除了表 '{self.current_table}' 的记录 ID {item_id}。"
+            if not model_class:
+                log.warning(
+                    f"删除操作被阻止，因为表 '{self.current_table}' 没有在ORM删除映射中定义。"
                 )
                 await interaction.response.edit_message(
-                    content=f"🗑️ 记录 `#{item_id}` 已被成功删除。", view=None
+                    content=f"错误：表 `{self.current_table}` 不支持ORM删除操作。",
+                    view=None,
                 )
+                return
 
-                # RAG 删除
-                await incremental_rag_service.delete_entry(item_id)
-                log.info(f"条目 {item_id} 的向量已成功删除。")
+            # --- 通用ORM删除逻辑 ---
+            DATABASE_URL = get_database_url(sync=True)
+            engine = create_engine(DATABASE_URL)
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            session = SessionLocal()
+            try:
+                item_to_delete = session.get(model_class, int(item_id))
+                if item_to_delete:
+                    session.delete(item_to_delete)
+                    session.commit()
+                    log.info(
+                        f"管理员 {interaction.user.display_name} 删除了表 '{self.current_table}' 的记录 ID {item_id} (ORM Path)。"
+                    )
 
-                self.view_mode = "list"
-                await self.update_view()
+                    # --- 重新加入向量删除逻辑 ---
+                    try:
+                        await incremental_rag_service.delete_entry(item_id)
+                        log.info(f"条目 {item_id} 的关联向量已从 RAG 中删除。")
+                    except Exception as e:
+                        log.error(
+                            f"删除条目 {item_id} 的向量时出错: {e}", exc_info=True
+                        )
+                        # 注意：即使向量删除失败，主记录也已删除，这里只记录错误。
 
+                    await interaction.response.edit_message(
+                        content=f"🗑️ 记录 `#{item_id}` 已被成功删除。", view=None
+                    )
+                    self.view_mode = "list"
+                    await self.update_view()
+                else:
+                    await interaction.response.edit_message(
+                        content=f"错误：在表 `{self.current_table}` 中找不到ID为 {item_id} 的记录。",
+                        view=None,
+                    )
             except Exception as e:
-                log.error(f"删除记录失败: {e}", exc_info=True)
+                session.rollback()
+                log.error(f"ORM删除记录失败: {e}", exc_info=True)
                 await interaction.response.edit_message(
                     content=f"删除失败: {e}", view=None
                 )
             finally:
-                if conn:
-                    conn.close()
+                session.close()
 
         async def cancel_callback(interaction: discord.Interaction):
             await interaction.response.edit_message(

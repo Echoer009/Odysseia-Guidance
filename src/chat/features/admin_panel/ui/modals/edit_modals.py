@@ -52,7 +52,7 @@ class EditMemoryModal(discord.ui.Modal):
         new_summary = self.summary_input.value.strip()
 
         try:
-            await personal_memory_service.update_memory_summary(
+            await personal_memory_service.update_summary_manually(
                 self.user_id, new_summary
             )
             log.info(

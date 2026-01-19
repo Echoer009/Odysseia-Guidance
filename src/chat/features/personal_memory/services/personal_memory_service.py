@@ -135,32 +135,55 @@ class PersonalMemoryService:
                 log.debug(f"在 ParadeDB 中未找到用户 {user_id} 的摘要。")
                 return "该用户当前没有个人记忆摘要。"
 
+    async def update_summary_manually(self, user_id: int, new_summary: str):
+        """
+        仅手动更新用户的个人记忆摘要，不影响计数或历史记录。
+        主要用于管理员手动编辑。
+        """
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                await self._update_summary(session, user_id, new_summary)
+        log.info(f"为用户 {user_id} 手动更新了记忆摘要。")
+
+    async def _update_summary(self, session, user_id: int, new_summary: Optional[str]):
+        """私有方法：只更新摘要。"""
+        stmt = (
+            update(CommunityMemberProfile)
+            .where(CommunityMemberProfile.discord_id == str(user_id))
+            .values(personal_summary=new_summary)
+        )
+        await session.execute(stmt)
+
+    async def _reset_history_and_count(self, session, user_id: int):
+        """私有方法：只重置计数和历史。"""
+        stmt = (
+            update(CommunityMemberProfile)
+            .where(CommunityMemberProfile.discord_id == str(user_id))
+            .values(
+                personal_message_count=0,
+                history=[],
+            )
+        )
+        await session.execute(stmt)
+
     async def update_summary_and_reset_history(
         self, user_id: int, new_summary: Optional[str]
     ):
         """
         在 ParadeDB 中更新摘要，同时重置个人消息计数和对话历史。
+        (重构后，此函数调用两个独立的私有方法)
         """
         async with AsyncSessionLocal() as session:
             async with session.begin():
-                stmt = (
-                    update(CommunityMemberProfile)
-                    .where(CommunityMemberProfile.discord_id == str(user_id))
-                    .values(
-                        personal_summary=new_summary,
-                        personal_message_count=0,
-                        history=[],  # 清空历史
-                    )
-                )
-                await session.execute(stmt)
-                log.info(f"为用户 {user_id} 更新了记忆摘要，并重置了计数和历史。")
+                await self._update_summary(session, user_id, new_summary)
+                await self._reset_history_and_count(session, user_id)
+        log.info(f"为用户 {user_id} 更新了记忆摘要，并重置了计数和历史。")
 
     async def clear_personal_memory(self, user_id: int):
         """
         清除指定用户的个人记忆摘要、对话历史和消息计数。
         """
         log.info(f"正在为用户 {user_id} 清除个人记忆...")
-        # 传入None和空字符串都可以,数据库有做处理
         await self.update_summary_and_reset_history(user_id, None)
         log.info(f"用户 {user_id} 的个人记忆已清除。")
 

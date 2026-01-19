@@ -139,7 +139,9 @@ class GeneralKnowledgeDocument(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # 与分块的一对多关系
-    chunks = relationship("GeneralKnowledgeChunk", back_populates="document")
+    chunks = relationship(
+        "GeneralKnowledgeChunk", back_populates="document", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<GeneralKnowledgeDocument(id={self.id}, title='{self.title}')>"
@@ -229,7 +231,9 @@ class CommunityMemberProfile(Base):
     )
 
     # 与分块的一对多关系
-    chunks = relationship("CommunityMemberChunk", back_populates="profile")
+    chunks = relationship(
+        "CommunityMemberChunk", back_populates="profile", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<CommunityMemberProfile(id={self.id}, discord_id='{self.discord_id}')>"
