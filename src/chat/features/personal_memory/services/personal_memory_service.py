@@ -187,6 +187,26 @@ class PersonalMemoryService:
         await self.update_summary_and_reset_history(user_id, None)
         log.info(f"用户 {user_id} 的个人记忆已清除。")
 
+    async def reset_memory_and_delete_history(self, user_id: int):
+        """
+        删除对话记录并重置记忆。
+        这会清除用户的个人记忆摘要，并删除所有相关的对话历史记录。
+        """
+        log.info(f"正在为用户 {user_id} 重置记忆并删除对话历史...")
+        await self.update_summary_and_reset_history(user_id, None)
+        log.info(f"用户 {user_id} 的记忆和对话历史已清除。")
+
+    async def delete_conversation_history(self, user_id: int):
+        """
+        单纯删除对话记录。
+        这仅删除指定用户的对话历史记录和重置消息计数，不影响其个人记忆摘要。
+        """
+        log.info(f"正在为用户 {user_id} 删除对话历史...")
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                await self._reset_history_and_count(session, user_id)
+        log.info(f"用户 {user_id} 的对话历史已删除。")
+
 
 # 单例实例
 personal_memory_service = PersonalMemoryService()

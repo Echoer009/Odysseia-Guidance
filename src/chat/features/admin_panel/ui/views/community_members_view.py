@@ -57,11 +57,25 @@ class CommunityMembersView(BaseTableView):
 
     def _add_detail_view_components(self):
         super()._add_detail_view_components()
+        # Row 1
         self.view_memory_button = discord.ui.Button(
-            label="查看/编辑记忆", emoji="🧠", style=discord.ButtonStyle.success
+            label="查看/编辑记忆", emoji="🧠", style=discord.ButtonStyle.success, row=1
         )
         self.view_memory_button.callback = self.view_memory
         self.add_item(self.view_memory_button)
+
+        # Row 2
+        self.reset_memory_button = discord.ui.Button(
+            label="重置记忆与历史", emoji="🔄", style=discord.ButtonStyle.danger, row=2
+        )
+        self.reset_memory_button.callback = self.confirm_reset_memory
+        self.add_item(self.reset_memory_button)
+
+        self.delete_history_button = discord.ui.Button(
+            label="仅删除历史", emoji="🗑️", style=discord.ButtonStyle.secondary, row=2
+        )
+        self.delete_history_button.callback = self.confirm_delete_history
+        self.add_item(self.delete_history_button)
 
     async def search_user(self, interaction: discord.Interaction):
         modal = SearchUserModal(self)
@@ -108,6 +122,129 @@ class CommunityMembersView(BaseTableView):
             await interaction.response.send_message(
                 f"处理请求时发生错误: {e}", ephemeral=True
             )
+
+    def _get_current_user_id_and_name(
+        self,
+    ) -> tuple[Optional[int], Optional[str], Optional[str]]:
+        if not self.current_item_id:
+            return None, None, None
+
+        current_item = self._get_item_by_id(self.current_item_id)
+        if not current_item or "discord_id" not in current_item.keys():
+            return None, None, None
+
+        discord_id_str = current_item["discord_id"]
+        if not discord_id_str:
+            return None, None, None
+
+        try:
+            user_id = int(discord_id_str)
+            member_name = (
+                self._get_entry_title(dict(current_item)) or f"ID: {discord_id_str}"
+            ).replace("社区成员档案 - ", "")
+            return user_id, member_name, discord_id_str
+        except (ValueError, TypeError):
+            return None, None, None
+
+    async def confirm_reset_memory(self, interaction: discord.Interaction):
+        user_id, member_name, discord_id = self._get_current_user_id_and_name()
+
+        if not user_id or not member_name:
+            await interaction.response.send_message(
+                f"无法从此档案中获取有效的 Discord ID: `{discord_id}`", ephemeral=True
+            )
+            return
+
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                await personal_memory_service.reset_memory_and_delete_history(user_id)
+                log.info(
+                    f"管理员 {interaction.user.display_name} 重置了用户 {member_name} ({user_id}) 的记忆和历史。"
+                )
+                await interaction.followup.send(
+                    f"✅ 已成功重置用户 **{member_name}** 的记忆和对话历史。",
+                    ephemeral=True,
+                )
+                # Disable buttons on the original message
+                for item in confirm_view.children:
+                    if isinstance(item, discord.ui.Button):
+                        item.disabled = True
+                await interaction.edit_original_response(view=confirm_view)
+            except Exception as e:
+                log.error(f"重置用户 {user_id} 记忆失败: {e}", exc_info=True)
+                await interaction.followup.send(f"❌ 重置失败: {e}", ephemeral=True)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(
+            label="确认重置", style=discord.ButtonStyle.danger
+        )
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.response.send_message(
+            f"**⚠️ 确认操作**\n你确定要永久重置用户 **{member_name}** 的记忆和对话历史吗？此操作无法撤销。",
+            view=confirm_view,
+            ephemeral=True,
+        )
+
+    async def confirm_delete_history(self, interaction: discord.Interaction):
+        user_id, member_name, discord_id = self._get_current_user_id_and_name()
+
+        if not user_id or not member_name:
+            await interaction.response.send_message(
+                f"无法从此档案中获取有效的 Discord ID: `{discord_id}`", ephemeral=True
+            )
+            return
+
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                await personal_memory_service.delete_conversation_history(user_id)
+                log.info(
+                    f"管理员 {interaction.user.display_name} 删除了用户 {member_name} ({user_id}) 的历史。"
+                )
+                await interaction.followup.send(
+                    f"✅ 已成功删除用户 **{member_name}** 的对话历史。", ephemeral=True
+                )
+                for item in confirm_view.children:
+                    if isinstance(item, discord.ui.Button):
+                        item.disabled = True
+                await interaction.edit_original_response(view=confirm_view)
+            except Exception as e:
+                log.error(f"删除用户 {user_id} 历史失败: {e}", exc_info=True)
+                await interaction.followup.send(f"❌ 删除失败: {e}", ephemeral=True)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(
+            label="确认删除", style=discord.ButtonStyle.danger
+        )
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.response.send_message(
+            f"**⚠️ 确认操作**\n你确定要永久删除用户 **{member_name}** 的对话历史吗？记忆摘要将不受影响。此操作无法撤销。",
+            view=confirm_view,
+            ephemeral=True,
+        )
 
     async def edit_item(self, interaction: discord.Interaction):
         if not self.current_item_id:
