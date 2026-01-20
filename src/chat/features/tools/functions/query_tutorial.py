@@ -9,16 +9,15 @@ log = logging.getLogger(__name__)
 
 async def query_tutorial_knowledge_base(query: str, **kwargs) -> str:
     """
-    从专业知识库中获取关于 SillyTavern (酒馆)、公益站和类脑社区的权威教程与解答。
+    专用于查询 SillyTavern(酒馆)、类脑社区及公益站的**教程、指南与报错解决方案**。
 
     触发关键词:
     - **核心**: 酒馆, SillyTavern, 类脑, 公益站, 角色卡, 预设, 世界书, 宏
     - **技术**: 安装, 更新, 备份, 部署, 报错, API, Gemini, Claude, DeepSeek, 代理, Docker, Git, 免费, 公益站
-    - **社区**: 规则, 频道, 答疑, 涩图, 等级。
+    - **社区**: 规则, 频道, 答疑。
 
-    当问题包含上述关键词，或与这些主题高度相关时，优先使用此工具。
-    **备用调用**: 如果问题不含明确关键词，但你对答案不确定且主题可能相关，也应调用此工具核实。
-    参数 query 应为用户的原始问题。
+    **注意**: 日常问题无需使用。
+    参数 `query` 应为用户的原始问题。
     """
     log.info(f"工具 'query_tutorial_knowledge_base' 被调用，查询: '{query}'")
 

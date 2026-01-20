@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 from src.chat.features.forum_search.services.forum_search_service import (
@@ -21,7 +21,7 @@ class ForumSearchFilters(BaseModel):
         description="论坛频道的名称，例如: '世界书', '教程', '男性向'等。",
     )
     author_id: Optional[Union[str, List[str]]] = Field(
-        None, description="作者的 Discord ID (纯数字) 或 @mention 字符串。"
+        None, description="作者的 Discord ID (纯数字) "
     )
     start_date: Optional[str] = Field(None, description="开始日期 (格式: YYYY-MM-DD)。")
     end_date: Optional[str] = Field(None, description="结束日期 (格式: YYYY-MM-DD)。")
@@ -38,9 +38,10 @@ async def search_forum_threads(
     在社区论坛中搜索帖子，可根据关键词、作者、频道或日期进行精确查找。
 
     [使用示例]
-    - 用户说: "帮我找找关于'猫猫'的帖子" -> 调用时: `query="猫猫"`
-    - 用户说: "看看<@12345>最近发了什么" -> 调用时: `filters={"author_id": "12345"}`
-    - 用户说: "我想看'男性向'频道里最新的内容" -> 调用时: `filters={"category_name": "男性向"}`
+    - "帮我找找关于'女仆'的帖子" -> `query="女仆"`
+    - "看看<@12345>最近发了什么" -> `filters={"author_id": "12345"}`
+    - "我想看'男性向'频道里最新的内容" -> `filters={"category_name": "男性向"}`
+    - "有没有Gemini预设推荐？" -> `query="Gemini预设"`, `filters={"category_name": ["预设"]}`
 
     [返回格式与要求]
     - 函数返回一个字符串列表，每个字符串的格式为：`'频道名称 > 帖子链接'`。
