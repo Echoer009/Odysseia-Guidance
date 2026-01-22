@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 async def query_tutorial_knowledge_base(query: str, **kwargs) -> str:
     """
     专用于查询 SillyTavern(酒馆)、类脑社区及公益站的**教程、指南与报错解决方案**。
+    如果知识库没有相关内容，**必须**明确回答“我不知道”，**禁止**自行回答。
 
     触发关键词:
     - **核心**: 酒馆, SillyTavern, 类脑, 公益站, 角色卡, 预设, 世界书, 宏

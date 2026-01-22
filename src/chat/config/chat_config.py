@@ -116,6 +116,10 @@ TUTORIAL_RAG_CONFIG = {
     "MAX_PARENT_DOCS": 3,  # 最终返回给AI的父文档最大数量
 }
 
+# --- 工具专属配置 ---
+# 调用教程搜索工具后，在回复末尾追加的后缀
+TUTORIAL_SEARCH_SUFFIX = "\n\n> 虽然我努力学习了，但教程的内容可能不是最新的哦！ 如果我的回答解决不了你的问题，可以来https://discord.com/channels/1134557553011998840/1337107956499615744频道找答疑区的大佬们问问！"
+
 # --- 世界之书 RAG 配置 ---
 WORLD_BOOK_RAG_CONFIG = {
     "TOP_K_VECTOR": 20,

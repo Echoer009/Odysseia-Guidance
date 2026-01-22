@@ -15,6 +15,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.config import chat_config
 from src.chat.config.chat_config import DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
@@ -228,6 +229,15 @@ class ChatService:
 
             # 5. --- 后处理与格式化 ---
             final_response = self._format_ai_response(ai_response)
+
+            # --- 新增：为特定工具调用添加后缀 ---
+            if (
+                gemini_service.last_called_tools
+                and "query_tutorial_knowledge_base" in gemini_service.last_called_tools
+            ):
+                final_response += chat_config.TUTORIAL_SEARCH_SUFFIX
+                # 清空列表，避免影响下一次对话
+                gemini_service.last_called_tools = []
 
             # 6. --- 异步执行后续任务（不阻塞回复） ---
             # 此处现在只应包含不影响核心回复流程的日志记录等任务

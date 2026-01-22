@@ -309,6 +309,7 @@ class GeminiService:
         log.info("Discord Bot 实例已成功注入 GeminiService。")
         # 关键：同时将 bot 实例注入到 ToolService 中
         self.tool_service.bot = bot
+        self.last_called_tools: List[str] = []
         log.info("Discord Bot 实例已成功注入 ToolService。")
 
     def _create_client_with_key(self, api_key: str):
@@ -1050,6 +1051,7 @@ class GeminiService:
 
             if i == max_calls - 1:
                 log.warning("已达到最大工具调用限制，流程终止。")
+                self.last_called_tools = called_tool_names
                 return "哎呀，我好像陷入了一个复杂的思考循环里，我们换个话题聊聊吧！"
 
         if response and response.parts:
@@ -1108,9 +1110,11 @@ class GeminiService:
                     log.info("  - 未调用任何工具。")
                 log.info("--------------------------")
 
+                self.last_called_tools = called_tool_names
                 return formatted_response
 
-        elif (
+        self.last_called_tools = called_tool_names
+        if (
             response
             and response.prompt_feedback
             and response.prompt_feedback.block_reason
