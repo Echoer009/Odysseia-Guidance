@@ -23,10 +23,9 @@ class PersonalMemoryService:
         核心入口：更新对话历史和计数，并在达到阈值时触发总结。
         所有数据库操作都在ParadeDB中完成。
         """
-        should_summarize = False
+        history_to_summarize = None
         async with AsyncSessionLocal() as session:
             async with session.begin():
-                # 使用 SELECT ... FOR UPDATE 锁定行，确保事务安全
                 stmt = (
                     select(CommunityMemberProfile)
                     .where(CommunityMemberProfile.discord_id == str(user_id))
@@ -36,13 +35,9 @@ class PersonalMemoryService:
                 profile = result.scalars().first()
 
                 if not profile:
-                    log.warning(
-                        f"用户 {user_id} 在ParadeDB中没有档案，无法记录个人记忆。"
-                    )
+                    log.warning(f"用户 {user_id} 没有个人档案，无法记录记忆。")
                     return
 
-                # 更新计数和历史
-                # 使用 getattr 和 setattr 明确处理类型，以消除 Pylance 警告
                 current_count = getattr(profile, "personal_message_count", 0)
                 new_count = current_count + 1
                 setattr(profile, "personal_message_count", new_count)
@@ -50,44 +45,33 @@ class PersonalMemoryService:
                 new_turn = {"role": "user", "parts": [user_content]}
                 new_model_turn = {"role": "model", "parts": [ai_response]}
 
-                log.info(
-                    f"用户 {user_id} 的新对话轮次将被添加到历史记录: {user_name}: '{user_content}', 类脑娘: '{ai_response}'"
-                )
-
                 current_history = getattr(profile, "history", [])
                 new_history = list(current_history or [])
                 new_history.extend([new_turn, new_model_turn])
                 setattr(profile, "history", new_history)
 
-                log.debug(f"用户 {user_id} 消息计数更新为: {new_count}")
+                log.debug(f"用户 {user_id} 的消息计数更新为: {new_count}")
 
                 if new_count >= PERSONAL_MEMORY_CONFIG["summary_threshold"]:
-                    should_summarize = True
+                    log.info(f"用户 {user_id} 达到阈值，准备总结。")
+                    history_to_summarize = list(new_history)
+                    setattr(profile, "personal_message_count", 0)
+                    setattr(profile, "history", [])
 
-        # 在主事务之外执行总结，避免长时间锁定
-        if should_summarize:
-            await self._summarize_memory(user_id)
+        if history_to_summarize:
+            await self._summarize_memory(user_id, history_to_summarize)
 
-    async def _summarize_memory(self, user_id: int):
+    async def _summarize_memory(self, user_id: int, conversation_history: list):
         """私有方法：获取历史，生成摘要，并清空计数和历史。"""
-        log.info(f"用户 {user_id} 达到阈值，触发总结。")
+        log.info(f"开始为用户 {user_id} 生成记忆摘要。")
 
         async with AsyncSessionLocal() as session:
-            # 1. 获取需要总结的数据
-            stmt = select(
-                CommunityMemberProfile.personal_summary, CommunityMemberProfile.history
-            ).where(CommunityMemberProfile.discord_id == str(user_id))
+            stmt = select(CommunityMemberProfile.personal_summary).where(
+                CommunityMemberProfile.discord_id == str(user_id)
+            )
             result = await session.execute(stmt)
-            data = result.first()
+            old_summary = result.scalars().first() or "无"
 
-            if not data or not data.history:
-                log.warning(f"用户 {user_id} 无历史可供总结。")
-                return
-
-            old_summary, conversation_history = data
-            old_summary = old_summary or "无"
-
-        # 2. 格式化对话历史
         dialogue_text = "\n".join(
             f"{'用户' if turn.get('role') == 'user' else 'AI'}: {' '.join(map(str, turn.get('parts', [])))}"
             for turn in conversation_history
