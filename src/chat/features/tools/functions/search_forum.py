@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 class ForumSearchFilters(BaseModel):
     category_name: Optional[Union[str, List[str]]] = Field(
         None,
-        description="论坛频道的名称，例如: '世界书', '教程', '男性向'等。",
+        description="论坛频道的名称。必须是以下列表中的一个或多个: ['世界书', '全性向', '其他区', '制卡工具区', '女性向', '工具区', '插件', '教程', '深渊区', '男性向', '纯净区', '美化', '预设', '️其它工具区']。",
     )
     author_id: Optional[Union[str, List[str]]] = Field(
         None, description="作者的 Discord ID (纯数字) "
