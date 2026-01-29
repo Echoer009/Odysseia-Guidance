@@ -274,7 +274,7 @@ COIN_CONFIG = {
 
 # --- 个人记忆功能 ---
 PERSONAL_MEMORY_CONFIG = {
-    "summary_threshold": 2,  # 触发总结的消息数量阈值 (测试用 5, 原为 50)
+    "summary_threshold": 30,  # 触发总结的消息数量阈值 (测试用 5, 原为 50)
 }
 
 
