@@ -2,9 +2,20 @@
 import os
 import sys
 import json
+import asyncio
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from dotenv import load_dotenv
+
+# --- 动态路径设置 ---
+# 将 'src' 目录添加到 Python 路径中，以便导入 gemini_service
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+
+# --- 延后导入 ---
+# 现在可以安全地导入项目模块了
+from chat.services.gemini_service import gemini_service  # noqa
+from chat.config.chat_config import SUMMARY_MODEL, GEMINI_SUMMARY_GEN_CONFIG  # noqa
+
 
 # --- 配置 ---
 # 从 .env 文件加载环境变量 (如果存在)
@@ -21,6 +32,7 @@ DB_NAME = os.getenv("POSTGRES_DB", "braingirl_db")
 # 构建数据库连接 URL
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 MEMORY_THRESHOLD = 35
+TARGET_MEMORY_COUNT = 30
 
 
 def check_memory_entries():
@@ -165,9 +177,132 @@ def check_user_history(user_id: str):
         print(f"\n发生未知错误：{e}")
 
 
+async def fix_memory_entries():
+    """检查、修复并报告超出阈值的用户记忆"""
+    print("正在以“修复模式”运行...")
+
+    REDUCTION_PROMPT_TEMPLATE = (
+        "任务：你是一个记忆精简机器人。你的唯一目标是将一份过长的用户记忆摘要，严格地压缩到{target_count}条以内。\n\n"
+        "**核心原则:**\n"
+        "1. **识别核心**: 从【过长的记忆摘要】中，识别出最核心、最持久、最能代表用户与类脑娘关系的关键记忆。\n"
+        "2. **无情舍弃**: 大胆地、无情地舍弃那些琐碎、重复、短期或不再重要的信息。你的目标是“精简”，而不是“完整”。\n"
+        "3. **合并同类**: 将性质相似或相关的记忆点合并成一个更概括性的条目。\n\n"
+        "**强制规则 (必须严格遵守):**\n"
+        "1. **总数硬上限**: 最终输出的总条目数**绝对不能超过{target_count}条**。这是不可违反的最高指令。\n"
+        "2. **格式保持**: 严格保持输入摘要中的“长期记忆”和“近期动态”分类，并使用完全相同的Markdown格式输出。\n"
+        "3. **忠于原文**: 不要添加任何【过长的记忆摘要】中没有的新信息或个人解读。只做筛选、合并和精简。\n\n"
+        "**输入:**\n"
+        "【过长的记忆摘要】:\n{long_summary}\n\n"
+        "**输出要求:**\n"
+        "严格按下述Markdown格式输出精简后的记忆，总条目数不得超过{target_count}条。不要包含任何额外解释。\n"
+        "### 长期记忆\n"
+        "- (要点1)\n\n"
+        "### 近期动态\n"
+        "- (要点1)\n"
+    )
+
+    def count_summary_lines(summary: str) -> int:
+        """计算摘要中的记忆条目数"""
+        if not summary:
+            return 0
+        return len(
+            [line for line in summary.split("\n") if line.strip().startswith("-")]
+        )
+
+    try:
+        engine = create_engine(DATABASE_URL)
+
+        # --- 步骤 1: 读取并识别所有需要修复的用户 ---
+        violating_users = []
+        print("正在连接数据库以识别超额用户...")
+        with engine.connect() as connection:
+            query = text("""
+                SELECT discord_id, title, personal_summary
+                FROM community.member_profiles
+                WHERE personal_summary IS NOT NULL AND personal_summary != '';
+            """)
+            all_users = connection.execute(query).fetchall()
+
+            for user in all_users:
+                memory_count = count_summary_lines(user.personal_summary)
+                if memory_count > MEMORY_THRESHOLD:
+                    violating_users.append(
+                        {
+                            "discord_id": user.discord_id,
+                            "title": user.title,
+                            "memory_count": memory_count,
+                            "summary": user.personal_summary,
+                        }
+                    )
+        print("数据读取完成，断开连接。")
+
+        # --- 步骤 2: 逐个处理并更新用户 ---
+        if not violating_users:
+            print(f"\n分析完成：没有用户的记忆总结条目数超过 {MEMORY_THRESHOLD} 条。")
+            return
+
+        print(f"\n发现 {len(violating_users)} 个用户的记忆需要修复。开始处理...")
+        violating_users.sort(key=lambda x: x["memory_count"], reverse=True)
+
+        for i, user_data in enumerate(violating_users):
+            user_id = user_data["discord_id"]
+            old_count = user_data["memory_count"]
+            print(
+                f"\n({i + 1}/{len(violating_users)}) 正在处理用户: {user_data['title']} (ID: {user_id})，当前条数: {old_count}"
+            )
+
+            prompt = REDUCTION_PROMPT_TEMPLATE.format(
+                target_count=TARGET_MEMORY_COUNT, long_summary=user_data["summary"]
+            )
+
+            try:
+                # 调用 AI 生成新摘要
+                new_summary = await gemini_service.generate_simple_response(
+                    prompt=prompt,
+                    generation_config=GEMINI_SUMMARY_GEN_CONFIG,
+                    model_name=SUMMARY_MODEL,
+                )
+
+                if not new_summary:
+                    print(f"  > 错误：AI为用户 {user_id} 返回了空摘要。跳过此用户。")
+                    continue
+
+                new_count = count_summary_lines(new_summary)
+                print(f"  > AI 已生成新摘要，条目数: {new_count}")
+
+                if new_count > TARGET_MEMORY_COUNT:
+                    print(
+                        f"  > 警告：AI压缩后仍有 {new_count} 条，超过目标 {TARGET_MEMORY_COUNT} 条！"
+                    )
+
+                # 为每次更新使用独立的事务
+                update_sql = text("""
+                    UPDATE community.member_profiles
+                    SET personal_summary = :summary
+                    WHERE discord_id = :user_id
+                """)
+                with engine.begin() as connection:  # 开启新的独立连接和事务
+                    connection.execute(
+                        update_sql, {"summary": new_summary, "user_id": user_id}
+                    )
+                print(f"  > 成功更新用户 {user_id} 的数据库记录。")
+
+            except Exception as e:
+                print(f"  > 在处理用户 {user_id} 时出错: {e}")
+
+        print("\n--- 修复任务完成 ---")
+
+    except SQLAlchemyError as e:
+        print(f"\n数据库操作失败：{e}")
+    except Exception as e:
+        print(f"\n发生未知错误：{e}")
+
+
 if __name__ == "__main__":
     # 检查命令行参数
-    if len(sys.argv) > 2 and sys.argv[1] == "--check-history":
+    if len(sys.argv) > 1 and sys.argv[1] == "--fix-memory":
+        asyncio.run(fix_memory_entries())
+    elif len(sys.argv) > 2 and sys.argv[1] == "--check-history":
         user_id_to_check = sys.argv[2]
         check_user_history(user_id_to_check)
     else:

@@ -91,11 +91,18 @@ class PersonalMemoryService:
             old_summary=old_summary, dialogue_history=dialogue_text
         )
 
-        # --- Bug 复现日志 ---
-        log.info(f"--- 开始为用户 {user_id} 生成总结 ---")
-        log.info(f"旧摘要 (Old Summary):\n---\n{old_summary}\n---")
-        log.info(f"对话历史 (Dialogue History):\n---\n{dialogue_text}\n---")
-        # --- 结束日志 ---
+        # --- [MEMORY DEBUGGER] ---
+        def count_summary_lines(summary: str) -> int:
+            return len(
+                [line for line in summary.split("\n") if line.strip().startswith("-")]
+            )
+
+        old_summary_lines = count_summary_lines(old_summary)
+        log.info(f"---[MEMORY DEBUGGER]--- 用户 {user_id} 开始总结 ---")
+        log.info(f"旧摘要行数: {old_summary_lines}")
+        log.info(f"完整的旧摘要:\n{old_summary}")
+        log.info(f"用于总结的对话历史:\n{dialogue_text}")
+        # --- [MEMORY DEBUGGER] ---
 
         new_summary = await gemini_service.generate_simple_response(
             prompt=final_prompt,
@@ -105,10 +112,21 @@ class PersonalMemoryService:
 
         # 4. 将新摘要保存到数据库
         if new_summary:
-            # --- Bug 复现日志 ---
-            log.info(f"AI生成的新摘要 (New Summary):\n---\n{new_summary}\n---")
-            # --- 结束日志 ---
-            # 重构：调用一个只更新摘要的函数，因为历史和计数在调用此函数前已经重置。
+            # --- [MEMORY DEBUGGER] ---
+            new_summary_lines = count_summary_lines(new_summary)
+            log.info(f"---[MEMORY DEBUGGER]--- 用户 {user_id} 总结完毕 ---")
+            log.info(f"新摘要行数: {new_summary_lines} (Prompt要求 <= 30)")
+            if new_summary_lines > 30:
+                log.error("!!!!!!!! MEMORY EXPLOSION DETECTED !!!!!!!!")
+                log.error(
+                    f"用户 {user_id} 的新摘要行数 ({new_summary_lines}) 超过了30条的硬性限制！"
+                )
+                log.error(
+                    f"完整的失控摘要:\n{new_summary}"
+                )  # 使用 ERROR 级别记录失控的摘要
+            else:
+                log.debug(f"完整的新摘要:\n{new_summary}")
+            # --- [MEMORY DEBUGGER] ---
             await self.update_summary_manually(user_id, new_summary)
         else:
             log.error(f"为用户 {user_id} 生成记忆摘要失败，AI 返回空。")
