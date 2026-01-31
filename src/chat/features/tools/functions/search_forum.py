@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 class ForumSearchFilters(BaseModel):
     category_name: Optional[Union[str, List[str]]] = Field(
         None,
-        description="论坛频道的名称。必须是以下列表中的一个或多个: ['世界书', '全性向', '其他区', '制卡工具区', '女性向', '工具区', '插件', '教程', '深渊区', '男性向', '纯净区', '美化', '预设', '️其它工具区']。",
+        description="论坛频道的名称。如果填写,必须是以下列表中的一个或多个: 类脑频道 = ['世界书', '全性向', '其他区', '制卡工具区', '女性向', '工具区', '插件', '教程', '深渊区', '男性向', '纯净区', '美化', '预设', '️其它工具区']。",
     )
     author_id: Optional[Union[str, List[str]]] = Field(
         None, description="作者的 Discord ID (纯数字) "
@@ -35,7 +35,9 @@ async def search_forum_threads(
     **kwargs,
 ) -> List[str]:
     """
-    在社区论坛中搜索帖子，可根据关键词、作者、频道或日期进行精确查找。
+    1.在社区论坛中搜索帖子，可根据关键词、作者、频道或日期进行精确查找。
+    2. **仅在用户明确指定时使用 `filters`**: 只有当用户明确地使用了“频道”、“日期”等词语来限定范围时，才使用 `filters` 参数。
+    3.**允许推断"category_name"**: 但只允许是类脑频道里的频道,绝对禁止其他没有写的频道,例如角色卡
 
     [使用示例]
     - "帮我找找关于'女仆'的帖子" -> `query="女仆"`
