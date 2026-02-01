@@ -1046,7 +1046,7 @@ class GeminiService:
                     log.error(f"序列化工具结果用于日志记录时出错: {e}")
 
             conversation_history.append(
-                types.Content(role="user", parts=tool_result_parts)
+                types.Content(role="tool", parts=tool_result_parts)
             )
 
             if i == max_calls - 1:

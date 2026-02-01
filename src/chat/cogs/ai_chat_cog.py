@@ -5,10 +5,14 @@ from discord.ext import commands
 import logging
 from typing import Optional
 import re
+import io
 
 # 导入新的 Service
 from src.chat.services.chat_service import chat_service
 from src.chat.services.message_processor import message_processor
+from src.chat.services.gemini_service import gemini_service
+from src.chat.features.tools.functions.summarize_channel import text_to_summary_image
+
 
 # 导入上下文服务
 
@@ -92,20 +96,47 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if response_text:
             try:
-                # 检查是否在豁免频道，如果是，则直接回复；否则，检查长度
-                # 检查是否在豁免频道，或当前频道是否为帖子
+                # --- 响应发送逻辑 ---
+                # 动态获取上次调用的工具列表，如果不存在则为空列表
+                last_tools = getattr(gemini_service, "last_called_tools", [])
+
+                # 1. 优先处理长篇总结 -> 图片
+                # 使用DM阈值作为总结长度判断依据，保持一致性
+                if (
+                    self._get_text_length_without_emojis(response_text)
+                    > MESSAGE_SETTINGS["DM_THRESHOLD"]
+                    and "summarize_channel" in last_tools
+                ):
+                    log.info(
+                        f"响应为长篇总结 (length: {len(response_text)}), 尝试转为图片发送。"
+                    )
+                    image_bytes = text_to_summary_image(response_text)
+                    if image_bytes:
+                        with io.BytesIO(image_bytes) as image_file:
+                            await message.reply(
+                                file=discord.File(image_file, "summary.png"),
+                                mention_author=True,
+                            )
+                        # 发送成功后直接返回，不再执行后续逻辑
+                        return
+                    else:
+                        log.error("总结图片生成失败，将作为文本尝试发送。")
+
+                # 2. 如果不是长篇总结，则检查是否在豁免频道或帖子 (常规长消息可直接发送)
                 is_unrestricted = (
                     message.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
                     or isinstance(message.channel, discord.Thread)
                 )
                 if is_unrestricted:
                     await message.reply(response_text, mention_author=True)
-                elif (
+                    return
+
+                # 3. 如果以上都不是，则检查是否为需要发送私信的普通长消息
+                if (
                     self._get_text_length_without_emojis(response_text)
                     > MESSAGE_SETTINGS["DM_THRESHOLD"]
                 ):
                     try:
-                        # 优雅地处理频道类型，避免 Pylance 错误
                         channel_mention = (
                             message.channel.mention
                             if isinstance(
@@ -113,6 +144,7 @@ class AIChatCog(commands.Cog):
                             )
                             else "你们的私信"
                         )
+
                         await message.author.send(
                             f"刚刚在 {channel_mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
                         )
@@ -127,11 +159,15 @@ class AIChatCog(commands.Cog):
                             "字太多啦，我不要刷屏。你的私信又关了，我就不给你讲啦！",
                             mention_author=True,
                         )
-                else:
-                    await message.reply(response_text, mention_author=True)
+                    return
+
+                # 4. 默认情况：直接在频道回复短消息
+                await message.reply(response_text, mention_author=True)
+
             except discord.errors.HTTPException as e:
-                log.warning(f"发送回复失败: {e}")
-                pass  # 如果发送回复失败，则忽略
+                log.warning(f"发送回复时发生HTTP错误: {e}")
+            except Exception as e:
+                log.error(f"发送回复时发生未知错误: {e}", exc_info=True)
 
     async def handle_chat_message(
         self, message: discord.Message, processed_data: dict
