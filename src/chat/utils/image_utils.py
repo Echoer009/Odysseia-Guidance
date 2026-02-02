@@ -21,8 +21,10 @@ def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
     """
     对输入的图片字节数据进行智能预处理和压缩。
     - **如果图片 < 10MB**: 只进行必要的尺寸调整和格式统一，以高质量保存。
-    - **如果图片 >= 10MB**: 执行“尽力压缩”策略，尝试将图片压缩至 4MB 以下。
+    - **如果图片 >= 10MB**: 执行"尽力压缩"策略，尝试将图片压缩至 4MB 以下。
     - **最终检查**: 任何情况下，处理后的图片都不能超过 15MB 的物理上限。
+
+    内存优化：确保所有 BytesIO 缓冲区在使用后立即关闭，防止内存泄漏。
     """
     if not image_bytes:
         raise ValueError("输入的图片字节数据不能为空。")
@@ -30,8 +32,14 @@ def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
     original_byte_size = len(image_bytes)
     log.info(f"开始处理图片，原始大小: {original_byte_size / 1024:.2f} KB。")
 
+    input_buffer = None
+    output_buffer = None
+
     try:
-        with Image.open(io.BytesIO(image_bytes)) as img:
+        # 使用上下文管理器确保输入缓冲区被正确关闭
+        input_buffer = io.BytesIO(image_bytes)
+
+        with Image.open(input_buffer) as img:
             # --- 1. 尺寸调整 (对所有图片都执行) ---
             if img.width > MAX_IMAGE_DIMENSION or img.height > MAX_IMAGE_DIMENSION:
                 log.info(
@@ -55,6 +63,8 @@ def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
                 output_buffer = io.BytesIO()
                 img.save(output_buffer, format="WEBP", quality=HIGH_QUALITY)
                 processed_bytes = output_buffer.getvalue()
+                output_buffer.close()
+                output_buffer = None
             else:
                 # --- 策略B: 大于等于10MB，尽力压缩 ---
                 log.info("图片大于等于10MB，执行迭代压缩。")
@@ -63,6 +73,8 @@ def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
                     output_buffer = io.BytesIO()
                     img.save(output_buffer, format="WEBP", quality=quality)
                     processed_bytes = output_buffer.getvalue()
+                    output_buffer.close()
+                    output_buffer = None
 
                     log.debug(
                         f"尝试使用质量 {quality} 进行压缩，大小为: {len(processed_bytes) / 1024:.2f} KB。"
@@ -97,3 +109,15 @@ def sanitize_image(image_bytes: bytes) -> Tuple[bytes, str]:
     except Exception as e:
         log.error(f"图片处理过程中发生严重错误: {e}", exc_info=True)
         raise
+    finally:
+        # 确保所有缓冲区都被关闭
+        if input_buffer is not None:
+            try:
+                input_buffer.close()
+            except Exception:
+                pass
+        if output_buffer is not None:
+            try:
+                output_buffer.close()
+            except Exception:
+                pass

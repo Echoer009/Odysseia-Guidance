@@ -647,10 +647,27 @@ class GeminiService:
 
         # --- [重构] 针对自定义端点的图片净化 ---
         # 只有在调用自定义端点时才执行此操作，因为官方API可以处理这些图片。
+        # 使用顺序处理策略：一张一张处理，处理完一张释放内存，再处理下一张
         sanitized_images_for_endpoint = []
         if images:
-            log.info(f"检测到 {len(images)} 张图片，将为自定义端点进行净化处理。")
-            for img_data in images:
+            total_images = len(images)
+            max_images = app_config.IMAGE_PROCESSING_CONFIG.get(
+                "MAX_IMAGES_PER_MESSAGE", 9
+            )
+            sequential_processing = app_config.IMAGE_PROCESSING_CONFIG.get(
+                "SEQUENTIAL_PROCESSING", True
+            )
+
+            log.info(f"检测到 {total_images} 张图片，将为自定义端点进行净化处理。")
+
+            # 限制处理的图片数量
+            images_to_process = images[:max_images]
+            if total_images > max_images:
+                log.warning(
+                    f"图片数量 ({total_images}) 超过最大限制 ({max_images})，将只处理前 {max_images} 张。"
+                )
+
+            for idx, img_data in enumerate(images_to_process, 1):
                 # --- [优化] 仅当图片来源是用户附件时才进行净化 ---
                 if img_data.get("source") == "attachment":
                     try:
@@ -662,7 +679,16 @@ class GeminiService:
                             )
                             continue
 
+                        log.info(f"正在处理第 {idx}/{len(images_to_process)} 张图片...")
                         sanitized_bytes, new_mime_type = sanitize_image(image_bytes)
+
+                        # [内存优化] 处理完成后立即删除原始图片数据引用
+                        # 这有助于垃圾回收器及时释放内存
+                        if "data" in img_data:
+                            del img_data["data"]
+                        if "bytes" in img_data:
+                            del img_data["bytes"]
+
                         # [修复] 保持键名一致性，使用 'data' 存储净化后的字节
                         sanitized_images_for_endpoint.append(
                             {
@@ -671,9 +697,20 @@ class GeminiService:
                                 "source": "attachment",  # 来源是确定的
                             }
                         )
+
+                        log.info(f"第 {idx}/{len(images_to_process)} 张图片处理完成。")
+
+                        # [内存优化] 如果启用了顺序处理，在每张图片处理后强制垃圾回收
+                        if sequential_processing:
+                            import gc
+
+                            gc.collect()
+
                     except Exception as e:
                         # 如果净化失败，记录错误并通知用户
-                        log.error(f"为自定义端点净化附件图片时失败: {e}", exc_info=True)
+                        log.error(
+                            f"为自定义端点净化第 {idx} 张图片时失败: {e}", exc_info=True
+                        )
                         return "呜哇，这张图好像有点问题，我处理不了…可以换一张试试吗？<伤心>"
                 else:
                     # 对于非附件图片（如表情），直接使用原始数据

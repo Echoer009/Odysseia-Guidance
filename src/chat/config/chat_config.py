@@ -472,6 +472,12 @@ CHANNEL_MUTE_CONFIG = {
     "MUTE_DURATION_MINUTES": 30,  # 禁言的持续时间（分钟）
 }
 
+# --- 图片处理配置 ---
+IMAGE_PROCESSING_CONFIG = {
+    "SEQUENTIAL_PROCESSING": True,  # 顺序处理所有图片（一张一张处理，防止内存溢出）
+    "MAX_IMAGES_PER_MESSAGE": 9,  # 单次消息最多处理的图片数量（Discord限制为9张）
+}
+
 # --- 调试配置 ---
 DEBUG_CONFIG = {
     "LOG_FINAL_CONTEXT": False,  # 是否在日志中打印发送给AI的最终上下文，用于调试
