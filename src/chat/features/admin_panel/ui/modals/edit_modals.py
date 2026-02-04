@@ -38,11 +38,23 @@ class EditMemoryModal(discord.ui.Modal):
         self.db_view = db_view
         self.user_id = user_id
 
+        # --- 截断摘要以符合 Discord 4000 字符限制 ---
+        max_summary_length = 4000
+        truncated_summary = current_summary
+        if current_summary and len(current_summary) > max_summary_length:
+            truncated_summary = (
+                current_summary[: max_summary_length - 50]
+                + "\n\n[⚠️ 记忆摘要过长，已截断。完整内容请在数据库中查看或使用命令行工具。]"
+            )
+            log.warning(
+                f"用户 {user_id} 的记忆摘要过长 ({len(current_summary)} 字符)，已截断至 {max_summary_length} 字符。"
+            )
+
         self.summary_input = discord.ui.TextInput(
             label="个人记忆摘要",
             style=discord.TextStyle.paragraph,
-            default=current_summary,
-            max_length=4000,  # Discord TextInput 最大长度
+            default=truncated_summary,
+            max_length=max_summary_length,  # Discord TextInput 最大长度
             required=False,
         )
         self.add_item(self.summary_input)
