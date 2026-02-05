@@ -228,14 +228,14 @@ class CoinService:
 
     async def purchase_item(
         self, user_id: int, guild_id: int, item_id: int, quantity: int = 1
-    ) -> tuple[bool, str, Optional[int], bool, bool, Optional[dict]]:
+    ) -> tuple[bool, str, Optional[int], bool, Optional[dict]]:
         """
         处理用户购买商品的逻辑。
-        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, should_generate_gift_response: bool, embed_data: Optional[dict])。
+        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, embed_data: Optional[dict])。
         """
         item = await self.get_item_by_id(item_id)
         if not item:
-            return False, "找不到该商品。", None, False, False, None
+            return False, "找不到该商品。", None, False, None
 
         total_cost = item["price"] * quantity
         current_balance = await self.get_balance(user_id)
@@ -246,7 +246,6 @@ class CoinService:
                 f"你的余额不足！需要 {total_cost} 类脑币，但你只有 {current_balance}。",
                 None,
                 False,
-                False,
                 None,
             )
 
@@ -256,7 +255,7 @@ class CoinService:
             reason = f"购买 {quantity}x {item['name']}"
             new_balance = await self.remove_coins(user_id, total_cost, reason)
             if new_balance is None:
-                return False, "购买失败，无法扣除类脑币。", None, False, False, None
+                return False, "购买失败，无法扣除类脑币。", None, False, None
 
         # 根据物品目标执行不同操作
         item_target = item["target"]
@@ -273,8 +272,8 @@ class CoinService:
             )
 
             if gift_success:
-                # 购买成功，返回空消息，并标记需要生成AI回应
-                return True, "", new_balance, False, True, None
+                # 购买成功，返回空消息
+                return True, "", new_balance, False, None
             else:
                 # 送礼失败，回滚交易
                 await self.add_coins(
@@ -283,7 +282,7 @@ class CoinService:
                 log.warning(
                     f"用户 {user_id} 送礼失败，已返还 {total_cost} 类脑币。原因: {gift_message}"
                 )
-                return False, gift_message, current_balance, False, False, None
+                return False, gift_message, current_balance, False, None
 
         elif item_target == "self" and item_effect:
             # --- 给自己用且有立即效果的物品 ---
@@ -298,7 +297,6 @@ class CoinService:
                     True,
                     f"一道耀眼的闪光后，类脑娘关于 **{item['name']}** 的记忆...呃，不对，是类脑娘关于你的记忆被清除了。你们可以重新开始了。",
                     new_balance,
-                    False,
                     False,
                     None,
                 )
@@ -318,7 +316,6 @@ class CoinService:
                     "你与类脑娘进行了一次成功的“午后闲谈”。",
                     new_balance,
                     False,
-                    False,
                     embed_data,
                 )
             elif item_effect == PERSONAL_MEMORY_ITEM_EFFECT_ID:
@@ -336,7 +333,6 @@ class CoinService:
                         f"你花费了 {total_cost} 类脑币来更新你的个人档案。",
                         new_balance,
                         True,
-                        False,
                         None,
                     )
                 else:
@@ -345,7 +341,6 @@ class CoinService:
                         f"你已成功解锁 **{item['name']}**！现在类脑娘将开始为你记录个人记忆。",
                         new_balance,
                         True,
-                        False,
                         None,
                     )
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
@@ -355,7 +350,6 @@ class CoinService:
                     f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     True,
-                    False,
                     None,
                 )
             elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
@@ -365,7 +359,6 @@ class CoinService:
                     f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     True,
-                    False,
                     None,
                 )
             elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
@@ -375,7 +368,6 @@ class CoinService:
                     f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     True,
-                    False,
                     None,
                 )
             elif item_effect == DISABLE_THREAD_COMMENTOR_EFFECT_ID:
@@ -385,7 +377,6 @@ class CoinService:
                     True,
                     f"你“购买”了 **{item['name']}**。从此，类脑娘将不再暖你的贴。",
                     new_balance,
-                    False,
                     False,
                     None,
                 )
@@ -403,7 +394,6 @@ class CoinService:
                     f"你举起了 **{item['name']}**，上面写着“禁止通行”。从此，类脑娘将不再进入你的帖子。",
                     new_balance,
                     False,
-                    False,
                     None,
                 )
             elif item_effect == ENABLE_THREAD_COMMENTOR_EFFECT_ID:
@@ -413,7 +403,6 @@ class CoinService:
                     True,
                     f"你使用了 **{item['name']}**，枯萎的向日葵恢复了生机。类脑娘现在会重新暖你的贴了。",
                     new_balance,
-                    False,
                     False,
                     None,
                 )
@@ -444,7 +433,6 @@ class CoinService:
                     f"你使用了 **{item['name']}**，花费了 {total_cost} 类脑币。现在你创建的所有帖子将默认拥有 **60秒2次** 的发言许可，你也可以随时通过弹出的窗口自定义规则。",
                     new_balance,
                     True,
-                    False,
                     None,
                 )
             else:
@@ -455,7 +443,6 @@ class CoinService:
                     f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**，已放入你的背包。",
                     new_balance,
                     False,
-                    False,
                     None,
                 )
         else:
@@ -465,7 +452,6 @@ class CoinService:
                 True,
                 f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**，已放入你的背包。",
                 new_balance,
-                False,
                 False,
                 None,
             )

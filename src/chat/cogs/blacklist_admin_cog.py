@@ -55,6 +55,7 @@ class BlacklistAdminCog(commands.Cog):
         duration_minutes="封禁时长(分钟)",
         reason="封禁理由",
         global_ban="是否全局封禁 (默认否)",
+        message="发送给用户的私信内容 (可选，可独立使用)",
     )
     @app_commands.default_permissions(manage_guild=True)
     @is_developer()
@@ -65,6 +66,7 @@ class BlacklistAdminCog(commands.Cog):
         duration_minutes: int,
         reason: str = "无",
         global_ban: bool = False,
+        message: str | None = None,
     ):
         try:
             target_user_id = int(user_id)
@@ -76,27 +78,55 @@ class BlacklistAdminCog(commands.Cog):
 
         expires_at = datetime.utcnow() + timedelta(minutes=duration_minutes)
 
-        try:
+        # 发送自定义私信（如果提供了 message 参数）
+        if message:
             try:
                 target_user = await self.bot.fetch_user(target_user_id)
                 if target_user:
                     embed = discord.Embed(
-                        title="封禁通知",
-                        description=f"您已被开发者封禁，时长为 {duration_minutes} 分钟。在此期间您将无法与 类脑娘 互动。",
-                        color=discord.Color.red(),
+                        title="来自开发者的消息",
+                        description=message,
+                        color=discord.Color.blue(),
                     )
-                    embed.add_field(name="理由", value=reason, inline=False)
                     embed.set_footer(
-                        text=f"封禁时间: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                        text=f"发送时间: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC | 来自开发者"
                     )
                     try:
                         await target_user.send(embed=embed)
+                        log.info(f"已向用户 {target_user_id} 发送开发者私信。")
                     except discord.Forbidden:
                         log.warning(
-                            f"无法向用户 {target_user_id} 发送封禁通知私信，可能因为用户关闭了私信。"
+                            f"无法向用户 {target_user_id} 发送私信，可能因为用户关闭了私信。"
                         )
             except discord.NotFound:
                 log.warning(f"无法找到用户 {target_user_id}，无法发送私信。")
+
+        # 发送封禁通知私信
+        try:
+            target_user = await self.bot.fetch_user(target_user_id)
+            if target_user:
+                embed = discord.Embed(
+                    title="封禁通知",
+                    description=f"您已被开发者封禁，时长为 {duration_minutes} 分钟。在此期间您将无法与 类脑娘 互动。",
+                    color=discord.Color.red(),
+                )
+                embed.add_field(name="理由", value=reason, inline=False)
+                embed.add_field(
+                    name="如有疑问",
+                    value="如有疑问，请前往以下服务器询问：\nhttps://discord.gg/urzQv5WTHq\nhttps://discord.gg/BZuAMRNuMM",
+                    inline=False,
+                )
+                embed.set_footer(
+                    text=f"封禁时间: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                )
+                try:
+                    await target_user.send(embed=embed)
+                except discord.Forbidden:
+                    log.warning(
+                        f"无法向用户 {target_user_id} 发送封禁通知私信，可能因为用户关闭了私信。"
+                    )
+        except discord.NotFound:
+            log.warning(f"无法找到用户 {target_user_id}，无法发送私信。")
 
             if global_ban:
                 # 全局封禁
