@@ -182,7 +182,7 @@ class SubmissionService:
             return False, "❌ 内部错误：商品信息不完整，无法完成购买。"
 
         # 1. 扣款
-        success, message, new_balance, _, _, _ = await coin_service.purchase_item(
+        success, message, new_balance, _, _ = await coin_service.purchase_item(
             user_id=interaction.user.id,
             guild_id=interaction.guild.id if interaction.guild else 0,
             item_id=item_id,

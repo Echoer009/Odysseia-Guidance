@@ -78,6 +78,9 @@ class BlacklistAdminCog(commands.Cog):
 
         expires_at = datetime.utcnow() + timedelta(minutes=duration_minutes)
 
+        # 先发送响应，避免超时
+        await interaction.response.defer(ephemeral=True)
+
         # 发送自定义私信（如果提供了 message 参数）
         if message:
             try:
@@ -128,17 +131,19 @@ class BlacklistAdminCog(commands.Cog):
         except discord.NotFound:
             log.warning(f"无法找到用户 {target_user_id}，无法发送私信。")
 
+        # 执行封禁操作（修复缩进错误，移到try-except块外）
+        try:
             if global_ban:
                 # 全局封禁
                 if await chat_db_manager.is_user_globally_blacklisted(target_user_id):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         f"用户 <@{target_user_id}> 已经在全局黑名单中。", ephemeral=True
                     )
                     return
                 await chat_db_manager.add_to_global_blacklist(
                     target_user_id, expires_at
                 )
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"已将用户 <@{target_user_id}> 加入全局黑名单，时长 {duration_minutes} 分钟。",
                     ephemeral=True,
                 )
@@ -149,7 +154,7 @@ class BlacklistAdminCog(commands.Cog):
                 # 服务器封禁
                 guild_id = interaction.guild.id if interaction.guild else 0
                 if await chat_db_manager.is_user_blacklisted(target_user_id, guild_id):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         f"用户 <@{target_user_id}> 已经在当前服务器的黑名单中。",
                         ephemeral=True,
                     )
@@ -157,7 +162,7 @@ class BlacklistAdminCog(commands.Cog):
                 await chat_db_manager.add_to_blacklist(
                     target_user_id, guild_id, expires_at
                 )
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"已将用户 <@{target_user_id}> 加入当前服务器的黑名单，时长 {duration_minutes} 分钟。",
                     ephemeral=True,
                 )
@@ -166,7 +171,7 @@ class BlacklistAdminCog(commands.Cog):
                 )
         except Exception as e:
             log.error(f"封禁用户时出错: {e}", exc_info=True)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "封禁用户时发生错误，请检查日志。", ephemeral=True
             )
 
@@ -189,18 +194,21 @@ class BlacklistAdminCog(commands.Cog):
             )
             return
 
+        # 先发送响应，避免超时
+        await interaction.response.defer(ephemeral=True)
+
         try:
             if global_ban:
                 # 全局解封
                 if not await chat_db_manager.is_user_globally_blacklisted(
                     target_user_id
                 ):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         f"用户 <@{target_user_id}> 不在全局黑名单中。", ephemeral=True
                     )
                     return
                 await chat_db_manager.remove_from_global_blacklist(target_user_id)
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"已将用户 <@{target_user_id}> 从全局黑名单中移除。", ephemeral=True
                 )
                 log.info(
@@ -212,13 +220,13 @@ class BlacklistAdminCog(commands.Cog):
                 if not await chat_db_manager.is_user_blacklisted(
                     target_user_id, guild_id
                 ):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         f"用户 <@{target_user_id}> 不在当前服务器的黑名单中。",
                         ephemeral=True,
                     )
                     return
                 await chat_db_manager.remove_from_blacklist(target_user_id, guild_id)
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"已将用户 <@{target_user_id}> 从当前服务器的黑名单中移除。",
                     ephemeral=True,
                 )
@@ -227,7 +235,7 @@ class BlacklistAdminCog(commands.Cog):
                 )
         except Exception as e:
             log.error(f"解封用户时出错: {e}", exc_info=True)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "解封用户时发生错误，请检查日志。", ephemeral=True
             )
 
