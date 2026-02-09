@@ -10,6 +10,11 @@ from src.database.models import KnowledgeChunk, TutorialDocument
 
 import os
 
+# 导入新的帖子设置服务
+from src.chat.features.tutorial_search.services.thread_settings_service import (
+    thread_settings_service,
+)
+
 # --- RAG 追踪日志系统 ---
 LOG_DIR = "logs"
 LOG_FILE_PATH = os.path.join(LOG_DIR, "tutorial_rag_trace.log")
@@ -45,7 +50,12 @@ class TutorialSearchService:
         log.info(f"教程 RAG 配置已加载: {self.config}")
 
     async def _hybrid_search_with_rrf(
-        self, session, query_text: str, query_vector: List[float], thread_id: int | None
+        self,
+        session,
+        query_text: str,
+        query_vector: List[float],
+        thread_id: int | None,
+        search_mode: str = "ISOLATED",
     ) -> List:
         """使用原生 SQL 在数据库中执行高效的混合搜索和 RRF 融合，返回最佳 chunk 及其分数。"""
         # We need to join with tutorial_documents to get the thread_id
@@ -77,12 +87,34 @@ class TutorialSearchService:
                 (COALESCE(1.0 / (:rrf_k + s.rank), 0.0) + COALESCE(1.0 / (:rrf_k + k.rank), 0.0)) as rrf_score
             FROM semantic_search s
             FULL OUTER JOIN keyword_search k ON s.id = k.id
-            ORDER BY
-                is_thread_match DESC,
-                rrf_score DESC
-            LIMIT :final_k;
             """
         )
+
+        # 根据搜索模式添加过滤条件
+        if search_mode == "ISOLATED":
+            # 隔离模式：只搜索当前帖子（thread_id匹配）和基础库（thread_id为NULL）
+            sql_query = text(
+                sql_query.text
+                + """
+                WHERE COALESCE(s.thread_id, k.thread_id) = :thread_id
+                   OR COALESCE(s.thread_id, k.thread_id) IS NULL
+                ORDER BY
+                    is_thread_match DESC,
+                    rrf_score DESC
+                LIMIT :final_k;
+                """
+            )
+        else:
+            # 优先模式：搜索所有教程，但当前帖子优先
+            sql_query = text(
+                sql_query.text
+                + """
+                ORDER BY
+                    is_thread_match DESC,
+                    rrf_score DESC
+                LIMIT :final_k;
+                """
+            )
         result = await session.execute(
             sql_query,
             {
@@ -201,10 +233,16 @@ class TutorialSearchService:
 
         final_parent_docs: List[Dict[str, str]] = []
         try:
+            # 获取当前帖子的搜索模式
+            current_search_mode = await thread_settings_service.get_search_mode(
+                str(thread_id)
+            )
+            log.info(f"帖子 {thread_id} 的搜索模式: {current_search_mode}")
+
             async with AsyncSessionLocal() as session:
                 # 1. 混合搜索，找到最相关的 chunk ID
                 search_results = await self._hybrid_search_with_rrf(
-                    session, query, query_embedding, thread_id
+                    session, query, query_embedding, thread_id, current_search_mode
                 )
                 log.info(
                     f"混合搜索 RRF 结果 (id, is_thread_match, rrf_score): {search_results}"

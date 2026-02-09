@@ -12,6 +12,7 @@ from src.chat.features.odysseia_coin.ui.components.shop_components import (
     EditTutorialButton,
     DeleteTutorialButton,
     BackToTutorialListButton,
+    SearchModeButton,
 )
 
 if TYPE_CHECKING:
@@ -42,11 +43,36 @@ class TutorialPanel(BasePanel["TutorialManagementView"]):
         return await self._create_listing_embed()
 
     async def _create_listing_embed(self) -> discord.Embed:
+        # 获取当前帖子的搜索模式
+        from src.chat.features.tutorial_search.services.thread_settings_service import (
+            thread_settings_service,
+        )
+
+        thread_id = self.shop_data.thread_id
+        search_mode = "ISOLATED"  # 默认值
+        if thread_id:
+            search_mode = await thread_settings_service.get_search_mode(str(thread_id))
+
+        mode_name = "隔离模式" if search_mode == "ISOLATED" else "优先模式"
+        mode_desc = (
+            "只检索当前帖子的教程和基础库，当前帖子教程优先。"
+            if search_mode == "ISOLATED"
+            else "检索所有教程，但优先显示当前帖子的教程。"
+        )
+
         embed = discord.Embed(
             title="知识库管理",
             description="在这里管理你提交的教程。",
             color=discord.Color.blue(),
         )
+
+        # 添加搜索模式信息
+        embed.add_field(
+            name=f"🔍 当前搜索模式：{mode_name}",
+            value=mode_desc,
+            inline=False,
+        )
+
         tutorials = self.shop_data.tutorials
         if not tutorials:
             embed.add_field(
@@ -81,6 +107,7 @@ class TutorialPanel(BasePanel["TutorialManagementView"]):
 
     def _get_listing_components(self) -> List[discord.ui.Item]:
         return [
+            SearchModeButton(),
             AddTutorialButton(),
             ManageTutorialsButton(),
             BackToShopButton(),

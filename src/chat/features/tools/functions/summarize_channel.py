@@ -18,6 +18,8 @@ except ImportError:
         "Pillow is not installed. Please install it with 'pip install Pillow'"
     )
 
+from src.chat.features.tools.tool_metadata import tool_metadata
+
 log = logging.getLogger(__name__)
 
 
@@ -27,6 +29,12 @@ class SummarizeChannelParams(BaseModel):
     end_date: Optional[str] = Field(None, description="结束日期 (格式: YYYY-MM-DD)。")
 
 
+@tool_metadata(
+    name="总结",
+    description="总结一下最近的聊天内容～可以指定消息数量和时间范围哦！",
+    emoji="📝",
+    category="总结",
+)
 async def summarize_channel(
     params: SummarizeChannelParams,
     **kwargs,
@@ -45,6 +53,7 @@ async def summarize_channel(
     [返回格式与要求]
     - 函数返回一个包含消息历史的字符串，每条消息的格式为：`'作者(时间): 内容'`。
     - 你在收到内容后，需要将其内容总结成一段通顺的文字。
+    - **重要：禁止使用任何 Markdown 格式，直接输出纯文本。**
     """
     channel = kwargs.get("channel")
     if not channel or not isinstance(channel, discord.abc.Messageable):

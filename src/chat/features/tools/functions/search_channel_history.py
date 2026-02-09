@@ -5,6 +5,7 @@ from datetime import datetime
 import discord
 from discord.http import Route
 from src.chat.utils.time_utils import BEIJING_TZ
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 
 def _format_search_results(messages: List[Dict]) -> List[Dict[str, Any]]:
@@ -30,6 +31,12 @@ def _format_search_results(messages: List[Dict]) -> List[Dict[str, Any]]:
     return results
 
 
+@tool_metadata(
+    name="历史消息",
+    description="翻翻之前的聊天记录～可以在当前频道或者整个服务器里搜关键词！",
+    emoji="📜",
+    category="查询",
+)
 async def search_channel_history(
     query: str,
     **kwargs,

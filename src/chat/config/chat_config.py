@@ -24,6 +24,17 @@ DISABLED_INTERACTION_CHANNEL_IDS = [
 UNRESTRICTED_CHANNEL_IDS = _parse_ids("UNRESTRICTED_CHANNEL_IDS")
 
 
+# --- 工具加载器配置 ---
+# 禁用的工具模块列表（文件名，不含.py扩展名）
+# 例如: ["get_yearly_summary", "some_other_tool"]
+DISABLED_TOOLS = (
+    os.getenv("DISABLED_TOOLS", "").split(",") if os.getenv("DISABLED_TOOLS") else []
+)
+
+# 隐藏的工具列表（用户在UI中看不到，也无法禁用的工具）
+# 这些工具是系统必须保留的，不应该让用户控制
+HIDDEN_TOOLS = ["issue_user_warning"]
+
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
 GEMINI_MODEL = "gemini-2.5-flash"

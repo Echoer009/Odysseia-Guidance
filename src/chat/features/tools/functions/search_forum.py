@@ -9,6 +9,7 @@ from src.chat.features.forum_search.services.forum_search_service import (
 )
 from src.chat.config import chat_config as config
 from src.chat.utils.database import chat_db_manager
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ class ForumSearchFilters(BaseModel):
 
 
 # 2. 在函数签名中使用 Pydantic 模型
+@tool_metadata(
+    name="论坛搜索",
+    description="在社区论坛里找找帖子～可以按关键词、作者、频道或者日期来搜哦！",
+    emoji="🔍",
+    category="查询",
+)
 async def search_forum_threads(
     query: Optional[str] = None,
     filters: Optional[ForumSearchFilters] = None,

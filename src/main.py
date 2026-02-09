@@ -446,12 +446,12 @@ async def main():
     await chat_db_manager.init_async()
 
     # 3.5. 初始化商店商品
-    from src.chat.features.odysseia_coin.service.coin_service import (
-        _setup_initial_items,
-    )
-
-    await _setup_initial_items()
-    log.info("已初始化商店商品。")
+    # 商品已迁移到PostgreSQL，不再需要从配置文件初始化
+    # from src.chat.features.odysseia_coin.service.coin_service import (
+    #     _setup_initial_items,
+    # )
+    # await _setup_initial_items()
+    # log.info("已初始化商店商品。")
 
     log.info("已加载并注册 AI 工具。")
 

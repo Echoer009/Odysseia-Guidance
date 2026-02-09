@@ -6,10 +6,17 @@ import base64
 
 # 假设 coin_service 的路径是正确的
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
 
+@tool_metadata(
+    name="查询资料",
+    description="查询用户的类脑币余额、头像、角色等信息",
+    emoji="👤",
+    category="用户信息",
+)
 async def get_user_profile(
     user_id: str,
     queries: List[str],

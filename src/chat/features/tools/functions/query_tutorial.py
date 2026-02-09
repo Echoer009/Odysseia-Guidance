@@ -3,10 +3,17 @@ from src.chat.features.tutorial_search.services.tutorial_search_service import (
     tutorial_search_service,
 )
 from src.chat.services.prompt_service import prompt_service
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
 
+@tool_metadata(
+    name="教程查询",
+    description="查询酒馆、类脑和公益站的教程、指南和报错解决方案～",
+    emoji="📚",
+    category="查询",
+)
 async def query_tutorial_knowledge_base(query: str, **kwargs) -> str:
     """
     专用于查询 SillyTavern(酒馆)、类脑社区及公益站的**教程、指南与报错解决方案**。

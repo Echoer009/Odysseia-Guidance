@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
@@ -20,6 +21,8 @@ EMBEDDING_DIMENSION = 3072  # 所有RAG统一使用3072维度
 TUTORIALS_SCHEMA = "tutorials"
 GENERAL_KNOWLEDGE_SCHEMA = "general_knowledge"
 COMMUNITY_SCHEMA = "community"
+SHOP_SCHEMA = "shop"
+USER_SCHEMA = "user"
 
 Base = declarative_base()
 
@@ -112,6 +115,30 @@ class KnowledgeChunk(Base):
 
     def __repr__(self):
         return f"<KnowledgeChunk(id={self.id}, document_id={self.document_id})>"
+
+
+class ThreadSetting(Base):
+    """
+    存储每个帖子（Thread）的独立设置。
+    例如：教程搜索模式（ISOLATED 或 PRIORITY）。
+    """
+
+    __tablename__ = "thread_settings"
+    __table_args__ = {"schema": TUTORIALS_SCHEMA}
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(String, unique=True, nullable=False, comment="Discord帖子的ID")
+    search_mode = Column(
+        String,
+        nullable=False,
+        default="ISOLATED",
+        comment="教程搜索模式: 'ISOLATED' (隔离) 或 'PRIORITY' (优先)",
+    )
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ThreadSetting(thread_id='{self.thread_id}', search_mode='{self.search_mode}')>"
 
 
 # --- 通用知识库模型 (关联表结构) ---
@@ -301,3 +328,82 @@ class TokenUsage(Base):
 
     def __repr__(self):
         return f"<TokenUsage(date={self.date}, total_tokens={self.total_tokens})>"
+
+
+# --- 用户设置模型 (PostgreSQL) ---
+
+
+class UserToolSettings(Base):
+    """
+    存储每个用户的工具启用设置。
+    用户可以控制在自己的帖子里类脑娘可以使用哪些工具。
+    默认启用所有工具，如果用户没有设置记录。
+    """
+
+    __tablename__ = "user_tool_settings"
+    __table_args__ = {"schema": USER_SCHEMA}
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), unique=True, nullable=False, comment="用户的Discord ID"
+    )
+    enabled_tools: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="用户启用的工具列表（JSON格式），为null表示启用所有工具",
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<UserToolSettings(user_id='{self.user_id}')>"
+
+
+# --- 商店商品模型 (PostgreSQL) ---
+
+
+class ShopItem(Base):
+    """
+    商店商品表，用于存储商品配置和CG图片URL。
+    商品数据从SQLite迁移到PostgreSQL，用户数据保留在SQLite。
+    """
+
+    __tablename__ = "shop_items"
+    __table_args__ = {"schema": SHOP_SCHEMA}
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, comment="商品名称"
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=True, comment="商品描述")
+    price: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="商品价格（类脑币）"
+    )
+    category: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="商品类别"
+    )
+    target: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="self", comment="商品目标（self/ai）"
+    )
+    effect_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, comment="商品效果ID"
+    )
+    cg_url: Mapped[str] = mapped_column(
+        String(1000), nullable=True, comment="CG图片的Discord链接"
+    )
+    is_available: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, comment="是否可用（1=可用，0=不可用）"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ShopItem(id={self.id}, name='{self.name}', price={self.price})>"

@@ -295,7 +295,9 @@ class GeminiService:
         )
 
         # 2. 实例化工具服务，并传入工具映射
-        self.tool_service = ToolService(bot=self.bot, tool_map=self.tool_map)
+        self.tool_service = ToolService(
+            bot=self.bot, tool_map=self.tool_map, tool_declarations=self.available_tools
+        )
 
         log.info("--- 工具加载完成 (模块化) ---")
         log.info(
@@ -512,6 +514,7 @@ class GeminiService:
         guild_name: str = "未知服务器",
         location_name: str = "未知位置",
         model_name: Optional[str] = None,
+        user_id_for_settings: Optional[str] = None,
     ) -> str:
         """
         AI 回复生成的分发器。
@@ -543,6 +546,7 @@ class GeminiService:
                         guild_name=guild_name,
                         location_name=location_name,
                         model_name=model_name,
+                        user_id_for_settings=user_id_for_settings,
                     )
                 except Exception as e:
                     last_exception = e
@@ -577,6 +581,7 @@ class GeminiService:
                 guild_name=guild_name,
                 location_name=location_name,
                 model_name=fallback_model_name,  # 关键：使用固定的回退模型
+                user_id_for_settings=user_id_for_settings,
             )
 
         # 对于非自定义模型或回退失败后的默认路径
@@ -599,6 +604,7 @@ class GeminiService:
             guild_name=guild_name,
             location_name=location_name,
             model_name=model_name,
+            user_id_for_settings=user_id_for_settings,
         )
 
     async def _generate_with_custom_endpoint(
@@ -618,6 +624,7 @@ class GeminiService:
         guild_name: str = "未知服务器",
         location_name: str = "未知位置",
         model_name: Optional[str] = None,
+        user_id_for_settings: Optional[str] = None,
     ) -> str:
         """
         [新增] 使用自定义端点 (例如公益站) 生成 AI 回复。
@@ -738,6 +745,7 @@ class GeminiService:
             api_model_name=endpoint_config.get("model_name")
             or self.default_model_name,  # 传递用于调用 API 的真实模型名称
             client=client,
+            user_id_for_settings=user_id_for_settings,
         )
 
     @_api_key_handler
@@ -759,6 +767,7 @@ class GeminiService:
         location_name: str = "未知位置",
         model_name: Optional[str] = None,
         client: Any = None,
+        user_id_for_settings: Optional[str] = None,
     ) -> str:
         """
         [重构] 使用官方 API 密钥池生成 AI 回复。
@@ -786,6 +795,7 @@ class GeminiService:
             prompt_model_name=model_name,  # 对于官方 API，prompt 和 api 模型名称相同
             api_model_name=model_name,
             client=client,
+            user_id_for_settings=user_id_for_settings,
         )
 
     async def _execute_generation_cycle(
@@ -807,6 +817,7 @@ class GeminiService:
         prompt_model_name: Optional[str],
         api_model_name: Optional[str],
         client: Any,
+        user_id_for_settings: Optional[str] = None,
     ) -> str:
         """
         [新增] 核心的 AI 生成周期，包含上下文构建、工具调用循环和响应处理。
@@ -855,10 +866,13 @@ class GeminiService:
         # enabled_tools.append(types.Tool(url_context=types.UrlContext()))
         # log.info("已为本次调用启用 Google 搜索工具。")
 
-        # 3. 合并自定义的函数工具
-        if self.available_tools:
-            enabled_tools.extend(self.available_tools)
-            log.info(f"已合并 {len(self.available_tools)} 个自定义函数工具。")
+        # 3. 根据上下文动态获取函数工具
+        dynamic_tools = await self.tool_service.get_dynamic_tools_for_context(
+            user_id_for_settings=user_id_for_settings
+        )
+        if dynamic_tools:
+            enabled_tools.extend(dynamic_tools)
+            log.info(f"已根据上下文合并 {len(dynamic_tools)} 个动态函数工具。")
 
         # 4. 如果最终有工具被启用，则配置到生成参数中
         if enabled_tools:
@@ -974,6 +988,7 @@ class GeminiService:
                     channel=channel,
                     user_id=user_id,
                     log_detailed=log_detailed,
+                    user_id_for_settings=user_id_for_settings,
                 )
                 for call in function_calls
             ]
@@ -998,9 +1013,16 @@ class GeminiService:
                 ):
                     tool_name = result.function_response.name
                     # 现在这里是绝对安全的
-                    original_result = result.function_response.response.get(
-                        "result", {}
-                    )
+                    # 首先检查是否有错误信息
+                    error_message = result.function_response.response.get("error")
+                    if error_message:
+                        # 如果有错误信息，直接使用错误信息作为结果
+                        original_result = error_message
+                        log.info(f"工具返回错误信息: {error_message}")
+                    else:
+                        original_result = result.function_response.response.get(
+                            "result", {}
+                        )
 
                     # --- 新增：处理工具返回的头像图片 ---
                     if isinstance(original_result, dict):

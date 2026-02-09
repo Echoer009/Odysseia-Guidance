@@ -4,6 +4,8 @@ import inspect
 import logging
 from typing import List, Dict, Callable, Tuple
 
+from src.chat.config.chat_config import DISABLED_TOOLS
+
 log = logging.getLogger(__name__)
 
 
@@ -28,10 +30,17 @@ def load_tools_from_directory(
     tool_map = {}
 
     log.info(f"--- [工具加载器]: 开始从 '{directory}' 目录加载工具 ---")
+    log.info(f"--- [工具加载器]: 禁用的工具模块: {DISABLED_TOOLS} ---")
 
     for filename in os.listdir(directory):
         if filename.endswith(".py") and not filename.startswith("__init__"):
             module_name = filename[:-3]
+
+            # 检查是否在黑名单中
+            if module_name in DISABLED_TOOLS:
+                log.info(f"跳过禁用的工具模块: {module_name}")
+                continue
+
             # 构建完整的模块路径，例如: src.chat.features.tools.functions.get_user_avatar
             module_path = f"{directory.replace('/', '.')}.{module_name}"
 

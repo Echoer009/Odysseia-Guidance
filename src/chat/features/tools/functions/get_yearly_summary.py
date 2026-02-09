@@ -11,10 +11,17 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
 from src import config as app_config
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
 
+@tool_metadata(
+    name="年度总结",
+    description="回顾一下这一年在类脑社区的点点滴滴～",
+    emoji="🎉",
+    category="总结",
+)
 async def get_yearly_summary(**kwargs) -> Dict[str, Any]:
     """
     为当前用户生成并直接通过私信发送个性化的年度活动总结报告。

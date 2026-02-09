@@ -100,16 +100,9 @@ class AIChatCog(commands.Cog):
                 # 动态获取上次调用的工具列表，如果不存在则为空列表
                 last_tools = getattr(gemini_service, "last_called_tools", [])
 
-                # 1. 优先处理长篇总结 -> 图片
-                # 使用DM阈值作为总结长度判断依据，保持一致性
-                if (
-                    self._get_text_length_without_emojis(response_text)
-                    > MESSAGE_SETTINGS["DM_THRESHOLD"]
-                    and "summarize_channel" in last_tools
-                ):
-                    log.info(
-                        f"响应为长篇总结 (length: {len(response_text)}), 尝试转为图片发送。"
-                    )
+                # 1. 如果调用了总结工具，总是转换为图片发送
+                if "summarize_channel" in last_tools:
+                    log.info("调用了总结工具, 尝试转为图片发送。")
                     image_bytes = text_to_summary_image(response_text)
                     if image_bytes:
                         with io.BytesIO(image_bytes) as image_file:

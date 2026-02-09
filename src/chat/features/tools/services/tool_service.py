@@ -1,31 +1,73 @@
 from google.genai import types
 import discord
 import inspect
-from typing import Optional, Dict, Callable, Any
+from typing import Optional, Dict, Callable, Any, List
+
 import logging
+
+from src.chat.config.chat_config import HIDDEN_TOOLS
+from src.chat.features.tools.services.user_tool_settings_service import (
+    user_tool_settings_service,
+)
 
 log = logging.getLogger(__name__)
 
 
 class ToolService:
     """
-    一个负责执行 Gemini 模型请求的工具函数调用的服务。
-    它使用一个从工具名称到可调用函数的映射来查找和运行适当的工具。
+    一个负责管理和执行 Gemini 模型工具的服务。
+
+    它包含两个核心功能:
+    1. 动态地为每个聊天上下文提供正确的工具列表。
+    2. 执行模型请求的工具函数调用。
     """
 
-    def __init__(self, bot: Optional[discord.Client], tool_map: Dict[str, Callable]):
+    def __init__(
+        self,
+        bot: Optional[discord.Client],
+        tool_map: Dict[str, Callable],
+        tool_declarations: List[Callable],
+    ):
         """
         初始化 ToolService。
 
         Args:
             bot: Discord 客户端实例，将注入到需要它的工具中。
             tool_map: 一个字典，将工具名称映射到其对应的异步函数实现。
+            tool_declarations: 从工具加载器获得的原始工具函数声明列表。
         """
         self.bot = bot
         self.tool_map = tool_map
+        self.tool_declarations = tool_declarations
         log.info(
             f"ToolService 已使用 {len(tool_map)} 个工具进行初始化: {list(tool_map.keys())}"
         )
+
+    async def get_dynamic_tools_for_context(
+        self, user_id_for_settings: Optional[str] = None
+    ) -> List[Callable]:
+        """
+        根据提供的用户ID动态获取可用的工具列表。
+
+        - 无论用户是否禁用工具，都返回所有工具声明。
+        - 工具执行时会检查是否被用户禁用，如果被禁用则返回错误提示。
+
+        Args:
+            user_id_for_settings: 用于查询工具设置的用户的ID。如果为 None，则返回默认工具。
+
+        Returns:
+            所有工具函数列表（包括被用户禁用的工具）。
+        """
+        # 总是返回所有工具，让AI可以看到它们
+        # 工具执行时会检查是否被禁用
+        if not user_id_for_settings:
+            log.info("未提供 user_id_for_settings，使用默认工具集。")
+            return self.tool_declarations
+
+        log.info(
+            f"为用户 {user_id_for_settings} 返回所有工具声明（共 {len(self.tool_declarations)} 个）"
+        )
+        return self.tool_declarations
 
     async def execute_tool_call(
         self,
@@ -33,6 +75,7 @@ class ToolService:
         channel: Optional[discord.TextChannel] = None,
         user_id: Optional[int] = None,
         log_detailed: bool = False,
+        user_id_for_settings: Optional[str] = None,
     ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
@@ -42,6 +85,8 @@ class ToolService:
             tool_call: 来自 Gemini API 响应的函数调用对象。
             channel: 可选的当前消息所在的 Discord 频道对象。
             user_id: 可选的当前消息作者的 Discord ID，用作某些参数的备用值。
+            log_detailed: 是否记录详细日志。
+            user_id_for_settings: 用于检查工具设置的用户ID（通常是帖子所有者的ID）。
 
         Returns:
             一个格式化为 FunctionResponse 的 Part 对象，其中包含工具的输出。
@@ -64,6 +109,34 @@ class ToolService:
             return types.Part.from_function_response(
                 name=tool_name, response={"error": f"Tool '{tool_name}' not found."}
             )
+
+        # --- 检查工具是否被禁用 ---
+        if user_id_for_settings:
+            try:
+                # HIDDEN_TOOLS 中的工具是系统必须保留的，不应该让用户控制
+                if tool_name not in HIDDEN_TOOLS:
+                    user_settings = (
+                        await user_tool_settings_service.get_user_tool_settings(
+                            user_id_for_settings
+                        )
+                    )
+                    if user_settings and isinstance(user_settings, dict):
+                        enabled_tools = user_settings.get("enabled_tools", [])
+                        # 如果 enabled_tools 不为空且当前工具不在列表中，则禁用
+                        if enabled_tools and tool_name not in enabled_tools:
+                            log.info(
+                                f"工具 '{tool_name}' 被 {user_id_for_settings} 禁用，拒绝执行。"
+                            )
+                            # 返回错误信息，让AI解释给用户
+                            return types.Part.from_function_response(
+                                name=tool_name,
+                                response={
+                                    "error": f"工具 '{tool_name}' 被帖子所有者禁用了。ta不让我干这个活啦!"
+                                },
+                            )
+            except Exception as e:
+                log.error(f"检查工具设置时出错: {e}", exc_info=True)
+        # --- 结束检查 ---
 
         try:
             # 步骤 1: 从模型响应中提取参数

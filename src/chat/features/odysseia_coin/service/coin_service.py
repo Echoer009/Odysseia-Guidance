@@ -5,6 +5,9 @@ from typing import Optional
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import COIN_CONFIG
 from ...affection.service.affection_service import affection_service
+from src.database.database import AsyncSessionLocal
+from src.database.models import ShopItem
+from sqlalchemy import select
 
 log = logging.getLogger(__name__)
 
@@ -185,57 +188,122 @@ class CoinService:
         target: str = "self",
         effect_id: Optional[str] = None,
     ):
-        """向商店添加或更新一件商品"""
-        query = """
-            INSERT INTO shop_items (name, description, price, category, target, effect_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                description = excluded.description,
-                price = excluded.price,
-                category = excluded.category,
-                target = excluded.target,
-                effect_id = excluded.effect_id,
-                is_available = 1;
-        """
-        await chat_db_manager._execute(
-            chat_db_manager._db_transaction,
-            query,
-            (name, description, price, category, target, effect_id),
-            commit=True,
-        )
-        log.info(f"已添加或更新商品: {name} ({category})")
+        """向商店添加或更新一件商品（PostgreSQL）"""
+        async with AsyncSessionLocal() as session:
+            # 检查商品是否已存在
+            existing_item = await session.execute(
+                select(ShopItem).where(ShopItem.name == name)
+            )
+            existing = existing_item.scalar_one_or_none()
+
+            if existing:
+                # 更新现有商品
+                existing.description = description
+                existing.price = price
+                existing.category = category
+                existing.target = target
+                existing.effect_id = effect_id
+                existing.is_available = 1
+            else:
+                # 创建新商品
+                new_item = ShopItem(
+                    name=name,
+                    description=description,
+                    price=price,
+                    category=category,
+                    target=target,
+                    effect_id=effect_id,
+                    cg_url=None,
+                    is_available=1,
+                )
+                session.add(new_item)
+
+            await session.commit()
+            log.info(f"已添加或更新商品: {name} ({category})")
 
     async def get_items_by_category(self, category: str) -> list:
-        """根据类别获取所有可用的商品"""
-        query = "SELECT * FROM shop_items WHERE category = ? AND is_available = 1 ORDER BY price ASC"
-        return await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (category,), fetch="all"
-        )
+        """根据类别获取所有可用的商品（PostgreSQL）"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ShopItem)
+                .where(ShopItem.category == category)
+                .where(ShopItem.is_available == 1)
+                .order_by(ShopItem.price)
+            )
+            items = result.scalars().all()
+            # 转换为字典列表以保持兼容性
+            return [
+                {
+                    "item_id": item.id,
+                    "name": item.name,
+                    "description": item.description,
+                    "price": item.price,
+                    "category": item.category,
+                    "target": item.target,
+                    "effect_id": item.effect_id,
+                    "cg_url": item.cg_url,
+                    "is_available": item.is_available,
+                }
+                for item in items
+            ]
 
     async def get_all_items(self) -> list:
-        """获取所有可用的商品"""
-        query = "SELECT * FROM shop_items WHERE is_available = 1 ORDER BY category, price ASC"
-        return await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (), fetch="all"
-        )
+        """获取所有可用的商品（PostgreSQL）"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ShopItem)
+                .where(ShopItem.is_available == 1)
+                .order_by(ShopItem.category, ShopItem.price)
+            )
+            items = result.scalars().all()
+            # 转换为字典列表以保持兼容性
+            return [
+                {
+                    "item_id": item.id,
+                    "name": item.name,
+                    "description": item.description,
+                    "price": item.price,
+                    "category": item.category,
+                    "target": item.target,
+                    "effect_id": item.effect_id,
+                    "cg_url": item.cg_url,
+                    "is_available": item.is_available,
+                }
+                for item in items
+            ]
 
     async def get_item_by_id(self, item_id: int):
-        """通过ID获取商品信息"""
-        query = "SELECT * FROM shop_items WHERE item_id = ?"
-        return await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (item_id,), fetch="one"
-        )
+        """通过ID获取商品信息（PostgreSQL）"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ShopItem).where(ShopItem.id == item_id)
+            )
+            item = result.scalar_one_or_none()
+            if not item:
+                return None
+            # 转换为字典以保持兼容性
+            return {
+                "item_id": item.id,
+                "name": item.name,
+                "description": item.description,
+                "price": item.price,
+                "category": item.category,
+                "target": item.target,
+                "effect_id": item.effect_id,
+                "cg_url": item.cg_url,
+                "is_available": item.is_available,
+            }
 
     async def purchase_item(
         self, user_id: int, guild_id: int, item_id: int, quantity: int = 1
-    ) -> tuple[bool, str, Optional[int], bool, Optional[dict]]:
+    ) -> tuple[bool, str, Optional[int], bool, Optional[dict], Optional[str]]:
         """
         处理用户购买商品的逻辑。
-        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, embed_data: Optional[dict])。
+        返回一个元组 (success: bool, message: str, new_balance: Optional[int], should_show_modal: bool, embed_data: Optional[dict], cg_url: Optional[str])。
         """
         item = await self.get_item_by_id(item_id)
         if not item:
-            return False, "找不到该商品。", None, False, None
+            return False, "找不到该商品。", None, False, None, None
 
         total_cost = item["price"] * quantity
         current_balance = await self.get_balance(user_id)
@@ -247,6 +315,7 @@ class CoinService:
                 None,
                 False,
                 None,
+                None,
             )
 
         # 扣款并记录（仅当费用大于0时）
@@ -255,7 +324,7 @@ class CoinService:
             reason = f"购买 {quantity}x {item['name']}"
             new_balance = await self.remove_coins(user_id, total_cost, reason)
             if new_balance is None:
-                return False, "购买失败，无法扣除类脑币。", None, False, None
+                return False, "购买失败，无法扣除类脑币。", None, False, None, None
 
         # 根据物品目标执行不同操作
         item_target = item["target"]
@@ -272,8 +341,9 @@ class CoinService:
             )
 
             if gift_success:
-                # 购买成功，返回空消息
-                return True, "", new_balance, False, None
+                # 购买成功，返回空消息和CG图片URL
+                cg_url = item.get("cg_url")
+                return True, "", new_balance, False, None, cg_url
             else:
                 # 送礼失败，回滚交易
                 await self.add_coins(
@@ -282,7 +352,7 @@ class CoinService:
                 log.warning(
                     f"用户 {user_id} 送礼失败，已返还 {total_cost} 类脑币。原因: {gift_message}"
                 )
-                return False, gift_message, current_balance, False, None
+                return False, gift_message, current_balance, False, None, None
 
         elif item_target == "self" and item_effect:
             # --- 给自己用且有立即效果的物品 ---
@@ -299,6 +369,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID:
                 # 查看用户的个人记忆
@@ -317,6 +388,7 @@ class CoinService:
                     new_balance,
                     False,
                     embed_data,
+                    item.get("cg_url"),
                 )
             elif item_effect == PERSONAL_MEMORY_ITEM_EFFECT_ID:
                 # 检查用户是否已经拥有个人记忆功能
@@ -334,6 +406,7 @@ class CoinService:
                         new_balance,
                         True,
                         None,
+                        item.get("cg_url"),
                     )
                 else:
                     return (
@@ -342,6 +415,7 @@ class CoinService:
                         new_balance,
                         True,
                         None,
+                        item.get("cg_url"),
                     )
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
                 # 购买"知识纸条"商品，需要弹出模态窗口
@@ -351,6 +425,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
                 # 购买"社区成员档案上传"商品，需要弹出模态窗口
@@ -360,6 +435,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
                 # 购买“拉皮条”商品，需要弹出模态窗口
@@ -369,6 +445,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == DISABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“枯萎向日葵”，禁用暖贴功能
@@ -379,6 +456,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == BLOCK_THREAD_REPLIES_EFFECT_ID:
                 query = """
@@ -395,6 +473,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == ENABLE_THREAD_COMMENTOR_EFFECT_ID:
                 # 购买“魔法向日葵”，重新启用暖贴功能
@@ -405,6 +484,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
+                    item.get("cg_url"),
                 )
             elif item_effect == ENABLE_THREAD_REPLIES_EFFECT_ID:
                 # 购买“通行许可”，重新启用帖子回复并设置默认CD
@@ -434,26 +514,27 @@ class CoinService:
                     new_balance,
                     True,
                     None,
+                    item.get("cg_url"),
                 )
             else:
-                # 其他未知效果，暂时先放入背包
-                await self._add_item_to_inventory(user_id, item_id, quantity)
+                # 其他未知效果，不使用背包系统
                 return (
                     True,
-                    f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**，已放入你的背包。",
+                    f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     False,
                     None,
+                    item.get("cg_url"),
                 )
         else:
-            # --- 普通物品，放入背包 ---
-            await self._add_item_to_inventory(user_id, item_id, quantity)
+            # --- 普通物品，不使用背包系统 ---
             return (
                 True,
-                f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**，已放入你的背包。",
+                f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
                 new_balance,
                 False,
                 None,
+                item.get("cg_url"),
             )
 
     async def purchase_event_item(
@@ -706,24 +787,25 @@ class CoinService:
         return result["count"] if result else 0
 
 
-async def _setup_initial_items():
-    """设置商店的初始商品（覆盖逻辑）"""
-    log.info("正在设置商店初始商品...")
-
-    # --- 新增：先删除所有现有商品以确保覆盖 ---
-    delete_query = "DELETE FROM shop_items"
-    await chat_db_manager._execute(
-        chat_db_manager._db_transaction, delete_query, commit=True
-    )
-    log.info("已删除所有旧的商店商品。")
-    # --- 结束 ---
-
-    # 从配置文件导入商品列表
-    from src.chat.config.shop_config import SHOP_ITEMS
-
-    for name, desc, price, cat, target, effect in SHOP_ITEMS:
-        await coin_service.add_item_to_shop(name, desc, price, cat, target, effect)
-    log.info("商店初始商品设置完毕。")
+# 已弃用：商品数据已迁移到 PostgreSQL，使用 migrate_shop_items_to_pg.py 脚本进行数据导入
+# async def _setup_initial_items():
+#     """设置商店的初始商品（覆盖逻辑）"""
+#     log.info("正在设置商店初始商品...")
+#
+#     # --- 新增：先删除所有现有商品以确保覆盖 ---
+#     delete_query = "DELETE FROM shop_items"
+#     await chat_db_manager._execute(
+#         chat_db_manager._db_transaction, delete_query, commit=True
+#     )
+#     log.info("已删除所有旧的商店商品。")
+#     # --- 结束 ---
+#
+#     # 从配置文件导入商品列表
+#     from src.chat.config.shop_config import SHOP_ITEMS
+#
+#     for name, desc, price, cat, target, effect in SHOP_ITEMS:
+#         await coin_service.add_item_to_shop(name, desc, price, cat, target, effect)
+#     log.info("商店初始商品设置完毕。")
 
 
 # 单例实例

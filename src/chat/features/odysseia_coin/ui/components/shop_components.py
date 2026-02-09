@@ -1,6 +1,5 @@
 """
-This module contains all the UI components (Buttons, Selects, Modals)
-used in the Odysseia Coin Shop feature.
+本模块包含奥德赛币商店功能中使用的所有UI组件（按钮、选择菜单、模态框）。
 """
 
 from __future__ import annotations
@@ -26,10 +25,13 @@ from src.chat.features.odysseia_coin.service.coin_service import (
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
-from src.chat.features.affection.service.gift_service import GiftService
-from src.chat.features.affection.service.affection_service import affection_service
-from src.chat.services.gemini_service import gemini_service
 from src.chat.features.odysseia_coin.service.shop_service import shop_service
+from src.chat.features.tools.tool_metadata import (
+    get_all_tools_metadata,
+)
+from src.chat.features.tools.services.user_tool_settings_service import (
+    user_tool_settings_service,
+)
 
 
 if TYPE_CHECKING:
@@ -38,15 +40,15 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Use a TypeVar to specify the view type for better type hinting
+# 使用 TypeVar 来指定视图类型，以获得更好的类型提示
 ViewT = TypeVar("ViewT", bound=discord.ui.View)
 
 
-# --- Base Components ---
+# --- 基础组件 ---
 
 
 class ShopButton(discord.ui.Button[ViewT]):
-    """A base button class that provides correct type hinting for the view."""
+    """一个基础按钮类，为视图提供正确的类型提示。"""
 
     @property
     def view(self) -> ViewT:
@@ -54,18 +56,18 @@ class ShopButton(discord.ui.Button[ViewT]):
 
 
 class ShopSelect(discord.ui.Select[ViewT]):
-    """A base select class that provides correct type hinting for the view."""
+    """一个基础选择菜单类，为视图提供正确的类型提示。"""
 
     @property
     def view(self) -> ViewT:
         return cast(ViewT, super().view)
 
 
-# --- Event UI Components ---
+# --- 活动UI组件 ---
 
 
 class EventButton(ShopButton["SimpleShopView"]):
-    """Button to enter the active event view."""
+    """进入当前活动视图的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -85,11 +87,11 @@ class EventButton(ShopButton["SimpleShopView"]):
         await interaction.response.edit_message(embeds=[embed], view=event_view)
 
 
-# --- Daily Report UI Components ---
+# --- 每日速报UI组件 ---
 
 
 class DailyReportView(discord.ui.View):
-    """View for displaying the daily report."""
+    """用于显示每日速报的视图。"""
 
     def __init__(self, main_view: "SimpleShopView"):
         super().__init__(timeout=180)
@@ -102,7 +104,7 @@ class DailyReportView(discord.ui.View):
         self.add_item(back_button)
 
     async def create_embed(self) -> discord.Embed:
-        """Creates the embed for the daily report."""
+        """创建每日速报的嵌入消息。"""
         if hasattr(self.main_view, "daily_panel"):
             return await self.main_view.daily_panel.create_embed()
         return discord.Embed(
@@ -110,13 +112,13 @@ class DailyReportView(discord.ui.View):
         )
 
     async def back_callback(self, interaction: discord.Interaction):
-        """Returns to the main shop view."""
+        """返回主商店视图。"""
         embeds = await self.main_view.create_shop_embeds()
         await interaction.response.edit_message(embeds=embeds, view=self.main_view)
 
 
 class DailyReportButton(ShopButton["SimpleShopView"]):
-    """Button to open the daily report view."""
+    """打开每日速报视图的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -135,7 +137,7 @@ class DailyReportButton(ShopButton["SimpleShopView"]):
         await interaction.response.edit_message(embeds=[embed], view=daily_view)
 
 
-# --- Loan UI Components ---
+# --- 借贷UI组件 ---
 
 
 class LoanModal(discord.ui.Modal, title="输入借款金额"):
@@ -248,11 +250,11 @@ class LoanView(discord.ui.View):
             )
 
 
-# --- Main Shop Components ---
+# --- 主商店组件 ---
 
 
 class CategorySelect(ShopSelect["SimpleShopView"]):
-    """Select menu for choosing an item category."""
+    """用于选择商品类别的选择菜单。"""
 
     def __init__(self, categories: List[str]):
         options = [
@@ -285,7 +287,7 @@ class CategorySelect(ShopSelect["SimpleShopView"]):
 
 
 class ItemSelect(ShopSelect["SimpleShopView"]):
-    """Select menu for choosing a specific item."""
+    """用于选择特定商品的选择菜单。"""
 
     def __init__(self, category: str, items: List[Dict[str, Any]]):
         options = [
@@ -311,7 +313,7 @@ class ItemSelect(ShopSelect["SimpleShopView"]):
 
 
 class BackToCategoriesButton(ShopButton["SimpleShopView"]):
-    """Button to return to the category selection view."""
+    """返回类别选择视图的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -327,7 +329,7 @@ class BackToCategoriesButton(ShopButton["SimpleShopView"]):
 
 
 class LoanButton(ShopButton["SimpleShopView"]):
-    """Button to open the loan view."""
+    """打开借贷视图的按钮。"""
 
     def __init__(self):
         super().__init__(label="借贷", style=discord.ButtonStyle.primary, emoji="🏦")
@@ -340,10 +342,10 @@ class LoanButton(ShopButton["SimpleShopView"]):
 
 
 class WorkButton(ShopButton["SimpleShopView"]):
-    """Button to perform work and earn coins."""
+    """执行打工并赚取类脑币的按钮。"""
 
     def __init__(self):
-        super().__init__(label="打工", style=discord.ButtonStyle.success, emoji="🛠️")
+        super().__init__(label="打工", style=discord.ButtonStyle.primary, emoji="🛠️")
 
     async def callback(self, interaction: discord.Interaction):
         work_db_service = WorkDBService()
@@ -376,10 +378,10 @@ class WorkButton(ShopButton["SimpleShopView"]):
 
 
 class SellBodyButton(ShopButton["SimpleShopView"]):
-    """Button for the 'sell body' feature."""
+    """“卖屁股”功能的按钮。"""
 
     def __init__(self):
-        super().__init__(label="卖屁股", style=discord.ButtonStyle.danger, emoji="🥵")
+        super().__init__(label="卖屁股", style=discord.ButtonStyle.primary, emoji="🥵")
 
     async def callback(self, interaction: discord.Interaction):
         user_id = interaction.user.id
@@ -408,7 +410,7 @@ class SellBodyButton(ShopButton["SimpleShopView"]):
 
 
 class LeaderboardButton(ShopButton["SimpleShopView"]):
-    """Button to open the leaderboard view."""
+    """打开排行榜视图的按钮。"""
 
     def __init__(self):
         super().__init__(label="排行榜", style=discord.ButtonStyle.primary, emoji="🏆")
@@ -420,10 +422,10 @@ class LeaderboardButton(ShopButton["SimpleShopView"]):
 
 
 class PurchaseButton(ShopButton["SimpleShopView"]):
-    """Button to purchase the selected item."""
+    """购买所选商品的按钮。"""
 
     def __init__(self):
-        super().__init__(label="购买", style=discord.ButtonStyle.success, emoji="💰")
+        super().__init__(label="购买", style=discord.ButtonStyle.primary, emoji="💰")
 
     async def callback(self, interaction: discord.Interaction):
         if self.view.selected_item_id is None:
@@ -527,6 +529,7 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
             new_balance,
             should_show_modal,
             embed_data,
+            cg_url,
         ) = await coin_service.purchase_item(
             interaction.user.id,
             interaction.guild.id if interaction.guild else 0,
@@ -541,6 +544,10 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
                 color=discord.Color.blue(),
             )
             await interaction.followup.send(message, embed=embed, ephemeral=True)
+        elif success and cg_url:
+            # 购买成功且有CG图片URL，显示提示和图片链接
+            final_message = f"{message}\n\n{cg_url}"
+            await interaction.followup.send(final_message, ephemeral=True)
         else:
             await interaction.followup.send(final_message, ephemeral=True)
 
@@ -618,11 +625,11 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
 
 
 class RefreshBalanceButton(ShopButton["SimpleShopView"]):
-    """Button to refresh the user's coin balance."""
+    """刷新用户类脑币余额的按钮。"""
 
     def __init__(self):
         super().__init__(
-            label="刷新余额", style=discord.ButtonStyle.secondary, emoji="🔄"
+            label="刷新余额", style=discord.ButtonStyle.primary, emoji="🔄"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -634,11 +641,11 @@ class RefreshBalanceButton(ShopButton["SimpleShopView"]):
         await interaction.followup.send("余额已刷新。", ephemeral=True)
 
 
-# --- Tutorial / Knowledge Base Components ---
+# --- 教程/知识库组件 ---
 
 
 class BackToShopButton(ShopButton["TutorialManagementView"]):
-    """Button to return to the main shop view."""
+    """返回主商店视图的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -646,21 +653,21 @@ class BackToShopButton(ShopButton["TutorialManagementView"]):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        # We need to re-create the main shop view
+        # 我们需要重新创建主商店视图
         from ..shop_ui import SimpleShopView
 
         main_view = SimpleShopView(self.view.bot, self.view.author, self.view.shop_data)
-        main_view.interaction = interaction  # Crucial for keeping state
+        main_view.interaction = interaction  # 保持状态至关重要
 
         embeds = await main_view.create_shop_embeds()
         await interaction.response.edit_message(embeds=embeds, view=main_view)
 
 
 class TutorialModal(discord.ui.Modal, title="添加新的知识库教程"):
-    # <--- 修改 2: __init__ 接收 view
+    # <--- 修改 2: __init__ 接收视图
     def __init__(self, view: "TutorialManagementView"):
         super().__init__(timeout=300)
-        self.view = view  # Store the view
+        self.view = view  # 存储视图
         self.title_input = discord.ui.TextInput(
             label="教程标题",
             placeholder="请输入一个简洁明了的标题",
@@ -699,11 +706,11 @@ class TutorialModal(discord.ui.Modal, title="添加新的知识库教程"):
 
         if success:
             await interaction.followup.send("✅ 你的教程已成功提交！", ephemeral=True)
-            # Refresh the view to show the new tutorial
+            # 刷新视图以显示新教程
             await self.view.initialize()
             embed = await self.view.create_embed()
             if self.view.interaction:
-                # Use the original interaction to edit the message
+                # 使用原始交互来编辑消息
                 await self.view.interaction.edit_original_response(
                     embeds=[embed], view=self.view
                 )
@@ -742,7 +749,7 @@ class EditTutorialModal(discord.ui.Modal, title="编辑知识库教程"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        # We will implement the service layer next
+        # 我们接下来将实现服务层
         success = await shop_service.update_tutorial(
             tutorial_id=self.tutorial_id,
             title=self.title_input.value,
@@ -752,11 +759,11 @@ class EditTutorialModal(discord.ui.Modal, title="编辑知识库教程"):
 
         if success:
             await interaction.followup.send("✅ 你的教程已成功更新！", ephemeral=True)
-            # Refresh the view
+            # 刷新视图
             await self.view.initialize(force_refresh=True)
             panel = self.view.panel
             if panel:
-                panel.enter_listing_mode()  # Go back to the list view after edit
+                panel.enter_listing_mode()  # 编辑后返回列表视图
             self.view.update_components()
             embed = await self.view.create_embed()
             if self.view.interaction:
@@ -769,8 +776,44 @@ class EditTutorialModal(discord.ui.Modal, title="编辑知识库教程"):
             )
 
 
+class SearchModeButton(ShopButton["TutorialManagementView"]):
+    """切换当前帖子搜索模式的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="切换搜索模式", style=discord.ButtonStyle.primary, emoji="🔍"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        from src.chat.features.tutorial_search.services.thread_settings_service import (
+            thread_settings_service,
+        )
+
+        thread_id = self.view.shop_data.thread_id
+        if not thread_id:
+            await interaction.followup.send(
+                "❌ 错误：无法找到当前帖子的ID。请确保你在一个帖子中。", ephemeral=True
+            )
+            return
+
+        # 获取当前模式
+        current_mode = await thread_settings_service.get_search_mode(str(thread_id))
+
+        # 切换模式
+        new_mode = "PRIORITY" if current_mode == "ISOLATED" else "ISOLATED"
+        await thread_settings_service.set_search_mode(str(thread_id), new_mode)
+
+        # 刷新视图
+        await self.view.initialize()
+        self.view.update_components()
+        embed = await self.view.create_embed()
+        await interaction.edit_original_response(embeds=[embed], view=self.view)
+
+
 class AddTutorialButton(ShopButton["TutorialManagementView"]):
-    """Button to add a new tutorial."""
+    """添加新教程的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -783,7 +826,7 @@ class AddTutorialButton(ShopButton["TutorialManagementView"]):
 
 
 class KnowledgeBaseButton(ShopButton["SimpleShopView"]):
-    """Button to open the tutorial management view."""
+    """打开教程管理视图的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -793,7 +836,7 @@ class KnowledgeBaseButton(ShopButton["SimpleShopView"]):
     async def callback(self, interaction: discord.Interaction):
         from ..shop_ui import TutorialManagementView
 
-        # This view will be created in the next step
+        # 此视图将在下一步中创建
         tutorial_view = TutorialManagementView(
             bot=self.view.bot, author=self.view.author, shop_data=self.view.shop_data
         )
@@ -803,7 +846,7 @@ class KnowledgeBaseButton(ShopButton["SimpleShopView"]):
 
 
 class ConfirmationModal(discord.ui.Modal, title="确认删除"):
-    """A simple modal to confirm an action."""
+    """一个用于确认操作的简单模态框。"""
 
     def __init__(self, on_confirm_callback):
         super().__init__(timeout=180)
@@ -829,7 +872,7 @@ class ConfirmationModal(discord.ui.Modal, title="确认删除"):
 
 
 class ManageTutorialsButton(ShopButton["TutorialManagementView"]):
-    """Button to manage existing tutorials."""
+    """管理现有教程的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -851,29 +894,29 @@ class ManageTutorialsButton(ShopButton["TutorialManagementView"]):
             )
             return
 
-        # Call the panel's method to switch to management mode
+        # 调用面板的方法切换到管理模式
         panel.enter_management_mode()
-        self.view.update_components()  # The view will now get components from the panel
+        self.view.update_components()  # 视图现在将从面板获取组件
 
-        # Update the message with the new embed and components
+        # 使用新的嵌入和组件更新消息
         embed = await self.view.create_embed()
         await interaction.response.edit_message(embeds=[embed], view=self.view)
 
 
 class TutorialActionSelect(ShopSelect["TutorialManagementView"]):
-    """A select menu to choose a tutorial for an action (edit/delete)."""
+    """一个用于选择要执行操作（编辑/删除）的教程的选择菜单。"""
 
     def __init__(self, tutorials: List[Dict[str, Any]]):
         options = [
             discord.SelectOption(
-                label=tutorial["title"][:100],  # Max 100 chars for label
+                label=tutorial["title"][:100],  # 标签最多100个字符
                 value=str(tutorial["id"]),
                 description=f"ID: {tutorial['id']}",
                 emoji="📝",
             )
             for tutorial in tutorials
         ]
-        options = options[:25]  # Max 25 options
+        options = options[:25]  # 最多25个选项
         super().__init__(
             placeholder="选择一个你要操作的教程...",
             min_values=1,
@@ -885,13 +928,13 @@ class TutorialActionSelect(ShopSelect["TutorialManagementView"]):
         panel = self.view.panel
         assert panel is not None
         panel.selected_tutorial_id = int(self.values[0])
-        # The view's update_components will handle button states
+        # 视图的 update_components 将处理按钮状态
         self.view.update_components()
         await interaction.response.edit_message(view=self.view)
 
 
 class EditTutorialButton(ShopButton["TutorialManagementView"]):
-    """Button to edit a selected tutorial."""
+    """编辑所选教程的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -909,7 +952,7 @@ class EditTutorialButton(ShopButton["TutorialManagementView"]):
             )
             return
 
-        # Fetch the full tutorial data
+        # 获取完整的教程数据
         tutorial_data = await shop_service.get_tutorial_by_id(
             panel.selected_tutorial_id
         )
@@ -919,7 +962,7 @@ class EditTutorialButton(ShopButton["TutorialManagementView"]):
             )
             return
 
-        # Open the modal with pre-filled data
+        # 打开预填充数据的模态框
         modal = EditTutorialModal(
             view=self.view,
             tutorial_id=panel.selected_tutorial_id,
@@ -929,7 +972,7 @@ class EditTutorialButton(ShopButton["TutorialManagementView"]):
 
 
 class DeleteTutorialButton(ShopButton["TutorialManagementView"]):
-    """Button to delete a selected tutorial."""
+    """删除所选教程的按钮。"""
 
     def __init__(self):
         super().__init__(
@@ -966,7 +1009,7 @@ class DeleteTutorialButton(ShopButton["TutorialManagementView"]):
                 await modal_interaction.followup.send(
                     "✅ 教程已成功删除。", ephemeral=True
                 )
-                # Refresh the view
+                # 刷新视图
                 await self.view.initialize(force_refresh=True)
                 panel.enter_listing_mode()
                 self.view.update_components()
@@ -986,7 +1029,7 @@ class DeleteTutorialButton(ShopButton["TutorialManagementView"]):
 
 
 class BackToTutorialListButton(ShopButton["TutorialManagementView"]):
-    """Button to go back to the main tutorial management panel."""
+    """返回主教程管理面板的按钮。"""
 
     def __init__(self):
         super().__init__(label="返回列表", style=discord.ButtonStyle.secondary)
@@ -998,3 +1041,131 @@ class BackToTutorialListButton(ShopButton["TutorialManagementView"]):
         self.view.update_components()
         embed = await self.view.create_embed()
         await interaction.response.edit_message(embeds=[embed], view=self.view)
+
+
+# --- 工具设置UI组件 ---
+
+
+class ToolListButton(ShopButton["SimpleShopView"]):
+    """打开工具设置视图的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="类脑娘的工作清单", style=discord.ButtonStyle.primary, emoji="🗒️"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        tool_settings_view = ToolSettingsView(main_view=self.view)
+        await tool_settings_view.initialize(interaction.user)
+        embed = await tool_settings_view.create_embed()
+        await interaction.response.edit_message(embeds=[embed], view=tool_settings_view)
+
+
+class ToolSettingsView(discord.ui.View):
+    """管理用户工具设置的视图。"""
+
+    def __init__(self, main_view: "SimpleShopView"):
+        super().__init__(timeout=300)
+        self.main_view = main_view
+        self.user: discord.User | discord.Member | None = None
+        self.user_settings: Dict[str, Any] | None = None
+        self.all_tools: Dict[str, Dict[str, Any]] = {}
+        self.confirmation_message: str | None = None
+
+    async def initialize(self, user: discord.User | discord.Member):
+        self.user = user
+        self.user_settings = await user_tool_settings_service.get_user_tool_settings(
+            str(user.id)
+        )
+        self.all_tools = get_all_tools_metadata()
+        self.add_components()
+
+    def add_components(self):
+        """根据当前状态向视图添加组件。"""
+        self.clear_items()
+        self.add_item(ToolToggleSelect(self.all_tools, self.user_settings))
+
+        back_button = discord.ui.Button(
+            label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️"
+        )
+        back_button.callback = self.back_callback
+        self.add_item(back_button)
+
+    async def create_embed(self) -> discord.Embed:
+        """创建工具设置的嵌入消息。"""
+        description = "在这里可以设置类脑娘在你的帖子里能使用哪些工具哦～\n默认情况下所有工具都是开启的。"
+        if self.confirmation_message:
+            description = f"✅ {self.confirmation_message}\n\n{description}"
+            # 重置消息，以便下次更新时不显示
+            self.confirmation_message = None
+
+        embed = discord.Embed(
+            title="🗒️ 类脑娘的工作清单",
+            description=description,
+            color=discord.Color.blue(),
+        )
+        return embed
+
+    async def back_callback(self, interaction: discord.Interaction):
+        """返回主商店视图。"""
+        embeds = await self.main_view.create_shop_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=self.main_view)
+
+
+class ToolToggleSelect(discord.ui.Select):
+    """用于启用/禁用工具的选择菜单。"""
+
+    def __init__(
+        self,
+        all_tools: Dict[str, Dict[str, Any]],
+        user_settings: Dict[str, Any] | None,
+    ):
+        from src.chat.config.chat_config import HIDDEN_TOOLS
+
+        options = []
+        enabled_tools = user_settings.get("enabled_tools") if user_settings else None
+
+        for tool_name, meta in all_tools.items():
+            # 过滤掉不允许用户控制的工具（HIDDEN_TOOLS）
+            if tool_name in HIDDEN_TOOLS:
+                continue
+            # 如果 user_settings 为 None，则默认启用所有工具。
+            # 如果数据库中的 enabled_tools 为 None，则默认启用所有工具。
+            is_enabled = enabled_tools is None or tool_name in enabled_tools
+            options.append(
+                discord.SelectOption(
+                    label=meta["name"],
+                    value=tool_name,
+                    description=meta["description"],
+                    emoji=meta["emoji"],
+                    default=is_enabled,
+                )
+            )
+
+        super().__init__(
+            placeholder="选择要开启/关闭的工具...",
+            min_values=0,
+            max_values=len(options),
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view = cast(ToolSettingsView, self.view)
+        user_id = str(interaction.user.id)
+
+        # 将UI中选择的工具保存到数据库
+        new_enabled_set = set(self.values) if self.values else set()
+
+        await user_tool_settings_service.save_user_tool_settings(
+            user_id, {"enabled_tools": list(new_enabled_set)}
+        )
+
+        # 更新视图中的用户设置
+        view.user_settings = await user_tool_settings_service.get_user_tool_settings(
+            user_id
+        )
+
+        # 设置确认消息并更新原始消息
+        view.add_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)

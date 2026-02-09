@@ -6,10 +6,17 @@ import discord
 from src.chat.features.tarot.services import tarot_service
 from src.chat.utils.database import chat_db_manager
 from src.chat.features.tarot.config.tarot_config import TarotConfig
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
 
+@tool_metadata(
+    name="塔罗占卜",
+    description="抽张塔罗牌看看运势～可以问问题，也可以看看整体运势哦！",
+    emoji="🃏",
+    category="娱乐",
+)
 async def tarot_reading(
     question: str = "关于我最近的整体运势", spread_type: str = "three_card", **kwargs
 ) -> Dict[str, Any]:
