@@ -541,14 +541,47 @@ class CoinService:
                 )
         else:
             # --- 普通物品，不使用背包系统 ---
-            return (
-                True,
-                f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
-                new_balance,
-                False,
-                None,
-                _select_random_cg_url(item.get("cg_url")),
-            )
+            # 检查是否是"给类脑娘买点好吃的!"类别
+            if item["category"] == "给类脑娘买点好吃的!":
+                # 请类脑娘吃饭，增加好感度
+                points_to_add = max(1, item["price"] // 10)
+                (
+                    meal_success,
+                    meal_message,
+                ) = await affection_service.increase_affection_for_gift(
+                    user_id, points_to_add
+                )
+
+                if meal_success:
+                    # 购买成功，返回请吃饭的消息和CG图片URL
+                    cg_url = _select_random_cg_url(item.get("cg_url"))
+                    return (
+                        True,
+                        f"你花 {total_cost} 类脑币请类脑娘吃了 **{item['name']}**。",
+                        new_balance,
+                        False,
+                        None,
+                        cg_url,
+                    )
+                else:
+                    # 请吃饭失败，回滚交易
+                    await self.add_coins(
+                        user_id, total_cost, f"请吃饭失败返还: {item['name']}"
+                    )
+                    log.warning(
+                        f"用户 {user_id} 请类脑娘吃饭失败，已返还 {total_cost} 类脑币。原因: {meal_message}"
+                    )
+                    return False, meal_message, current_balance, False, None, None
+            else:
+                # 其他普通物品
+                return (
+                    True,
+                    f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    new_balance,
+                    False,
+                    None,
+                    _select_random_cg_url(item.get("cg_url")),
+                )
 
     async def purchase_event_item(
         self, user_id: int, item_name: str, price: int
