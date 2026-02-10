@@ -1,4 +1,5 @@
 import logging
+import random
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -22,6 +23,18 @@ ENABLE_THREAD_REPLIES_EFFECT_ID = "enable_thread_replies"
 SELL_BODY_EVENT_SUBMISSION_EFFECT_ID = "submit_sell_body_event"
 CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID = "clear_personal_memory"
 VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID = "view_personal_memory"
+
+
+def _select_random_cg_url(cg_url) -> Optional[str]:
+    """
+    从 cg_url 中随机选择一个 URL。
+    如果 cg_url 是列表，随机选择一个；如果是字符串，直接返回；否则返回 None。
+    """
+    if isinstance(cg_url, list) and cg_url:
+        return random.choice(cg_url)
+    elif isinstance(cg_url, str):
+        return cg_url
+    return None
 
 
 class CoinService:
@@ -342,7 +355,7 @@ class CoinService:
 
             if gift_success:
                 # 购买成功，返回空消息和CG图片URL
-                cg_url = item.get("cg_url")
+                cg_url = _select_random_cg_url(item.get("cg_url"))
                 return True, "", new_balance, False, None, cg_url
             else:
                 # 送礼失败，回滚交易
@@ -369,7 +382,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID:
                 # 查看用户的个人记忆
@@ -388,7 +401,7 @@ class CoinService:
                     new_balance,
                     False,
                     embed_data,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == PERSONAL_MEMORY_ITEM_EFFECT_ID:
                 # 检查用户是否已经拥有个人记忆功能
@@ -406,7 +419,7 @@ class CoinService:
                         new_balance,
                         True,
                         None,
-                        item.get("cg_url"),
+                        _select_random_cg_url(item.get("cg_url")),
                     )
                 else:
                     return (
@@ -415,7 +428,7 @@ class CoinService:
                         new_balance,
                         True,
                         None,
-                        item.get("cg_url"),
+                        _select_random_cg_url(item.get("cg_url")),
                     )
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
                 # 购买"知识纸条"商品，需要弹出模态窗口
@@ -425,7 +438,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
                 # 购买"社区成员档案上传"商品，需要弹出模态窗口
@@ -435,7 +448,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
                 # 购买“拉皮条”商品，需要弹出模态窗口
@@ -445,10 +458,10 @@ class CoinService:
                     new_balance,
                     True,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == DISABLE_THREAD_COMMENTOR_EFFECT_ID:
-                # 购买“枯萎向日葵”，禁用暖贴功能
+                # 购买"枯萎向日葵"，禁用暖贴功能
                 await self.set_warmup_preference(user_id, wants_warmup=False)
                 return (
                     True,
@@ -456,7 +469,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == BLOCK_THREAD_REPLIES_EFFECT_ID:
                 query = """
@@ -473,10 +486,10 @@ class CoinService:
                     new_balance,
                     False,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == ENABLE_THREAD_COMMENTOR_EFFECT_ID:
-                # 购买“魔法向日葵”，重新启用暖贴功能
+                # 购买"魔法向日葵"，重新启用暖贴功能
                 await self.set_warmup_preference(user_id, wants_warmup=True)
                 return (
                     True,
@@ -484,10 +497,10 @@ class CoinService:
                     new_balance,
                     False,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == ENABLE_THREAD_REPLIES_EFFECT_ID:
-                # 购买“通行许可”，重新启用帖子回复并设置默认CD
+                # 购买"通行许可"，重新启用帖子回复并设置默认CD
                 default_limit = 2
                 default_duration = 60
                 query = """
@@ -514,7 +527,7 @@ class CoinService:
                     new_balance,
                     True,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
             else:
                 # 其他未知效果，不使用背包系统
@@ -524,7 +537,7 @@ class CoinService:
                     new_balance,
                     False,
                     None,
-                    item.get("cg_url"),
+                    _select_random_cg_url(item.get("cg_url")),
                 )
         else:
             # --- 普通物品，不使用背包系统 ---
@@ -534,7 +547,7 @@ class CoinService:
                 new_balance,
                 False,
                 None,
-                item.get("cg_url"),
+                _select_random_cg_url(item.get("cg_url")),
             )
 
     async def purchase_event_item(

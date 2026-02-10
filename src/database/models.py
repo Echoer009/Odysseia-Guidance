@@ -392,8 +392,8 @@ class ShopItem(Base):
     effect_id: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, comment="商品效果ID"
     )
-    cg_url: Mapped[str] = mapped_column(
-        String(1000), nullable=True, comment="CG图片的Discord链接"
+    cg_url: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True, comment="CG图片的Discord链接列表"
     )
     is_available: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, comment="是否可用（1=可用，0=不可用）"
