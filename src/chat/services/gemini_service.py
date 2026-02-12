@@ -828,8 +828,8 @@ class GeminiService:
         model_to_count = prompt_model_name or self.default_model_name
         await chat_settings_service.increment_model_usage(model_to_count)
 
-        # 1. 构建完整的对话提示
-        final_conversation = prompt_service.build_chat_prompt(
+        # 1. 构建完整的对话提示（现在是异步方法）
+        final_conversation = await prompt_service.build_chat_prompt(
             user_name=user_name,
             message=message,
             replied_message=replied_message,

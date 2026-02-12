@@ -7,7 +7,7 @@ from PIL import Image
 import io
 import json
 import re
-
+import discord
 
 from src.chat.config.prompts import PROMPT_CONFIG
 from src.chat.config import chat_config
@@ -114,7 +114,7 @@ class PromptService:
 
         return prompt_template
 
-    def build_chat_prompt(
+    async def build_chat_prompt(
         self,
         user_name: str,
         message: Optional[str],
@@ -136,6 +136,62 @@ class PromptService:
         形成一个结构化的、引导式的上下文，以提高AI的稳定性和可控性。
         """
         final_conversation = []
+
+        # --- 新增：帖子首楼注入 ---
+        # 使用 message_processor 中的通用检测函数
+        if channel and message:
+            from src.chat.services.message_processor import detect_bot_location
+
+            location_info = detect_bot_location(channel)
+            bot_user_id = (
+                channel.guild.me.id
+                if hasattr(channel, "guild") and channel.guild
+                else None
+            )
+
+            # 检查是否在帖子中（只要在帖子里就注入首楼）
+            if location_info["is_thread"] and bot_user_id:
+                try:
+                    thread = channel
+                    # 获取帖子首楼
+                    if thread.starter_message:
+                        first_message = thread.starter_message
+                    else:
+                        first_message = await thread.fetch_message(thread.id)
+
+                    if first_message and first_message.content:
+                        # 获取作者信息
+                        author_name = "未知作者"
+                        if thread.owner:
+                            author_name = thread.owner.display_name
+                        elif thread.owner_id:
+                            try:
+                                owner = await thread.guild.fetch_member(thread.owner_id)
+                                author_name = owner.display_name
+                            except discord.NotFound:
+                                pass
+
+                        # 构建帖子首楼注入
+                        starter_content = first_message.content
+                        thread_title = thread.name
+                        tags = (
+                            ", ".join([tag.name for tag in thread.applied_tags])
+                            if thread.applied_tags
+                            else "无"
+                        )
+
+                        thread_first_post = f"""<thread_first_post>
+帖子标题: {thread_title}
+发帖人: {author_name}
+标签: {tags}
+首楼内容:
+{starter_content}
+</thread_first_post>"""
+
+                        # 保存帖子首楼内容，稍后注入
+                        self._thread_first_post_to_inject = thread_first_post
+                except Exception as e:
+                    log.warning(f"获取帖子首楼内容失败: {e}")
 
         # --- 新增：根据模型动态注入绕过限制的上下文 ---
         jailbreak_user = self._get_model_specific_prompt(
@@ -160,6 +216,14 @@ class PromptService:
 
         final_conversation.append({"role": "user", "parts": [core_prompt]})
         final_conversation.append({"role": "model", "parts": ["我在线啦，随时开聊！"]})
+
+        # --- 注入帖子首楼内容（保存人设后面） ---
+        if hasattr(self, "_thread_first_post_to_inject"):
+            thread_first_post = self._thread_first_post_to_inject
+            final_conversation.append({"role": "user", "parts": [thread_first_post]})
+            final_conversation.append({"role": "model", "parts": ["了解了"]})
+            log.info("已将帖子首楼内容注入到人设之后")
+            delattr(self, "_thread_first_post_to_inject")
 
         # --- 2. 动态知识注入 ---
         # 注入世界之书 (RAG) 内容

@@ -7,7 +7,6 @@ import re
 import asyncio
 import aiohttp
 
-from src.chat.services.regex_service import regex_service
 from src import config
 from src.chat.config import chat_config
 from src.chat.utils.database import chat_db_manager
@@ -17,6 +16,50 @@ log = logging.getLogger(__name__)
 # 定义一个正则表达式来匹配自定义表情
 # <a:emoji_name:emoji_id> (动态) 或 <:emoji_name:emoji_id> (静态)
 EMOJI_REGEX = re.compile(r"<a?:(\w+):(\d+)>")
+
+
+def detect_bot_location(channel: Any) -> Dict[str, Any]:
+    """
+    通用的bot位置检测函数，用于检测bot当前所在的频道或帖子。
+
+    Args:
+        channel: Discord的channel对象（可能是TextChannel或Thread）
+
+    Returns:
+        Dict[str, Any]: 包含位置信息的字典：
+            - location_type: "thread" | "channel" - 位置类型
+            - location_id: int - 当前位置的ID（频道ID或帖子ID）
+            - thread_id: int | None - 如果是帖子，返回帖子ID；否则为None
+            - parent_channel_id: int | None - 如果是帖子，返回父频道ID；否则为None
+            - is_thread: bool - 是否在帖子中
+    """
+    import discord
+
+    if isinstance(channel, discord.Thread):
+        return {
+            "location_type": "thread",
+            "location_id": channel.id,
+            "thread_id": channel.id,
+            "parent_channel_id": channel.parent_id,
+            "is_thread": True,
+        }
+    elif isinstance(channel, discord.TextChannel):
+        return {
+            "location_type": "channel",
+            "location_id": channel.id,
+            "thread_id": None,
+            "parent_channel_id": None,
+            "is_thread": False,
+        }
+    else:
+        # 处理未知类型的情况
+        return {
+            "location_type": "unknown",
+            "location_id": getattr(channel, "id", None),
+            "thread_id": None,
+            "parent_channel_id": None,
+            "is_thread": False,
+        }
 
 
 class MessageProcessor:
@@ -104,21 +147,25 @@ class MessageProcessor:
         # 检查消息是否来自置顶帖子
         # 检查频道是否被禁言
         if await chat_db_manager.is_channel_muted(message.channel.id):
-            log.debug(f"消息来自被禁言的频道 {message.channel.name}，已忽略。")
+            channel_name = getattr(message.channel, "name", str(message.channel.id))
+            log.debug(f"消息来自被禁言的频道 {channel_name}，已忽略。")
             return None
 
         # 检查消息是否来自置顶帖子
         if isinstance(message.channel, discord.Thread) and message.channel.flags.pinned:
-            log.debug(f"消息来自置顶帖子 {message.channel.name}，已忽略。")
+            channel_name = getattr(message.channel, "name", str(message.channel.id))
+            log.debug(f"消息来自置顶帖子 {channel_name}，已忽略。")
             return None
 
         # 检查消息是否来自配置中禁用的频道
         if message.channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
-            log.debug(f"消息来自禁用的频道 {message.channel.name}，已忽略。")
+            channel_name = getattr(message.channel, "name", str(message.channel.id))
+            log.debug(f"消息来自禁用的频道 {channel_name}，已忽略。")
             return None
 
         image_data_list = []
-        bot_user = message.guild.me
+        # 获取bot用户，优先使用 message.guild.me，如果是DM则使用 bot.user
+        bot_user = message.guild.me if message.guild else bot.user
 
         if message.attachments:
             image_data_list.extend(
@@ -146,9 +193,9 @@ class MessageProcessor:
                         for snapshot in ref_msg.message_snapshots:
                             # 根据 discord.py 文档，MessageSnapshot 是一个对象，必须使用属性访问。
                             # 我们使用 hasattr() 来安全地检查属性是否存在。
-                            if hasattr(snapshot, "author") and snapshot.author:
+                            if hasattr(snapshot, "author") and snapshot.author:  # type: ignore
                                 # snapshot.author 是一个 User/Member 对象，它有 display_name 属性
-                                original_author_name = snapshot.author.display_name
+                                original_author_name = snapshot.author.display_name  # type: ignore
 
                             if hasattr(snapshot, "content") and snapshot.content:
                                 snapshot_content_parts.append(snapshot.content)
@@ -251,7 +298,11 @@ class MessageProcessor:
                                 else None
                             )
 
-                            if ref_msg.author.id == bot_user.id and embed_author_name:
+                            if (
+                                bot_user
+                                and ref_msg.author.id == bot_user.id
+                                and embed_author_name
+                            ):
                                 command_context = (
                                     f"的 {command_name} 回应"
                                     if command_name
@@ -319,7 +370,10 @@ class MessageProcessor:
         return image_data_list
 
     def _clean_message_content(
-        self, content: str, mentions: list, bot_user: discord.ClientUser
+        self,
+        content: str,
+        mentions: list,
+        bot_user: Optional[discord.Member | discord.ClientUser],
     ) -> str:
         """
         清理消息内容，将对自身的@mention替换为名字，并移除其他@mention。
@@ -329,8 +383,8 @@ class MessageProcessor:
         for user in mentions:
             mention_str_1 = f"<@{user.id}>"
             mention_str_2 = f"<@!{user.id}>"
-            if user.id == bot_user.id:
-                replacement = f"@{bot_user.display_name}"
+            if bot_user and user.id == bot_user.id:
+                replacement = f"@{bot_user.display_name}"  # type: ignore
                 content = content.replace(mention_str_1, replacement).replace(
                     mention_str_2, replacement
                 )
