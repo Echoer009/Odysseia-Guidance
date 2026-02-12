@@ -220,8 +220,12 @@ configure_other() {
     echo "────────────────────────────────────────"
 
     DISABLED_TOOLS=$(ask_question "禁用的工具（多个用逗号分隔）" "get_yearly_summary" "false")
+    say_hello "（可选）论坛搜索频道 ID，用于论坛搜索功能"
+    say_wait "留空则不启用论坛搜索"
     FORUM_SEARCH_CHANNEL_IDS=$(ask_question "论坛搜索频道 ID（多个用逗号分隔）" "" "false")
-    COIN_REWARD_GUILD_IDS=$(ask_question "类脑币奖励服务器 ID（多个用逗号分隔）" "" "false")
+    say_hello "类脑币奖励服务器 ID，用于类脑币奖励功能"
+    say_wait "留空则默认使用开发服务器 ID"
+    COIN_REWARD_GUILD_IDS=$(ask_question "类脑币奖励服务器 ID（多个用逗号分隔）" "$GUILD_ID" "false")
 }
 
 # 生成 .env 文件
