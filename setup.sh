@@ -299,6 +299,34 @@ ask_start_service() {
     return 1
 }
 
+# 等待数据库就绪
+wait_for_db() {
+    local max_attempts=30
+    local attempt=1
+    local db_host="db"
+    local db_port="5432"
+
+    say_wait "等待数据库启动..."
+    echo ""
+
+    while [ $attempt -le $max_attempts ]; do
+        if docker compose exec -T db pg_isready -h $db_host -p $db_port > /dev/null 2>&1; then
+            say_success "数据库已就绪～"
+            echo ""
+            return 0
+        fi
+
+        printf "\r  等待中... ($attempt/$max_attempts)" >&2
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    echo ""
+    say_oops "数据库启动超时，请检查 Docker 容器状态"
+    docker compose ps db
+    exit 1
+}
+
 # 启动服务
 start_service() {
     echo ""
@@ -333,6 +361,9 @@ start_service() {
         say_oops "搬家过程出问题了..."
         exit 1
     fi
+
+    # 等待数据库就绪
+    wait_for_db
 
     # 初始化数据库
     say_wait "帮类脑娘整理一下房间（初始化数据库）..."
