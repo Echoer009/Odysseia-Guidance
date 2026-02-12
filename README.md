@@ -104,6 +104,26 @@ Odysseia 是一个为 Discord 社区"类脑"量身打造的、功能丰富的AI�
 
 #### 部署步骤
 
+**方式 A：一键配置（推荐）**
+
+```bash
+# 克隆项目
+git clone [仓库URL]
+cd Odysseia-Guidance
+
+# 运行一键配置脚本
+bash setup.sh
+```
+
+脚本将引导你完成所有配置，包括：
+- Discord 机器人令牌
+- Google Gemini API 密钥
+- 数据库配置
+- 功能开关
+- 自动构建和启动服务
+
+**方式 B：手动配置**
+
 **1. 克隆项目**
 ```bash
 git clone [仓库URL]

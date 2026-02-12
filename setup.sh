@@ -3,7 +3,8 @@
 # 类脑娘邀请脚本
 # 让类脑娘来帮你配置一切吧～
 
-set -e
+# 移除 set -e，避免 read 命令返回非零状态时脚本意外退出
+# 改用手动错误处理
 
 # 颜色定义 - 类脑娘的配色
 PINK='\033[38;5;213m'
@@ -70,9 +71,11 @@ check_env_file() {
         say_warning "哎呀～检测到 .env 文件已经存在啦！"
         echo ""
         say_hello "类脑娘可能已经在这里住过了，要重新装修一下吗？"
-        read -p "是否重新配置？(y/N): " -n 1 -r
+        local reply=""
+        printf "是否重新配置？(y/N): "
+        read -r reply < /dev/tty
         echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        if [[ ! "$reply" =~ ^[Yy]$ ]]; then
             say_success "好哒～那就保持现状！"
             return 1
         fi
@@ -88,21 +91,35 @@ ask_question() {
     local question="$1"
     local default="$2"
     local required="$3"
+    local input=""
 
-    echo ""
+    # 所有提示信息输出到 stderr，避免被命令替换捕获
+    echo "" >&2
     if [ -n "$default" ]; then
-        say_hello "$question [默认: $default]"
-        read -p "你的回答: " input
-        echo "${input:-$default}"
+        echo -e "${PINK}💕 $question [默认: $default]${NC}" >&2
+        echo -n "你的回答: " >&2
+        read -r input < /dev/tty
+        if [ -z "$input" ]; then
+            input="$default"
+        fi
+        # 只有最终结果输出到 stdout
+        printf '%s\n' "$input"
     else
-        while [ -z "$input" ]; do
-            say_hello "$question"
-            read -p "你的回答: " input
-            if [ -z "$input" ] && [ "$required" = "true" ]; then
-                say_oops "这个必须要填哦～"
+        while true; do
+            echo -e "${PINK}💕 $question${NC}" >&2
+            echo -n "你的回答: " >&2
+            read -r input < /dev/tty
+            if [ -n "$input" ]; then
+                printf '%s\n' "$input"
+                return 0
+            fi
+            if [ "$required" = "true" ]; then
+                echo -e "${HEART}😅 这个必须要填哦～${NC}" >&2
+            else
+                printf '\n'
+                return 0
             fi
         done
-        echo "$input"
     fi
 }
 
@@ -120,8 +137,11 @@ configure_required() {
 
     GOOGLE_API_KEYS=""
     key_count=0
+    local key=""
     while true; do
-        read -p "  密钥 #$((key_count + 1)): " key
+        # 输出提示到 stderr，避免干扰 stdout
+        printf "  密钥 #%d: " "$((key_count + 1))" >&2
+        read -r key < /dev/tty
         if [ -z "$key" ]; then
             if [ $key_count -eq 0 ]; then
                 say_oops "至少需要一个密钥呢～"
@@ -134,7 +154,7 @@ configure_required() {
         else
             GOOGLE_API_KEYS="$key"
         fi
-        ((key_count++))
+        key_count=$((key_count + 1))
     done
 }
 
@@ -170,9 +190,11 @@ configure_features() {
     say_wait "配置一些功能开关～"
     echo "────────────────────────────────────────"
 
-    read -p "启用聊天功能？(Y/n): " -n 1 -r
+    local reply=""
+    printf "启用聊天功能？(Y/n): "
+    read -r reply < /dev/tty
     echo ""
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
+    if [[ "$reply" =~ ^[Nn]$ ]]; then
         CHAT_ENABLED="False"
         say_warning "聊天功能已关闭～"
     else
@@ -180,9 +202,10 @@ configure_features() {
         say_success "聊天功能已开启～"
     fi
 
-    read -p "记录 AI 完整上下文（用于调试）？(y/N): " -n 1 -r
+    printf "记录 AI 完整上下文（用于调试）？(y/N): "
+    read -r reply < /dev/tty
     echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
         LOG_AI_FULL_CONTEXT="true"
         say_success "调试日志已开启～"
     else
@@ -266,9 +289,11 @@ ask_start_service() {
     echo ""
     say_hello "配置文件已经准备好啦！"
     say_wait "要不要现在就让类脑娘住进来呢？"
-    read -p "现在启动服务吗？(Y/n): " -n 1 -r
+    local reply=""
+    printf "现在启动服务吗？(Y/n): "
+    read -r reply < /dev/tty
     echo ""
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    if [[ ! "$reply" =~ ^[Nn]$ ]]; then
         return 0
     fi
     return 1
