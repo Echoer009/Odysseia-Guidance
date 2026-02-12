@@ -71,9 +71,6 @@ EMBED_COLOR_WARNING = 0xFEE75C  # 黄色
 EMBED_COLOR_PURPLE = 0x9B59B6  # 紫色
 EMBED_COLOR_PRIMARY = 0x49989A  # 主要 Embed 颜色
 
-# --- RAG 相关配置 ---
-# 是否启用RAG查询重写功能 (1 for enabled, 0 for disabled)
-RAG_QUERY_REWRITING_ENABLED = int(os.getenv("RAG_QUERY_REWRITING_ENABLED", 1))
 
 # --- 可用 AI 模型 ---
 AVAILABLE_AI_MODELS = [

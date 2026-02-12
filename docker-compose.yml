@@ -6,12 +6,18 @@ services:
       - .env
     environment:
       - RUNNING_IN_DOCKER=true
-    #build:
-    #  context: .
-    #  dockerfile: .devcontainer/Dockerfile
-    #  network: host
-    image: odysseia-guidance-bot_app:latest
-    pull_policy: never
+
+    # --- 部署方式二选一 ---
+    # 方式一 (推荐): 从本地源代码构建
+    # 优点: 使用最新代码、方便调试
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+
+    # 方式二: 直接使用 Docker Hub 上的公共镜像
+    # 优点: 快速、简单、无需本地构建。使用此方式时，请注释掉上面的 'build' 部分，并取消下方 'image' 行的注释。
+    #image: echoni0n/braingirl:latest
+
     container_name: Odysseia_Guidance
     volumes:
       - .:/app
