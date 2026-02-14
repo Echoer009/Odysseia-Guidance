@@ -4,7 +4,6 @@ import io
 from discord import app_commands
 from discord.ext import commands
 
-from src.chat.utils.database import chat_db_manager
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.feeding_service import feeding_service
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
@@ -14,7 +13,9 @@ from src.chat.config.chat_config import FEEDING_CONFIG, PROMPT_CONFIG
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.config import DEVELOPER_USER_IDS
-from src.chat.services.event_service import event_service
+from src.chat.features.affection.utils.interaction_checks import (
+    check_interaction_channel_availability,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,42 +33,27 @@ class FeedingCog(commands.Cog):
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
         # --- 交互可用性检查 ---
-        channel = interaction.channel
-        # 0. 检查频道是否被禁言
-        if channel and await chat_db_manager.is_channel_muted(channel.id):
-            await interaction.response.send_message(
-                "呜…我现在不能在这里说话啦…", ephemeral=True
-            )
+        is_allowed, error_message = await check_interaction_channel_availability(
+            interaction
+        )
+        if not is_allowed:
+            await interaction.response.send_message(error_message, ephemeral=True)
             return
 
-        # 1. 检查是否在禁用的频道中
-        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
-            await interaction.response.send_message(
-                "嘘... 在这里我需要保持安静，我们去别的地方聊吧？", ephemeral=True
-            )
-            return
-
-        # 2. 检查是否在置顶的帖子中
-        if isinstance(channel, discord.Thread) and channel.flags.pinned:
-            await interaction.response.send_message(
-                "唔... 这个帖子被置顶了，一定是很重要的内容。我们不要在这里聊天，以免打扰到大家哦。",
-                ephemeral=True,
-            )
-            return
-
-        user_id = interaction.user.id
+        user_id_int = interaction.user.id
+        user_id_str = str(user_id_int)
 
         # 检查用户是否为开发者，如果是，则绕过冷却时间检查
-        if interaction.user.id not in DEVELOPER_USER_IDS:
+        if user_id_int not in DEVELOPER_USER_IDS:
             # 使用 FeedingService 检查是否可以投喂
-            can_feed, message = await self.feeding_service.can_feed(user_id)
+            can_feed, message = await self.feeding_service.can_feed(user_id_str)
             if not can_feed:
                 await interaction.response.send_message(message, ephemeral=False)
                 return
 
         await interaction.response.send_message("类脑娘正在嚼嚼嚼...", ephemeral=False)
 
-        if not image.content_type.startswith("image/"):
+        if not image.content_type or not image.content_type.startswith("image/"):
             await interaction.edit_original_response(
                 content="欸？这个不能吃啦，给我看看真正的食物图片嘛！"
             )
@@ -77,9 +63,8 @@ class FeedingCog(commands.Cog):
             image_bytes = await image.read()
 
             # 构建包含类脑娘人设的提示词
-            persona_part = extract_persona_prompt(
-                prompt_service.get_prompt("SYSTEM_PROMPT")
-            )
+            system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
+            persona_part = extract_persona_prompt(system_prompt)
             base_prompt = PROMPT_CONFIG.get("feeding_prompt", "")
             prompt = f"{persona_part}\n\n{base_prompt}"
 
@@ -112,11 +97,15 @@ class FeedingCog(commands.Cog):
                 affection_gain = int(match.group(2))
                 coin_gain = int(match.group(3))
 
-            await self.affection_service.add_affection_points(user_id, affection_gain)
+            await self.affection_service.add_affection_points(
+                user_id_int, affection_gain
+            )
 
             # 只有当 coin_gain 是正数时才增加类脑币
             if coin_gain > 0:
-                await self.coin_service.add_coins(user_id, coin_gain, reason="投喂奖励")
+                await self.coin_service.add_coins(
+                    user_id_int, coin_gain, reason="投喂奖励"
+                )
 
             # 替换表情并添加奖励消息
             evaluation_with_emojis = replace_emojis(evaluation)
@@ -151,7 +140,8 @@ class FeedingCog(commands.Cog):
 
             # 检查是否在豁免频道，如果是，则显示大图
             is_unrestricted = (
-                interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
+                interaction.channel
+                and interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
                 or isinstance(interaction.channel, discord.Thread)
             )
             if is_unrestricted:
@@ -163,7 +153,7 @@ class FeedingCog(commands.Cog):
             embed.set_footer(text="类脑娘对你的投喂做出回应...")
 
             # 记录投喂事件
-            await self.feeding_service.record_feeding(user_id)
+            await self.feeding_service.record_feeding(user_id_str)
 
             await interaction.edit_original_response(
                 content=None, embed=embed, attachments=[file]

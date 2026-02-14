@@ -9,7 +9,6 @@ from src.chat.config.chat_config import (
     CONFESSION_PERSONA_INJECTION,
 )
 from src.chat.config import chat_config
-from src.chat.utils.database import chat_db_manager
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.confession_service import ConfessionService
 from src.chat.services.gemini_service import gemini_service
@@ -17,6 +16,9 @@ from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.config import DEVELOPER_USER_IDS
 from src.chat.services.event_service import event_service
+from src.chat.features.affection.utils.interaction_checks import (
+    check_interaction_channel_availability,
+)
 
 
 class ConfessionCog(commands.Cog):
@@ -33,35 +35,20 @@ class ConfessionCog(commands.Cog):
     @app_commands.describe(content="写下你的忏悔内容。")
     async def confess(self, interaction: discord.Interaction, content: str):
         # --- 交互可用性检查 ---
-        channel = interaction.channel
-        # 0. 检查频道是否被禁言
-        if channel and await chat_db_manager.is_channel_muted(channel.id):
-            await interaction.response.send_message(
-                "呜…我现在不能在这里说话啦…", ephemeral=True
-            )
+        is_allowed, error_message = await check_interaction_channel_availability(
+            interaction
+        )
+        if not is_allowed:
+            await interaction.response.send_message(error_message, ephemeral=True)
             return
 
-        # 1. 检查是否在禁用的频道中
-        if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
-            await interaction.response.send_message(
-                "嘘... 在这里我需要保持安静，我们去别的地方聊吧？", ephemeral=True
-            )
-            return
-
-        # 2. 检查是否在置顶的帖子中
-        if isinstance(channel, discord.Thread) and channel.flags.pinned:
-            await interaction.response.send_message(
-                "唔... 这个帖子被置顶了，一定是很重要的内容。我们不要在这里聊天，以免打扰到大家哦。",
-                ephemeral=True,
-            )
-            return
-
-        user_id = interaction.user.id
+        user_id_int = interaction.user.id
+        user_id_str = str(user_id_int)
 
         # 检查用户是否为开发者，如果是，则绕过冷却时间检查
-        if interaction.user.id not in DEVELOPER_USER_IDS:
+        if user_id_int not in DEVELOPER_USER_IDS:
             can_confess, remaining_time = await self.confession_service.can_confess(
-                user_id
+                user_id_str
             )
             if not can_confess:
                 await interaction.response.send_message(
@@ -78,7 +65,7 @@ class ConfessionCog(commands.Cog):
 
         try:
             affection_status = await self.affection_service.get_affection_status(
-                user_id
+                user_id_int
             )
             current_affection = affection_status["points"]
             level_name = affection_status["level_name"]
@@ -86,10 +73,11 @@ class ConfessionCog(commands.Cog):
             # 注入核心设定
             # 为忏悔场景创建一个特殊的、更宽容的人设
             # 1. 使用正则表达式移除审查模块和绝对规则模块
+            system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
             persona_without_rules = re.sub(
                 r"<ABSOLUTE_RULES>.*?</ABSOLUTE_RULES>",
                 "",
-                prompt_service.get_prompt("SYSTEM_PROMPT"),
+                system_prompt,
                 flags=re.DOTALL,
             )
             persona_without_moderation = re.sub(
@@ -146,10 +134,10 @@ class ConfessionCog(commands.Cog):
             new_affection = current_affection
             if affection_change > 0:
                 new_affection = await self.affection_service.add_affection_points(
-                    user_id, affection_change
+                    user_id_int, affection_change
                 )
 
-            await self.confession_service.record_confession(user_id)
+            await self.confession_service.record_confession(user_id_str)
 
             embed = discord.Embed(
                 title="来自类脑娘的低语",

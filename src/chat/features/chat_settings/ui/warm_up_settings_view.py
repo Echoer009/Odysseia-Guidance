@@ -24,6 +24,8 @@ class WarmUpSettingsView(View):
 
     async def _initialize(self):
         """异步获取设置并构建UI。"""
+        if not self.guild:
+            return
         self.initial_selection = await self.service.get_warm_up_channels(self.guild.id)
         self._create_paginator()
         self._create_view_items()
@@ -39,6 +41,8 @@ class WarmUpSettingsView(View):
 
     def _create_paginator(self):
         """创建分页器实例。"""
+        if not self.guild:
+            return
         forum_channels = [c for c in self.guild.channels if isinstance(c, ForumChannel)]
 
         options = []
@@ -55,7 +59,7 @@ class WarmUpSettingsView(View):
             placeholder="选择要开启暖贴功能的论坛频道...",
             custom_id_prefix="warm_up_select",
             options=options,
-            on_select_callback=self.on_selection,
+            on_select_callback=self._on_select_callback,
             label_prefix="论坛",
         )
 
@@ -95,9 +99,11 @@ class WarmUpSettingsView(View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def interaction_check(self, interaction: Interaction) -> bool:
+        if not interaction.data:
+            return True
         custom_id = interaction.data.get("custom_id")
 
-        if self.paginator and self.paginator.handle_pagination(custom_id):
+        if self.paginator and custom_id and self.paginator.handle_pagination(custom_id):
             # 分页时，只重新构建项目并更新视图，不重新初始化
             self._create_view_items()
             await interaction.response.edit_message(view=self)
@@ -113,6 +119,8 @@ class WarmUpSettingsView(View):
             embed.description = "目前没有频道启用暖贴功能。"
         else:
             channel_mentions = []
+            if not self.guild:
+                return discord.Embed(title="暖贴频道设置", color=discord.Color.blue())
             for channel_id in self.initial_selection:
                 channel = self.guild.get_channel(channel_id)
                 if channel:
@@ -127,14 +135,20 @@ class WarmUpSettingsView(View):
         embed.set_footer(text="在下面的下拉菜单中勾选或取消勾选以进行修改。")
         return embed
 
-    async def on_selection(self, interaction: Interaction):
+    async def _on_select_callback(self, interaction: Interaction, values: List[str]):
+        """PaginatedSelect 回调包装器，符合 (Interaction, List[str]) 签名。"""
+        await self.on_selection(interaction, values)
+
+    async def on_selection(self, interaction: Interaction, values: List[str]):
         """处理频道选择事件。"""
         await interaction.response.defer()
 
         # 获取当前页面所有被选中的频道的ID
-        current_page_selected_ids = {int(v) for v in interaction.data.get("values", [])}
+        current_page_selected_ids = {int(v) for v in values}
 
         # 获取当前页面所有的选项ID
+        if not self.paginator:
+            return
         current_page_option_ids = {
             int(opt.value) for opt in self.paginator.pages[self.paginator.current_page]
         }
@@ -143,6 +157,8 @@ class WarmUpSettingsView(View):
         deselected_ids = current_page_option_ids - current_page_selected_ids
 
         # 从数据库中移除被取消选择的频道
+        if not self.guild:
+            return
         for channel_id in deselected_ids:
             if channel_id in self.initial_selection:
                 await self.service.remove_warm_up_channel(self.guild.id, channel_id)
@@ -162,6 +178,7 @@ class WarmUpSettingsView(View):
 
     async def on_back(self, interaction: Interaction):
         """返回主设置菜单。"""
+        # 延迟导入以避免循环导入
         from src.chat.features.chat_settings.ui.chat_settings_view import (
             ChatSettingsView,
         )
