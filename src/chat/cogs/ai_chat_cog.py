@@ -59,11 +59,12 @@ class AIChatCog(commands.Cog):
             # 如果返回 None，说明消息来自一个应被忽略的源（如置顶帖），直接退出
             return
 
-        # 检查消息是否符合处理条件：私聊 或 在服务器中被@
+        # 检查消息是否符合处理条件：只响应服务器中被@的消息，不响应私信
         is_dm = message.guild is None
         is_mentioned = self.bot.user in message.mentions
 
-        if not is_dm and not is_mentioned:
+        # 禁止私信回复，只响应服务器中的 @ 消息
+        if is_dm or not is_mentioned:
             return
 
         # 新增：检查是否在帖子中，以及帖子创建者是否禁用了回复
