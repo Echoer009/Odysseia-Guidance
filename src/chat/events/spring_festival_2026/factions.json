@@ -1,0 +1,18 @@
+[
+    {
+        "faction_id": "spring_festival_eve",
+        "faction_name": "除夕",
+        "description": "除夕夜到啦！一家人围在一起包饺子、看春晚，等着新年钟声敲响，空气中都是年味和温暖~",
+        "response_images": {
+            "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1472646436318347367/chifan.png"
+        }
+    },
+    {
+        "faction_id": "spring_festival_day",
+        "faction_name": "大年初一",
+        "description": "新年第一天！到处喜气洋洋的，走亲访友拜年，还能收到红包，满满的幸福和欢乐！",
+        "response_images": {
+            "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1472646436318347367/chifan.png"
+        }
+    }
+]

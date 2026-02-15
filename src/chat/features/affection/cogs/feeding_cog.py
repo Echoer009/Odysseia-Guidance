@@ -9,6 +9,7 @@ from src.chat.features.affection.service.feeding_service import feeding_service
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
 from src.chat.services.gemini_service import gemini_service
 from src.chat.services.prompt_service import prompt_service
+from src.chat.services.event_service import event_service
 from src.chat.config.chat_config import FEEDING_CONFIG, PROMPT_CONFIG
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
@@ -145,7 +146,23 @@ class FeedingCog(commands.Cog):
                 or isinstance(interaction.channel, discord.Thread)
             )
             if is_unrestricted:
-                sticker_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
+                # 首先尝试使用派系专属图片
+                sticker_url = None
+                selected_faction_id = event_service.get_selected_faction()
+                if selected_faction_id:
+                    factions = event_service.get_event_factions()
+                    if factions:
+                        for faction in factions:
+                            if faction.get("faction_id") == selected_faction_id:
+                                sticker_url = faction.get("response_images", {}).get(
+                                    "feeding", FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
+                                )
+                                break
+
+                # 如果没有找到派系图片，使用默认配置
+                if not sticker_url:
+                    sticker_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
+
                 if sticker_url:
                     embed.set_image(url=sticker_url)
 

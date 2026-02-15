@@ -220,7 +220,8 @@ class ChatDatabaseManager:
                 CREATE TABLE IF NOT EXISTS user_coins (
                     user_id INTEGER PRIMARY KEY,
                     balance INTEGER NOT NULL DEFAULT 0,
-                    last_daily_message_date TEXT
+                    last_daily_message_date TEXT,
+                    last_red_envelope_date TEXT
                 );
             """)
 
@@ -313,6 +314,12 @@ class ChatDatabaseManager:
                     "ALTER TABLE user_coins ADD COLUMN thread_cooldown_limit INTEGER;"
                 )
                 log.info("已向 user_coins 表添加 thread_cooldown_limit 列。")
+
+            if "last_red_envelope_date" not in columns_coins:
+                cursor.execute(
+                    "ALTER TABLE user_coins ADD COLUMN last_red_envelope_date TEXT;"
+                )
+                log.info("已向 user_coins 表添加 last_red_envelope_date 列。")
 
             # 个人记忆功能的'memory_feature_unlocked'列已迁移至'users'表，此处不再需要
             # 保留此注释以作记录
@@ -1590,6 +1597,41 @@ class ChatDatabaseManager:
             self._db_transaction, query, (today_date_str,), fetch="one"
         )
         return result["issue_user_warning_count"] if result else 0
+
+    # --- 春节红包管理 ---
+    async def get_last_red_envelope_date(self, user_id: int) -> Optional[str]:
+        """获取用户最后一次领取红包的日期（ISO格式：YYYY-MM-DD）。"""
+        query = "SELECT last_red_envelope_date FROM user_coins WHERE user_id = ?"
+        try:
+            result = await self._execute(
+                self._db_transaction, query, (user_id,), fetch="one"
+            )
+            return result["last_red_envelope_date"] if result else None
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e):
+                log.warning(
+                    f"尝试获取用户 {user_id} 的红包记录失败，因为 'last_red_envelope_date' 列不存在。请确保已运行最新的数据库迁移脚本。"
+                )
+                return None
+            raise
+
+    async def set_last_red_envelope_date(self, user_id: int, date: str) -> None:
+        """设置用户最后一次领取红包的日期。自动创建或更新记录。"""
+        # 确保用户记录存在
+        await self._execute(
+            self._db_transaction,
+            "INSERT OR IGNORE INTO user_coins (user_id) VALUES (?)",
+            (user_id,),
+            commit=True,
+        )
+
+        query = """
+            UPDATE user_coins
+            SET last_red_envelope_date = ?
+            WHERE user_id = ?
+        """
+        await self._execute(self._db_transaction, query, (date, user_id), commit=True)
+        log.info(f"已更新用户 {user_id} 的红包领取日期为 {date}")
 
 
 def get_database_url(sync: bool = False) -> str:

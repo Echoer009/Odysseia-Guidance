@@ -1,0 +1,6 @@
+{
+    "system_prompt_faction_packs": {
+        "spring_festival_eve": "factions/spring_festival_eve.xml",
+        "spring_festival_day": "factions/spring_festival_day.xml"
+    }
+}
