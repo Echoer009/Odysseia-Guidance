@@ -1,12 +1,38 @@
 import os
 import json
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 import logging
+import re
 
 # 假设的配置路径
 EVENTS_DIR = "src/chat/events"
 log = logging.getLogger(__name__)
+
+# 春节相关常量
+SPRING_FESTIVAL_2026_EVE = "spring_festival_eve"
+SPRING_FESTIVAL_2026_DAY = "spring_festival_day"
+SPRING_FESTIVAL_2026_GENERIC_DAY = "spring_festival_generic_day"
+
+# 2026年春节（大年初一）日期
+SPRING_FESTIVAL_2026_START = date(2026, 2, 17)  # 大年初一
+
+# 初二到十四的节日描述映射
+SPRING_FESTIVAL_DESCRIPTIONS = {
+    2: "大年初二！回娘家、吃面条，寓意着“顺顺溜溜”，年味依旧浓厚~",
+    3: "大年初三！小年朝，早睡晚起，寓意“赤狗日”，不宜拜年，适合在家休息~",
+    4: "大年初四！迎灶神，全家团聚，寓意“羊日”，吉祥如意~",
+    5: "大年初五！迎财神，放鞭炮，寓意“破五”，财源滚滚来~",
+    6: "大年初六！送穷鬼，启市营业，寓意“马日”，马到成功~",
+    7: "大年初七！人日庆生，吃七宝羹，寓意“人的生日”，万物复苏~",
+    8: "大年初八！谷日生日，放生祈福，寓意“聚财”，八方来财~",
+    9: "大年初九！玉皇大帝诞辰，祭天祈福，寓意“天日”，天赐良机~",
+    10: "大年初十！祭石感恩，寓意“石头日”，稳固安康~",
+    11: "大年初十一！子婿日，岳父宴请女婿，寓意“亲上加亲”~",
+    12: "大年初十二！搭灯棚，准备元宵，寓意“添灯”，喜上加喜~",
+    13: "大年初十三！灶王爷点查户口，寓意“灯头生日”，光明在前~",
+    14: "大年初十四！试花灯，猜灯谜，寓意“守夜”，喜迎元宵~",
+}
 
 
 class EventService:
@@ -170,6 +196,7 @@ class EventService:
     def get_system_prompt_faction_pack_content(self) -> Optional[str]:
         """
         根据当前选择的派系，动态加载并返回其派系包文件内容。
+        对于需要动态参数的派系（如spring_festival_generic_day），会进行占位符替换。
         """
         if not self.selected_faction_info:
             return None
@@ -206,7 +233,12 @@ class EventService:
                     log.debug(
                         f"正在为选择的派系 '{faction_id}' 从 '{pack_file_path}' 加载派系包。"
                     )
-                    return f.read()
+                    content = f.read()
+
+                    # 动态替换占位符
+                    content = self._replace_faction_placeholders(faction_id, content)
+
+                    return content
             else:
                 log.warning(f"派系包文件未找到: {pack_file_path}")
                 return None
@@ -214,6 +246,65 @@ class EventService:
         except Exception as e:
             log.error(f"加载派系 '{faction_id}' 的提示词包时出错: {e}")
             return None
+
+    def _replace_faction_placeholders(self, faction_id: str, content: str) -> str:
+        """
+        根据派系ID替换内容中的占位符。
+        """
+        if faction_id == SPRING_FESTIVAL_2026_GENERIC_DAY:
+            return self._replace_spring_festival_generic_day(content)
+
+        # 可以在这里添加其他需要动态替换的派系
+        # elif faction_id == "some_other_faction":
+        #     return self._replace_some_other_faction(content)
+
+        return content
+
+    def _replace_spring_festival_generic_day(self, content: str) -> str:
+        """
+        为春节初二到十四的通用派系替换占位符。
+        占位符：
+        - {day}: 大年初几（2-14）
+        - {festival_description}: 对应的节日描述
+        """
+        try:
+            # 获取当前日期（使用本地时间，因为春节是中国的传统节日）
+            today = date.today()
+
+            # 计算距离春节的天数
+            days_since_start = (today - SPRING_FESTIVAL_2026_START).days
+
+            # 计算是初几（大年初一 + days_since_start）
+            lunar_day = 1 + days_since_start
+
+            # 验证是否在初二到十四范围内
+            if lunar_day < 2 or lunar_day > 14:
+                log.warning(
+                    f"当前日期 {today} 不在春节初二到十四范围内（当前计算为初{lunar_day}）。"
+                    f"将使用默认值初二（2）。"
+                )
+                lunar_day = 2
+
+            # 获取节日描述
+            description = SPRING_FESTIVAL_DESCRIPTIONS.get(
+                lunar_day, f"大年初{lunar_day}！春节假期中，年味正浓~"
+            )
+
+            # 替换占位符
+            replaced_content = content.replace("{day}", str(lunar_day))
+            replaced_content = replaced_content.replace(
+                "{festival_description}", description
+            )
+
+            log.debug(
+                f"已替换春节通用派系占位符：day={lunar_day}, description={description[:50]}..."
+            )
+
+            return replaced_content
+
+        except Exception as e:
+            log.error(f"替换春节通用派系占位符时出错: {e}")
+            return content
 
     def set_selected_faction(self, faction_id: Optional[str]):
         """

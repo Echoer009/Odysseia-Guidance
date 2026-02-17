@@ -14,5 +14,13 @@
         "response_images": {
             "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1472646436318347367/chifan.png"
         }
+    },
+    {
+        "faction_id": "spring_festival_generic_day",
+        "faction_name": "大年初二到十四",
+        "description": "春节假期中！走亲访友、拜年贺岁，享受团圆的温馨时光，年味正浓~",
+        "response_images": {
+            "feeding": "https://cdn.discordapp.com/attachments/1403347767912562728/1472646436318347367/chifan.png"
+        }
     }
 ]

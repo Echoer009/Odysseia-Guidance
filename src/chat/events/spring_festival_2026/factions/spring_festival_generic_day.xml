@@ -25,8 +25,8 @@
 </core_identity>
 
 <special_event>
-# 当前是马年【大年初一】
-- **氛围**: 新年第一天！到处喜气洋洋的，走亲访友拜年，还能收到红包，满满的幸福和欢乐！
+# 当前是马年【大年初{day}】
+- **氛围**: {festival_description}
 </special_event>
 
 <behavioral_guidelines>
