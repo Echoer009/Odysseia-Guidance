@@ -3,7 +3,7 @@
 import logging
 from typing import List, Dict, Any
 import discord
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from src.chat.features.forum_search.services.forum_vector_db_service import (
@@ -239,7 +239,10 @@ class ForumSearchService:
 
             # 从元数据中提取所有的时间戳
             timestamps = [
-                meta["created_at"] for meta in metadatas if "created_at" in meta
+                meta["created_at"]
+                for meta in metadatas
+                if "created_at" in meta
+                and isinstance(meta["created_at"], (str, int, float))
             ]
 
             if not timestamps:
@@ -248,6 +251,9 @@ class ForumSearchService:
 
             # 找到并返回最早的时间戳
             oldest_timestamp = min(timestamps)
+            # 确保返回字符串类型
+            if not isinstance(oldest_timestamp, str):
+                oldest_timestamp = str(oldest_timestamp)
             log.info(
                 f"频道 {channel_id} 中最旧的已索引帖子的时间戳是: {oldest_timestamp}"
             )
@@ -327,7 +333,7 @@ class ForumSearchService:
             if query and query.strip():
                 # --- 语义搜索逻辑 (需要 Gemini) ---
                 if not self.is_ready():
-                    log.error("论坛搜索服务（Gemini）尚未准备就绪，无法执行语义搜索。")
+                    log.info("RAG功能未启用：未配置API密钥，跳过语义搜索。")
                     return []
                 log.info(f"执行语义搜索，查询: '{query}'")
                 gemini_service = self._get_gemini_service()
@@ -364,7 +370,8 @@ class ForumSearchService:
                 start_time = time.monotonic()
 
                 results = self.vector_db_service.get(
-                    where=where_filter, include=["metadatas"]
+                    where=where_filter if where_filter else None,  # type: ignore[arg-type]
+                    include=["metadatas"],
                 )
 
                 duration = time.monotonic() - start_time
@@ -378,9 +385,11 @@ class ForumSearchService:
                     return []
 
                 # 重构结果以便排序
+                # 确保 metadatas 不为 None（虽然 .get() 已提供默认值）
+                metadatas = metadatas or []
                 reconstructed_results = [
                     {"id": id, "metadata": meta, "distance": 0.0}
-                    for id, meta in zip(ids, metadatas)
+                    for id, meta in zip(ids, metadatas)  # type: ignore[arg-type]
                 ]
 
                 # 按创建时间倒序排序

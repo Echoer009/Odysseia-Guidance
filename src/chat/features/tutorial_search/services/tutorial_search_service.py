@@ -226,7 +226,8 @@ class TutorialSearchService:
                 text=query, task_type="retrieval_query"
             )
             if not query_embedding:
-                raise ValueError("Embedding 生成失败，返回为空。")
+                log.info("RAG功能未启用：未配置API密钥，跳过教程检索。")
+                return []
         except Exception as e:
             log.error(f"为查询 '{query}' 生成 embedding 时出错: {e}", exc_info=True)
             return []

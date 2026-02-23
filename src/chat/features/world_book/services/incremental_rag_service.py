@@ -182,7 +182,7 @@ def _build_text_slang(entry: dict) -> str:
 def _build_text_general_knowledge(entry: dict) -> str:
     """为"通用知识"类别构建结构化文本。"""
     name = entry.get("name", entry.get("title", ""))
-    text_parts = [f"类别: 通用知识", f"名称: {name}"]
+    text_parts = ["类别: 通用知识", f"名称: {name}"]
 
     content_dict = entry.get("content", {})
     if isinstance(content_dict, dict) and content_dict.get("description"):
@@ -284,7 +284,7 @@ class IncrementalRAGService:
             bool: 处理成功返回True，否则返回False
         """
         if not self.is_ready():
-            log.warning("RAG服务尚未准备就绪，无法处理社区成员档案")
+            log.info("RAG功能未启用：未配置API密钥，跳过社区成员向量化。")
             return False
 
         # 从数据库获取成员信息
@@ -610,7 +610,7 @@ class IncrementalRAGService:
             bool: 处理成功返回True，否则返回False
         """
         if not self.is_ready():
-            log.warning("RAG服务尚未准备就绪，无法处理通用知识条目")
+            log.info("RAG功能未启用：未配置API密钥，跳过通用知识向量化。")
             return False
 
         log.debug(f"尝试处理通用知识条目: {entry_id}")

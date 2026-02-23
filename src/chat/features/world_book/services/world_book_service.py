@@ -61,7 +61,7 @@ class WorldBookService:
             if not latest_query:
                 log.debug("latest_query 为空，跳过 RAG 搜索。")
             else:
-                log.warning("WorldBookService 尚未准备就绪，无法执行 find_entries。")
+                log.info("RAG功能未启用：未配置API密钥，跳过检索。")
             return []
 
         # 2. 使用 GeminiService 总结对话历史以生成查询

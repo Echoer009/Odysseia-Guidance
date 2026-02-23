@@ -75,6 +75,17 @@ def _api_key_handler(func: Callable) -> Callable:
 
     @wraps(func)
     async def wrapper(self: "GeminiService", *args, **kwargs):
+        # 检查是否配置了RAG API密钥
+        if self.key_rotation_service is None:
+            # 对于embedding方法，直接返回None
+            if func.__name__ == "generate_embedding":
+                log.warning("RAG功能未启用：未配置API密钥")
+                return None
+            # 对于其他方法，抛出异常让调用方处理
+            # 对话功能应该通过 _generate_with_custom_endpoint 处理
+            raise NoAvailableKeyError("未配置RAG API密钥，无法使用此方法")
+
+        # 正常流程：使用RAG API密钥
         while True:
             key_obj = None
             try:
@@ -249,20 +260,19 @@ class GeminiService:
             log.info("已开启 google-genai SDK 底层 DEBUG 日志。")
             # 设置基础日志记录器以捕获 httpx 的调试信息
             logging.basicConfig(level=logging.DEBUG)
-        # --- 密钥轮换服务 ---
+        # --- 密钥轮换服务（用于RAG功能）---
         google_api_keys_str = os.getenv("GOOGLE_API_KEYS_LIST", "")
-        if not google_api_keys_str:
-            log.error("GOOGLE_API_KEYS_LIST 环境变量未设置！服务将无法运行。")
-            # 在这种严重配置错误下，抛出异常以阻止应用启动
-            raise ValueError("GOOGLE_API_KEYS_LIST is not set.")
-
-        # 先移除整个字符串两端的空格和引号，以支持 "key1,key2" 格式
         processed_keys_str = google_api_keys_str.strip().strip('"')
         api_keys = [key.strip() for key in processed_keys_str.split(",") if key.strip()]
-        self.key_rotation_service = KeyRotationService(api_keys)
-        log.info(
-            f"GeminiService 初始化并由 KeyRotationService 管理 {len(api_keys)} 个密钥。"
-        )
+
+        if api_keys:
+            self.key_rotation_service = KeyRotationService(api_keys)
+            log.info(
+                f"GeminiService 初始化并由 KeyRotationService 管理 {len(api_keys)} 个密钥。"
+            )
+        else:
+            self.key_rotation_service = None
+            log.warning("未配置 GOOGLE_API_KEYS_LIST，RAG检索功能将被禁用。")
 
         self.default_model_name = app_config.GEMINI_MODEL
         self.executor = ThreadPoolExecutor(
@@ -557,6 +567,14 @@ class GeminiService:
                         await asyncio.sleep(1)  # 在重试前稍作等待
 
             # 如果所有尝试都失败了，则执行回退逻辑
+            # 检查是否配置了RAG API密钥
+            if self.key_rotation_service is None:
+                log.error(
+                    f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
+                    f"未配置 GOOGLE_API_KEYS_LIST，无法回退到官方 API。"
+                )
+                return "呜哇，有点晕嘞，自定义端点连接失败了，还没有配置备用API密钥呢，等配置好了再来找我玩吧！"
+
             log.warning(
                 f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
                 f"将回退到官方 API。"
@@ -585,6 +603,13 @@ class GeminiService:
             )
 
         # 对于非自定义模型或回退失败后的默认路径
+        # 检查是否配置了RAG API密钥
+        if self.key_rotation_service is None:
+            log.error(
+                "未配置 GOOGLE_API_KEYS_LIST，无法使用官方 API。请选择自定义端点模型。"
+            )
+            return "呜哇，现在有点晕嘞，还没有配置好API密钥呢，请选择自定义端点模型或配置 GOOGLE_API_KEYS_LIST 哦～"
+
         log.info(
             f"使用模型 '{model_name or self.default_model_name}'，将使用官方 API 逻辑。"
         )

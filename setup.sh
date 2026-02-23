@@ -132,20 +132,23 @@ configure_required() {
 
     echo ""
     say_hello "接下来是 Google Gemini API 密钥～"
+    say_wait "用于RAG检索功能（世界书、论坛搜索等）"
     say_wait "可以输入多个密钥哦，每个占一行，输入空行结束"
     say_hello "获取地址: https://makersuite.google.com/app/apikey"
+    say_warning "如果留空，RAG检索功能将被禁用，但AI对话仍可使用"
 
     GOOGLE_API_KEYS=""
     key_count=0
     local key=""
     while true; do
         # 输出提示到 stderr，避免干扰 stdout
-        printf "  密钥 #%d: " "$((key_count + 1))" >&2
+        printf "  密钥 #%d (直接回车跳过): " "$((key_count + 1))" >&2
         read -r key < /dev/tty
         if [ -z "$key" ]; then
             if [ $key_count -eq 0 ]; then
-                say_oops "至少需要一个密钥呢～"
-                continue
+                say_warning "跳过 Gemini API 密钥配置～"
+                say_warning "RAG检索功能将被禁用"
+                SKIP_RAG=true
             fi
             break
         fi
@@ -156,6 +159,17 @@ configure_required() {
         fi
         key_count=$((key_count + 1))
     done
+}
+
+# 配置自定义 Gemini 端点
+configure_gemini_endpoint() {
+    echo ""
+    say_hello "（可选）自定义 Gemini API 端点"
+    say_wait "用于AI对话功能"
+    say_warning "如果不配置，将无法使用AI对话功能"
+    
+    CUSTOM_GEMINI_URL=$(ask_question "自定义端点 URL" "" "true")
+    CUSTOM_GEMINI_API_KEY=$(ask_question "自定义端点的 API 密钥（如需要）" "" "false")
 }
 
 # 配置数据库
@@ -248,6 +262,11 @@ DEVELOPER_USER_IDS="$DEVELOPER_USER_IDS"
 ADMIN_ROLE_IDS="$ADMIN_ROLE_IDS"
 
 # Gemini AI 配置
+# 自定义端点（用于AI对话）
+CUSTOM_GEMINI_URL="$CUSTOM_GEMINI_URL"
+CUSTOM_GEMINI_API_KEY="$CUSTOM_GEMINI_API_KEY"
+
+# RAG检索用的API密钥
 GOOGLE_API_KEYS_LIST="$GOOGLE_API_KEYS"
 
 # PostgreSQL 数据库配置
@@ -279,10 +298,6 @@ LOG_DETAILED_GEMINI_PROCESS=True
 # ComfyUI 图像生成配置
 COMFYUI_SERVER_ADDRESS=""
 COMFYUI_WORKFLOW_PATH=""
-
-# 自定义 Gemini 端点
-CUSTOM_GEMINI_URL=""
-CUSTOM_GEMINI_API_KEY=""
 EOF
 
     say_success "配置文件生成完成～"
@@ -410,6 +425,7 @@ main() {
 
     # 配置各项
     configure_required
+    configure_gemini_endpoint
     configure_database
     configure_discord
     configure_features
