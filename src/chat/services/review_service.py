@@ -451,7 +451,7 @@ class ReviewService:
         self,
         pending_id: int,
         entry: sqlite3.Row,
-        message: discord.Message,
+        message: Optional[discord.Message],
         conn: sqlite3.Connection,
     ):
         """批准条目，将其写入主表并更新状态"""
@@ -653,12 +653,13 @@ Discord ID: {profile_user_id}
                     self.background_tasks.add(task)
                     task.add_done_callback(self._handle_task_result)
 
-                original_embed = message.embeds[0]
-                new_embed = original_embed.copy()
-                new_embed.title = embed_title
-                new_embed.description = embed_description
-                new_embed.color = discord.Color.green()
-                await message.edit(embed=new_embed)
+                if message:
+                    original_embed = message.embeds[0]
+                    new_embed = original_embed.copy()
+                    new_embed.title = embed_title
+                    new_embed.description = embed_description
+                    new_embed.color = discord.Color.green()
+                    await message.edit(embed=new_embed)
             else:
                 log.warning(
                     f"无法识别的条目类型 '{entry_type}' (审核ID: {pending_id})，未执行任何操作。"

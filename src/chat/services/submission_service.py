@@ -119,15 +119,46 @@ class SubmissionService:
         if purchase_info:
             knowledge_data["purchase_info"] = purchase_info
 
+        # 检测是否为管理员直接创建（通过数据库管理面板的按钮）
+        is_admin_create = purchase_info is not None and purchase_info.get(
+            "is_admin_create", False
+        )
+
         pending_id = await self._create_pending_entry(
             "general_knowledge", interaction, knowledge_data
         )
 
         if pending_id:
-            # 调用 ReviewService 来启动审核流程
-            assert review_service is not None
-            asyncio.create_task(review_service.start_review(pending_id))
-            log.info(f"通用知识提交成功，待审核ID: {pending_id}。已启动审核流程。")
+            if is_admin_create:
+                # 管理员直接创建，跳过公开审核，直接批准
+                conn = self._get_db_connection()
+                if conn:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT * FROM pending_entries WHERE id = ?",
+                            (pending_id,),
+                        )
+                        entry = cursor.fetchone()
+                        if entry:
+                            assert review_service is not None
+                            await review_service.approve_entry(
+                                pending_id=pending_id,
+                                entry=entry,
+                                message=None,  # 管理员创建不需要消息
+                                conn=conn,
+                            )
+                            log.info(
+                                f"通用知识管理员直接创建成功，待审核ID: {pending_id}。已直接批准，跳过公开审核。"
+                            )
+                    finally:
+                        if conn:
+                            conn.close()
+            else:
+                # 调用 ReviewService 来启动审核流程
+                assert review_service is not None
+                asyncio.create_task(review_service.start_review(pending_id))
+                log.info(f"通用知识提交成功，待审核ID: {pending_id}。已启动审核流程。")
 
         return pending_id
 
@@ -142,6 +173,11 @@ class SubmissionService:
             f"用户 {interaction.user.id} 正在提交社区成员档案: {member_data.get('name')}"
         )
 
+        # 检测是否为管理员直接创建（跳过审核）
+        is_admin_create = purchase_info is not None and purchase_info.get(
+            "is_admin_create", False
+        )
+
         # 如果有购买信息，将其添加到 entry_data 中
         if purchase_info:
             member_data["purchase_info"] = purchase_info
@@ -153,12 +189,48 @@ class SubmissionService:
         )
 
         if pending_id:
-            # 异步启动审核流程，不阻塞当前交互
-            assert review_service is not None
-            asyncio.create_task(review_service.start_review(pending_id))
-            log.info(
-                f"已为社区成员档案 '{member_data.get('name')}' (pending_id: {pending_id}) 创建审核任务。"
-            )
+            if is_admin_create:
+                # 管理员创建：直接批准，跳过公开审核
+                log.info(
+                    f"管理员创建社区成员档案 (pending_id: {pending_id})，直接批准。"
+                )
+                try:
+                    # 获取待审核条目数据
+                    conn = self._get_db_connection()
+                    if conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT * FROM pending_entries WHERE id = ?",
+                            (pending_id,),
+                        )
+                        entry = cursor.fetchone()
+                        if entry:
+                            # 直接调用批准逻辑
+                            assert review_service is not None
+                            await review_service.approve_entry(
+                                pending_id=pending_id,
+                                entry=entry,
+                                message=None,  # 管理员创建不需要消息
+                                conn=conn,
+                            )
+                            log.info(
+                                f"管理员创建的社区成员档案 (pending_id: {pending_id}) 已直接批准。"
+                            )
+                        else:
+                            log.error(f"无法找到待审核条目 #{pending_id}")
+                        conn.close()
+                except Exception as e:
+                    log.error(
+                        f"直接批准管理员创建的社区成员档案失败 (pending_id: {pending_id}): {e}",
+                        exc_info=True,
+                    )
+            else:
+                # 普通提交：启动公开审核流程
+                assert review_service is not None
+                asyncio.create_task(review_service.start_review(pending_id))
+                log.info(
+                    f"已为社区成员档案 '{member_data.get('name')}' (pending_id: {pending_id}) 创建审核任务。"
+                )
 
         return pending_id
 

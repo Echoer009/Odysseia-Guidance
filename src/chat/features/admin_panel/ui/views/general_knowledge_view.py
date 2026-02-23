@@ -10,6 +10,9 @@ from src.chat.features.admin_panel.services import db_services
 from .base_view import BaseTableView
 from ..modals.edit_modals import EditModal
 from ..modals.search_modals import SearchKnowledgeModal
+from src.chat.features.world_book.ui.contribution_modal import (
+    WorldBookContributionModal,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,8 +48,24 @@ class GeneralKnowledgeView(BaseTableView):
             self.search_button.callback = self.search_knowledge
             self.add_item(self.search_button)
 
+            # 添加通用知识按钮（管理员免审核直接创建）
+            self.add_knowledge_button = discord.ui.Button(
+                label="添加知识",
+                emoji="📝",
+                style=discord.ButtonStyle.success,
+                row=1,
+            )
+            self.add_knowledge_button.callback = self.add_knowledge
+            self.add_item(self.add_knowledge_button)
+
     async def search_knowledge(self, interaction: discord.Interaction):
         modal = SearchKnowledgeModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def add_knowledge(self, interaction: discord.Interaction):
+        """打开添加通用知识模态框（管理员免审核直接创建）"""
+        purchase_info = {"item_id": 0, "price": 0, "is_admin_create": True}
+        modal = WorldBookContributionModal(purchase_info)
         await interaction.response.send_modal(modal)
 
     async def edit_item(self, interaction: discord.Interaction):

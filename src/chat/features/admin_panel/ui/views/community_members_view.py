@@ -17,6 +17,9 @@ from ..modals.search_modals import SearchUserModal, SearchCommunityMemberModal
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.community_member.ui.community_member_modal import (
+    CommunityMemberUploadModal,
+)
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +57,13 @@ class CommunityMembersView(BaseTableView):
             )
             self.search_member_button.callback = self.search_community_member
             self.add_item(self.search_member_button)
+
+        # 添加"创建新名片"按钮（管理员功能）
+        self.create_profile_button = discord.ui.Button(
+            label="创建新名片", emoji="💳", style=discord.ButtonStyle.success, row=1
+        )
+        self.create_profile_button.callback = self.add_profile
+        self.add_item(self.create_profile_button)
 
     def _add_detail_view_components(self):
         super()._add_detail_view_components()
@@ -256,6 +266,13 @@ class CommunityMembersView(BaseTableView):
             return
 
         modal = EditCommunityMemberModal(self, self.current_item_id, current_item)
+        await interaction.response.send_modal(modal)
+
+    async def add_profile(self, interaction: discord.Interaction):
+        """打开添加名片模态框（管理员免费创建）"""
+        # 管理员创建名片，使用免费的 purchase_info（item_id=0, price=0）
+        purchase_info = {"item_id": 0, "price": 0, "is_admin_create": True}
+        modal = CommunityMemberUploadModal(purchase_info)
         await interaction.response.send_modal(modal)
 
     def _get_item_by_id(self, item_id: str) -> Optional[Any]:
