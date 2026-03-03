@@ -267,14 +267,14 @@ class ChatSettingsView(View):
         await self._update_view(interaction)
 
     async def on_api_fallback_toggle(self, interaction: Interaction):
+        """切换 API fallback 全局设置。"""
         current_state = self.settings.get("global", {}).get(
             "api_fallback_enabled", True
         )
         new_state = not current_state
-        if not self.guild:
-            return
-        await self.service.db_manager.update_global_chat_config(
-            self.guild.id, api_fallback_enabled=new_state
+        # 更新全局设置
+        await self.service.db_manager.set_global_setting(
+            "api_fallback_enabled", str(new_state)
         )
         await self._update_view(interaction)
 

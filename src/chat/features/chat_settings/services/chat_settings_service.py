@@ -41,6 +41,16 @@ class ChatSettingsService:
         )
         warm_up_channels = await self.db_manager.get_warm_up_channels(guild_id)
 
+        # api_fallback_enabled 从全局设置读取
+        api_fallback_value = await self.db_manager.get_global_setting(
+            "api_fallback_enabled"
+        )
+        api_fallback_enabled = (
+            api_fallback_value.lower() in ("true", "1", "yes", "on")
+            if api_fallback_value is not None
+            else True
+        )
+
         settings = {
             "global": {
                 "chat_enabled": global_config_row["chat_enabled"]
@@ -49,10 +59,7 @@ class ChatSettingsService:
                 "warm_up_enabled": global_config_row["warm_up_enabled"]
                 if global_config_row
                 else True,
-                "api_fallback_enabled": global_config_row["api_fallback_enabled"]
-                if global_config_row
-                and "api_fallback_enabled" in global_config_row.keys()
-                else True,
+                "api_fallback_enabled": api_fallback_enabled,
             },
             "channels": {
                 config["entity_id"]: {
@@ -79,11 +86,11 @@ class ChatSettingsService:
         return config["warm_up_enabled"] if config else True
 
     async def is_api_fallback_enabled(self, guild_id: int) -> bool:
-        """检查API fallback功能是否开启。"""
-        config = await self.db_manager.get_global_chat_config(guild_id)
-        if config and "api_fallback_enabled" in config.keys():
-            return config["api_fallback_enabled"]
-        return True
+        """检查API fallback功能是否开启（全局设置）。"""
+        value = await self.db_manager.get_global_setting("api_fallback_enabled")
+        if value is not None:
+            return value.lower() in ("true", "1", "yes", "on")
+        return True  # 默认开启
 
     async def get_effective_channel_config(
         self, channel: discord.abc.GuildChannel
