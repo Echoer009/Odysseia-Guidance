@@ -528,79 +528,129 @@ class GeminiService:
     ) -> str:
         """
         AI 回复生成的分发器。
-        如果选择了自定义模型，则优先尝试自定义端点；如果失败，则自动回退到官方 API。
+        如果选择了自定义模型，则优先尝试自定义端点；如果失败，则根据设置决定是否回退到官方 API。
         """
         # 如果选择了自定义模型，则尝试使用它，并准备好回退
         if model_name and model_name in app_config.CUSTOM_GEMINI_ENDPOINTS:
             log.info(f"检测到自定义模型 '{model_name}'，将优先尝试使用自定义端点。")
-            max_attempts = 2  # 1次主尝试 + 1次重试
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    log.info(
-                        f"尝试使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts})"
-                    )
-                    return await self._generate_with_custom_endpoint(
-                        user_id=user_id,
-                        guild_id=guild_id,
-                        message=message,
-                        channel=channel,
-                        replied_message=replied_message,
-                        images=images,
-                        user_name=user_name,
-                        channel_context=channel_context,
-                        world_book_entries=world_book_entries,
-                        personal_summary=personal_summary,
-                        affection_status=affection_status,
-                        user_profile_data=user_profile_data,
-                        guild_name=guild_name,
-                        location_name=location_name,
-                        model_name=model_name,
-                        user_id_for_settings=user_id_for_settings,
-                    )
-                except Exception as e:
-                    last_exception = e
-                    log.warning(
-                        f"使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts}) 失败: {e}"
-                    )
-                    if attempt < max_attempts - 1:
-                        await asyncio.sleep(1)  # 在重试前稍作等待
 
-            # 如果所有尝试都失败了，则执行回退逻辑
-            # 检查是否配置了RAG API密钥
-            if self.key_rotation_service is None:
+            # 检查是否启用API fallback
+            api_fallback_enabled = await chat_settings_service.is_api_fallback_enabled(
+                guild_id
+            )
+            log.info(f"API fallback设置: {'开启' if api_fallback_enabled else '关闭'}")
+
+            if api_fallback_enabled:
+                # 开启fallback：当前逻辑 - 尝试2次，失败后回退到官方API
+                max_attempts = 2  # 1次主尝试 + 1次重试
+                last_exception = None
+                for attempt in range(max_attempts):
+                    try:
+                        log.info(
+                            f"尝试使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts})"
+                        )
+                        return await self._generate_with_custom_endpoint(
+                            user_id=user_id,
+                            guild_id=guild_id,
+                            message=message,
+                            channel=channel,
+                            replied_message=replied_message,
+                            images=images,
+                            user_name=user_name,
+                            channel_context=channel_context,
+                            world_book_entries=world_book_entries,
+                            personal_summary=personal_summary,
+                            affection_status=affection_status,
+                            user_profile_data=user_profile_data,
+                            guild_name=guild_name,
+                            location_name=location_name,
+                            model_name=model_name,
+                            user_id_for_settings=user_id_for_settings,
+                        )
+                    except Exception as e:
+                        last_exception = e
+                        log.warning(
+                            f"使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts}) 失败: {e}"
+                        )
+                        if attempt < max_attempts - 1:
+                            await asyncio.sleep(1)  # 在重试前稍作等待
+
+                # 如果所有尝试都失败了，则执行回退逻辑
+                # 检查是否配置了RAG API密钥
+                if self.key_rotation_service is None:
+                    log.error(
+                        f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
+                        f"未配置 GOOGLE_API_KEYS_LIST，无法回退到官方 API。"
+                    )
+                    return "呜哇，有点晕嘞，自定义端点连接失败了，还没有配置备用API密钥呢，等配置好了再来找我玩吧！"
+
+                log.warning(
+                    f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
+                    f"将回退到官方 API。"
+                )
+                # --- [新逻辑] 回退时固定使用 gemini-2.5-flash 模型 ---
+                fallback_model_name = "gemini-2.5-flash"
+                log.info(f"回退到官方 API，固定使用模型 '{fallback_model_name}'。")
+
+                return await self._generate_with_official_api(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    message=message,
+                    channel=channel,
+                    replied_message=replied_message,
+                    images=images,
+                    user_name=user_name,
+                    channel_context=channel_context,
+                    world_book_entries=world_book_entries,
+                    personal_summary=personal_summary,
+                    affection_status=affection_status,
+                    user_profile_data=user_profile_data,
+                    guild_name=guild_name,
+                    location_name=location_name,
+                    model_name=fallback_model_name,  # 关键：使用固定的回退模型
+                    user_id_for_settings=user_id_for_settings,
+                )
+            else:
+                # 关闭fallback：重试自定义端点5次，失败后返回固定文本
+                max_attempts = 5
+                last_exception = None
+                for attempt in range(max_attempts):
+                    try:
+                        log.info(
+                            f"尝试使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts}, fallback已关闭)"
+                        )
+                        return await self._generate_with_custom_endpoint(
+                            user_id=user_id,
+                            guild_id=guild_id,
+                            message=message,
+                            channel=channel,
+                            replied_message=replied_message,
+                            images=images,
+                            user_name=user_name,
+                            channel_context=channel_context,
+                            world_book_entries=world_book_entries,
+                            personal_summary=personal_summary,
+                            affection_status=affection_status,
+                            user_profile_data=user_profile_data,
+                            guild_name=guild_name,
+                            location_name=location_name,
+                            model_name=model_name,
+                            user_id_for_settings=user_id_for_settings,
+                        )
+                    except Exception as e:
+                        last_exception = e
+                        log.warning(
+                            f"使用自定义端点 '{model_name}' (尝试 {attempt + 1}/{max_attempts}) 失败: {e}"
+                        )
+                        if attempt < max_attempts - 1:
+                            await asyncio.sleep(1)  # 在重试前稍作等待
+
+                # 所有尝试都失败，返回固定文本
                 log.error(
                     f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
-                    f"未配置 GOOGLE_API_KEYS_LIST，无法回退到官方 API。"
+                    f"API fallback已关闭，不进行回退。"
                 )
-                return "呜哇，有点晕嘞，自定义端点连接失败了，还没有配置备用API密钥呢，等配置好了再来找我玩吧！"
-
-            log.warning(
-                f"自定义端点 '{model_name}' 的所有 {max_attempts} 次尝试均失败。最终错误: {last_exception}. "
-                f"将回退到官方 API。"
-            )
-            # --- [新逻辑] 回退时固定使用 gemini-2.5-flash 模型 ---
-            fallback_model_name = "gemini-2.5-flash"
-            log.info(f"回退到官方 API，固定使用模型 '{fallback_model_name}'。")
-
-            return await self._generate_with_official_api(
-                user_id=user_id,
-                guild_id=guild_id,
-                message=message,
-                channel=channel,
-                replied_message=replied_message,
-                images=images,
-                user_name=user_name,
-                channel_context=channel_context,
-                world_book_entries=world_book_entries,
-                personal_summary=personal_summary,
-                affection_status=affection_status,
-                user_profile_data=user_profile_data,
-                guild_name=guild_name,
-                location_name=location_name,
-                model_name=fallback_model_name,  # 关键：使用固定的回退模型
-                user_id_for_settings=user_id_for_settings,
-            )
+                return "呜哇，现在有点晕嘞"
 
         # 对于非自定义模型或回退失败后的默认路径
         # 检查是否配置了RAG API密钥

@@ -127,32 +127,46 @@ class ChatSettingsView(View):
             )
         )
 
+        api_fallback_enabled = self.settings.get("global", {}).get(
+            "api_fallback_enabled", True
+        )
+        self.add_item(
+            Button(
+                label=f"API回退: {'开' if api_fallback_enabled else '关'}",
+                style=ButtonStyle.green if api_fallback_enabled else ButtonStyle.red,
+                custom_id="api_fallback_toggle",
+                row=0,
+            )
+        )
+
         self.add_item(
             Button(
                 label="设置暖贴频道",
                 style=ButtonStyle.secondary,
                 custom_id="warm_up_settings",
-                row=0,
+                row=4,
             )
         )
 
-        # 分类选择器 (第 2 行)
-        if self.category_paginator:
-            self.add_item(self.category_paginator.create_select(row=2))
+        self.add_item(
+            Button(
+                label="更换AI模型",
+                style=ButtonStyle.secondary,
+                custom_id="ai_model_settings",
+                row=4,
+            )
+        )
 
-        # 频道选择器 (第 3 行)
-        if self.channel_paginator:
-            self.add_item(self.channel_paginator.create_select(row=3))
+        self.add_item(
+            Button(
+                label="今日Token",
+                style=ButtonStyle.secondary,
+                custom_id="show_token_usage",
+                row=4,
+            )
+        )
 
-        # 两个分页器的按钮都放在第 4 行
-        if self.category_paginator:
-            for btn in self.category_paginator.get_buttons(row=4):
-                self.add_item(btn)
-        if self.channel_paginator:
-            for btn in self.channel_paginator.get_buttons(row=4):
-                self.add_item(btn)
-
-        # 活动派系选择器
+        # 活动派系选择器 (第 1 行)
         if self.factions:
             faction_options = [
                 SelectOption(
@@ -180,23 +194,22 @@ class ChatSettingsView(View):
             faction_select.callback = self.on_faction_select
             self.add_item(faction_select)
 
-        # 更换AI模型按钮
-        self.add_item(
-            Button(
-                label="更换AI模型",
-                style=ButtonStyle.secondary,
-                custom_id="ai_model_settings",
-                row=0,
-            )
-        )
-        self.add_item(
-            Button(
-                label="今日 Token 统计",
-                style=ButtonStyle.secondary,
-                custom_id="show_token_usage",
-                row=0,
-            )
-        )
+        # 分类选择器 (第 2 行)
+        if self.category_paginator:
+            self.add_item(self.category_paginator.create_select(row=2))
+
+        # 频道选择器 (第 3 行)
+        if self.channel_paginator:
+            self.add_item(self.channel_paginator.create_select(row=3))
+
+        # 分页器按钮暂时不显示，因为UI空间不足
+        # TODO: 未来可以考虑重新设计UI布局以支持分页按钮
+        # if self.category_paginator:
+        #     for btn in self.category_paginator.get_buttons(row=4):
+        #         self.add_item(btn)
+        # if self.channel_paginator:
+        #     for btn in self.channel_paginator.get_buttons(row=4):
+        #         self.add_item(btn)
 
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
@@ -210,6 +223,8 @@ class ChatSettingsView(View):
             await self.on_global_toggle(interaction)
         elif custom_id == "warm_up_toggle":
             await self.on_warm_up_toggle(interaction)
+        elif custom_id == "api_fallback_toggle":
+            await self.on_api_fallback_toggle(interaction)
         elif custom_id == "warm_up_settings":
             await self.on_warm_up_settings(interaction)
         elif (
@@ -248,6 +263,18 @@ class ChatSettingsView(View):
             return
         await self.service.db_manager.update_global_chat_config(
             self.guild.id, warm_up_enabled=new_state
+        )
+        await self._update_view(interaction)
+
+    async def on_api_fallback_toggle(self, interaction: Interaction):
+        current_state = self.settings.get("global", {}).get(
+            "api_fallback_enabled", True
+        )
+        new_state = not current_state
+        if not self.guild:
+            return
+        await self.service.db_manager.update_global_chat_config(
+            self.guild.id, api_fallback_enabled=new_state
         )
         await self._update_view(interaction)
 

@@ -49,6 +49,10 @@ class ChatSettingsService:
                 "warm_up_enabled": global_config_row["warm_up_enabled"]
                 if global_config_row
                 else True,
+                "api_fallback_enabled": global_config_row["api_fallback_enabled"]
+                if global_config_row
+                and "api_fallback_enabled" in global_config_row.keys()
+                else True,
             },
             "channels": {
                 config["entity_id"]: {
@@ -73,6 +77,13 @@ class ChatSettingsService:
         """检查暖贴功能是否开启。"""
         config = await self.db_manager.get_global_chat_config(guild_id)
         return config["warm_up_enabled"] if config else True
+
+    async def is_api_fallback_enabled(self, guild_id: int) -> bool:
+        """检查API fallback功能是否开启。"""
+        config = await self.db_manager.get_global_chat_config(guild_id)
+        if config and "api_fallback_enabled" in config.keys():
+            return config["api_fallback_enabled"]
+        return True
 
     async def get_effective_channel_config(
         self, channel: discord.abc.GuildChannel
@@ -248,7 +259,8 @@ class ChatSettingsService:
 
     def set_winning_faction(self, faction_id: Optional[str]):
         """设置当前活动的获胜派系。"""
-        event_service.set_winning_faction(faction_id)
+        if faction_id is not None:
+            event_service.set_winning_faction(faction_id)
 
     def get_winning_faction(self) -> Optional[str]:
         """获取当前活动的获胜派系。"""

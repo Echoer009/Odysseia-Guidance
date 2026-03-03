@@ -329,9 +329,20 @@ class ChatDatabaseManager:
                 CREATE TABLE IF NOT EXISTS global_chat_config (
                     guild_id INTEGER PRIMARY KEY,
                     chat_enabled BOOLEAN NOT NULL DEFAULT 1,
-                    warm_up_enabled BOOLEAN NOT NULL DEFAULT 1
+                    warm_up_enabled BOOLEAN NOT NULL DEFAULT 1,
+                    api_fallback_enabled BOOLEAN NOT NULL DEFAULT 1
                 );
             """)
+
+            # 检查并向 global_chat_config 添加列
+            cursor.execute("PRAGMA table_info(global_chat_config);")
+            columns_global_chat = [info[1] for info in cursor.fetchall()]
+            if "api_fallback_enabled" not in columns_global_chat:
+                cursor.execute("""
+                    ALTER TABLE global_chat_config
+                    ADD COLUMN api_fallback_enabled BOOLEAN NOT NULL DEFAULT 1;
+                """)
+                log.info("已向 global_chat_config 表添加 api_fallback_enabled 列。")
 
             # --- 暖贴功能频道设置 ---
             cursor.execute("""
@@ -1083,6 +1094,7 @@ class ChatDatabaseManager:
         guild_id: int,
         chat_enabled: Optional[bool] = None,
         warm_up_enabled: Optional[bool] = None,
+        api_fallback_enabled: Optional[bool] = None,
     ) -> None:
         """更新或创建服务器的全局聊天配置。"""
         updates = {}
@@ -1090,6 +1102,8 @@ class ChatDatabaseManager:
             updates["chat_enabled"] = chat_enabled
         if warm_up_enabled is not None:
             updates["warm_up_enabled"] = warm_up_enabled
+        if api_fallback_enabled is not None:
+            updates["api_fallback_enabled"] = api_fallback_enabled
 
         if not updates:
             return
@@ -1101,7 +1115,7 @@ class ChatDatabaseManager:
             INSERT INTO global_chat_config (guild_id, {", ".join(updates.keys())})
             VALUES (?, {", ".join(["?"] * len(params))})
             ON CONFLICT(guild_id) DO UPDATE SET
-            {set_clause};
+                {set_clause};
         """
         await self._execute(
             self._db_transaction, query, (guild_id, *params, *params), commit=True
