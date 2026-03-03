@@ -1358,7 +1358,6 @@ class GeminiService:
             return response.text.strip()
         return None
 
-    @_api_key_handler
     async def generate_simple_response(
         self,
         prompt: str,
@@ -1368,42 +1367,67 @@ class GeminiService:
     ) -> Optional[str]:
         """
         一个用于单次、非对话式文本生成的方法，允许传入完整的生成配置和可选的模型名称。
-        非常适合用于如“礼物回应”、“投喂”等需要自定义生成参数的一次性任务。
+        非常适合用于如"礼物回应"、"投喂"等需要自定义生成参数的一次性任务。
+        默认使用自定义端点（gemini-2.5-flash-custom）。
 
         Args:
             prompt: 提供给模型的完整输入提示。
             generation_config: 一个包含生成参数的字典 (e.g., temperature, max_output_tokens).
             model_name: (可选) 指定要使用的模型。如果为 None，则使用默认的聊天模型。
+            client: (可选) 客户端实例。如果为 None 且不使用自定义端点，则使用装饰器提供的客户端。
 
         Returns:
             生成的文本字符串，如果失败则返回 None。
         """
-        if not client:
-            raise ValueError("装饰器未能提供客户端实例。")
+        # 确定要使用的模型名称
+        final_model_name = model_name or self.default_model_name
+
+        # 检查是否使用自定义端点
+        endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(final_model_name)
+        if endpoint_config and all(
+            [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
+        ):
+            # 使用自定义端点
+            log.info(f"正在为自定义端点创建客户端: {endpoint_config['base_url']}")
+            http_options = types.HttpOptions(base_url=endpoint_config["base_url"])
+            client = genai.Client(
+                api_key=endpoint_config["api_key"], http_options=http_options
+            )
+            # 使用配置中的实际模型名称
+            final_model_name = endpoint_config.get("model_name", final_model_name)
+        else:
+            # 使用原来的逻辑（需要装饰器提供的客户端）
+            if not client:
+                raise ValueError("不使用自定义端点时，装饰器未能提供客户端实例。")
 
         loop = asyncio.get_event_loop()
         gen_config = types.GenerateContentConfig(
             **generation_config, safety_settings=self.safety_settings
         )
-        final_model_name = model_name or self.default_model_name
 
-        response = await loop.run_in_executor(
-            self.executor,
-            lambda: client.models.generate_content(
-                model=final_model_name, contents=[prompt], config=gen_config
-            ),
-        )
-
-        if response.parts:
-            return response.text.strip()
-
-        log.warning(f"generate_simple_response 未能生成有效内容。API 响应: {response}")
-        if response.prompt_feedback and response.prompt_feedback.block_reason:
-            log.warning(
-                f"请求可能被安全策略阻止，原因: {response.prompt_feedback.block_reason}"
+        try:
+            response = await loop.run_in_executor(
+                self.executor,
+                lambda: client.models.generate_content(
+                    model=final_model_name, contents=[prompt], config=gen_config
+                ),
             )
 
-        return None
+            if response.parts:
+                return response.text.strip()
+
+            log.warning(
+                f"generate_simple_response 未能生成有效内容。API 响应: {response}"
+            )
+            if response.prompt_feedback and response.prompt_feedback.block_reason:
+                log.warning(
+                    f"请求可能被安全策略阻止，原因: {response.prompt_feedback.block_reason}"
+                )
+
+            return None
+        except Exception as e:
+            log.error(f"generate_simple_response 调用失败: {e}")
+            return None
 
     async def generate_thread_praise(
         self, conversation_history: List[Dict[str, Any]]
