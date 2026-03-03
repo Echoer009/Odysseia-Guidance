@@ -274,13 +274,16 @@ def run_default_removal():
         print(f"错误: 写入 .env 文件失败: {e}")
 
 
-async def test_api_key(api_key: str, model_name: str = "gemini-2.5-flash") -> dict:
+async def test_api_key(
+    api_key: str, model_name: str = "gemini-2.5-flash", test_type: str = "generate"
+) -> dict:
     """
     测试指定的 API 密钥是否可用
 
     Args:
         api_key: 要测试的 API 密钥
         model_name: 要使用的模型名称
+        test_type: 测试类型，"generate" 或 "embed"
 
     Returns:
         包含测试结果的字典
@@ -296,6 +299,7 @@ async def test_api_key(api_key: str, model_name: str = "gemini-2.5-flash") -> di
     result = {
         "api_key": api_key[-8:] + "...",  # 只显示后8位
         "model": model_name,
+        "test_type": test_type,
         "success": False,
         "error_type": None,
         "error_message": None,
@@ -309,24 +313,53 @@ async def test_api_key(api_key: str, model_name: str = "gemini-2.5-flash") -> di
 
         # 发送测试请求
         loop = asyncio.get_event_loop()
-        gen_config = genai_types.GenerateContentConfig(
-            temperature=0.7, max_output_tokens=100
-        )
 
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.models.generate_content(
-                model=model_name, contents=["你好，请回复一句话。"], config=gen_config
-            ),
-        )
+        if test_type == "embed":
+            # 测试 embed 功能
+            embed_config = genai_types.EmbedContentConfig(
+                task_type="retrieval_document"
+            )
+            embedding_result = await loop.run_in_executor(
+                None,
+                lambda: client.models.embed_content(
+                    model=model_name,
+                    contents=[genai_types.Part(text="测试文本")],
+                    config=embed_config,
+                ),
+            )
 
-        if response.parts:
-            result["success"] = True
-            text = response.text if response.text is not None else ""
-            result["response"] = text.strip()[:100]  # 限制显示长度
+            if embedding_result and embedding_result.embeddings:
+                result["success"] = True
+                values = embedding_result.embeddings[0].values
+                if values is not None:
+                    result["response"] = f"向量维度: {len(values)}"
+                else:
+                    result["response"] = "向量维度: 未知"
+            else:
+                result["error_type"] = "EmptyEmbedding"
+                result["error_message"] = "API 返回了空嵌入"
         else:
-            result["error_type"] = "EmptyResponse"
-            result["error_message"] = "API 返回了空响应"
+            # 测试 generate 功能
+            gen_config = genai_types.GenerateContentConfig(
+                temperature=0.7, max_output_tokens=100
+            )
+
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.models.generate_content(
+                    model=model_name,
+                    contents=["你好，请回复一句话。"],
+                    config=gen_config,
+                ),
+            )
+
+            if response.parts:
+                result["success"] = True
+                text = response.text if response.text is not None else ""
+                result["response"] = text.strip()[:100]  # 限制显示长度
+            else:
+                result["error_type"] = "EmptyResponse"
+                result["error_message"] = "API 返回了空响应"
 
     except genai_errors.ClientError as e:
         result["error_type"] = "ClientError"
@@ -342,7 +375,9 @@ async def test_api_key(api_key: str, model_name: str = "gemini-2.5-flash") -> di
 
 
 def run_test(
-    score_threshold: Optional[int] = None, model_name: str = "gemini-2.5-flash"
+    score_threshold: Optional[int] = None,
+    model_name: str = "gemini-2.5-flash",
+    test_type: str = "generate",
 ):
     """
     执行 API 密钥测试
@@ -350,8 +385,9 @@ def run_test(
     Args:
         score_threshold: 要测试的密钥分数阈值，None 表示测试所有密钥
         model_name: 要使用的模型名称
+        test_type: 测试类型，"generate" 或 "embed"
     """
-    print(f"--- 正在测试 API 密钥 (模型: {model_name}) ---")
+    print(f"--- 正在测试 API 密钥 (模型: {model_name}, 类型: {test_type}) ---")
 
     reputations = load_reputations()
     if reputations is None:
@@ -381,11 +417,12 @@ def run_test(
     print("正在发送测试请求...")
 
     # 异步运行测试
-    result = asyncio.run(test_api_key(selected_key, model_name))
+    result = asyncio.run(test_api_key(selected_key, model_name, test_type))
 
     print("\n--- 测试结果 ---")
     print(f"密钥: {result['api_key']}")
     print(f"模型: {result['model']}")
+    print(f"测试类型: {result['test_type']}")
     print(f"状态: {'✓ 成功' if result['success'] else '✗ 失败'}")
 
     if result["success"]:
@@ -432,6 +469,7 @@ def main():
             # 解析 test 命令参数
             score_threshold = None
             model_name = "gemini-2.5-flash"
+            test_type = "generate"
 
             # 解析可选参数
             i = 2
@@ -446,10 +484,13 @@ def main():
                 elif sys.argv[i] == "--model" and i + 1 < len(sys.argv):
                     model_name = sys.argv[i + 1]
                     i += 2
+                elif sys.argv[i] == "--type" and i + 1 < len(sys.argv):
+                    test_type = sys.argv[i + 1]
+                    i += 2
                 else:
                     i += 1
 
-            run_test(score_threshold, model_name)
+            run_test(score_threshold, model_name, test_type)
         else:
             print(f"错误: 未知命令 '{command}'")
             print("可用命令: status, reformat, add, test")
