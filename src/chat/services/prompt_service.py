@@ -604,55 +604,6 @@ class PromptService:
 
         return ""
 
-    def build_rag_summary_prompt(
-        self,
-        latest_query: str,
-        user_name: str,
-        conversation_history: Optional[List[Dict[str, Any]]],
-    ) -> str:
-        """
-        构建用于生成RAG搜索独立查询的提示。
-        """
-        history_text = ""
-        if conversation_history:
-            history_text = "\n".join(
-                # 修复：正确处理 parts 列表，而不是直接转换
-                f"{turn.get('role', 'unknown')}: {''.join(map(str, turn.get('parts', [''])))}"
-                for turn in conversation_history
-                if turn.get("parts") and turn["parts"]
-            )
-
-        if not history_text:
-            history_text = "（无相关对话历史）"
-
-        prompt = f"""
-你是一个严谨的查询分析助手。你的任务是根据下面提供的“对话历史”作为参考，将“用户的最新问题”改写成一个独立的、信息完整的查询，以便于进行向量数据库搜索。
-
-**核心规则:**
-1. 解析代词: 必须将问题中的代词（如“我”、“我的”、“你”）替换为具体的实体。使用提问者的名字（`{user_name}`）来替换“我”或“我的”。
-2. 绝对忠于最新问题: 你的输出必须基于“用户的最新问题”。“对话历史”仅用于补充信息。
-3. **仅使用提供的信息**: 严禁使用任何对话历史之外的背景知识或进行联想猜测。
-4. 历史无关则直接使用: 如果问题本身已经信息完整且不包含需要解析的代词，就直接使用它，只需做少量清理（如移除语气词）。
-5. 保持意图: 不要改变用户原始的查询意图。
-6. 简洁明了: 移除无关的闲聊，生成一个清晰、直接的查询。
-7. 只输出结果: 你的最终回答只能包含优化后的查询文本，绝对不能包含任何解释、前缀或引号。
-
----
-
-**对话历史:**
-{history_text}
-
----
-
-**{user_name} 的最新问题:**
-{latest_query}
-
----
-
-**优化后的查询:**
-"""
-        return prompt
-
     def create_image_context_turn(
         self, image_data: bytes, mime_type: str, description: str = ""
     ) -> Dict[str, Any]:

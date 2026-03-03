@@ -424,7 +424,7 @@ class GeminiService:
         return {"role": content.role, "parts": serialized_parts}
 
     # --- Refactored generate_response and its helpers ---
-    def _prepare_api_contents(self, conversation: List[Dict]) -> List[types.Content]:
+    def _prepare_api_contents(self, conversation: List[Dict]) -> List:
         """将对话历史转换为 API 所需的 Content 对象列表。"""
         processed_contents = []
         for turn in conversation:
@@ -1355,25 +1355,36 @@ class GeminiService:
 
         return None
 
-    @_api_key_handler
     async def generate_thread_praise(
-        self, conversation_history: List[Dict[str, Any]], client: Any = None
+        self, conversation_history: List[Dict[str, Any]]
     ) -> Optional[str]:
         """
         专用于生成帖子夸奖的方法。
         现在接收一个由 prompt_service 构建好的完整对话历史。
+        使用自定义端点（goldenglow）进行生成。
 
         Args:
             conversation_history: 完整的对话历史列表。
-            client: (由装饰器注入) Gemini 客户端。
 
         Returns:
             生成的夸奖文本，如果失败则返回 None。
         """
-        if not client:
-            raise ValueError("装饰器未能提供客户端实例。")
+        # 使用自定义端点配置
+        model_name = app_config.THREAD_PRAISE_MODEL
+        endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
+        if not endpoint_config or not all(
+            [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
+        ):
+            log.error(f"暖贴功能的自定义端点配置不完整: {model_name}")
+            return None
 
-        loop = asyncio.get_event_loop()
+        # 创建自定义端点客户端
+        http_options = types.HttpOptions(base_url=endpoint_config["base_url"])
+        client = genai.Client(
+            api_key=endpoint_config["api_key"], http_options=http_options
+        )
+        log.info(f"暖贴功能使用自定义端点: {endpoint_config['base_url']}")
+
         # --- (新增) 为暖贴功能启用思考 ---
         praise_config = app_config.GEMINI_THREAD_PRAISE_CONFIG.copy()
         thinking_budget = praise_config.pop("thinking_budget", None)
@@ -1389,7 +1400,7 @@ class GeminiService:
             )
             log.info(f"已为暖贴功能启用思维链 (Thinking)，预算: {thinking_budget}。")
 
-        final_model_name = self.default_model_name
+        final_model_name = endpoint_config.get("model_name", self.default_model_name)
 
         final_contents = self._prepare_api_contents(conversation_history)
 
@@ -1408,11 +1419,8 @@ class GeminiService:
             )
             log.info("------------------------------------")
 
-        response = await loop.run_in_executor(
-            self.executor,
-            lambda: client.models.generate_content(
-                model=final_model_name, contents=final_contents, config=gen_config
-            ),
+        response = await client.aio.models.generate_content(
+            model=final_model_name, contents=final_contents, config=gen_config
         )
 
         if response.parts:
@@ -1423,7 +1431,7 @@ class GeminiService:
                 if hasattr(part, "thought") and part.thought:
                     # 这是思考过程，忽略它
                     pass
-                elif hasattr(part, "text"):
+                elif hasattr(part, "text") and part.text:
                     # 这是最终回复
                     final_text += part.text
             return final_text.strip()
@@ -1436,40 +1444,6 @@ class GeminiService:
 
         return None
 
-    async def summarize_for_rag(
-        self,
-        latest_query: str,
-        user_name: str,
-        conversation_history: Optional[List[Dict[str, Any]]] = None,
-    ) -> str:
-        """
-        根据用户的最新发言和可选的对话历史，生成一个用于RAG搜索的独立查询。
-
-        Args:
-            latest_query: 用户当前发送的最新消息。
-            user_name: 提问用户的名字。
-            conversation_history: (可选) 包含多轮对话的列表。
-
-        Returns:
-            一个精炼后的、适合向量检索的查询字符串。
-        """
-        if not latest_query:
-            log.info("RAG summarization called with no latest_query.")
-            return ""
-
-        prompt = prompt_service.build_rag_summary_prompt(
-            latest_query, user_name, conversation_history
-        )
-        summarized_query = await self.generate_text(
-            prompt, temperature=0.0, model_name=app_config.QUERY_REWRITING_MODEL
-        )
-
-        if not summarized_query:
-            log.info("RAG查询总结失败，将直接使用用户的原始查询。")
-            return latest_query.strip()
-
-        return summarized_query.strip().strip('"')
-
     async def clear_user_context(self, user_id: int, guild_id: int):
         """清除指定用户的对话上下文"""
         await chat_db_manager.clear_ai_conversation_context(user_id, guild_id)
@@ -1479,14 +1453,14 @@ class GeminiService:
         """检查AI服务是否可用"""
         return self.key_rotation_service is not None
 
-    @_api_key_handler
     async def generate_text_with_image(
-        self, prompt: str, image_bytes: bytes, mime_type: str, client: Any = None
+        self, prompt: str, image_bytes: bytes, mime_type: str
     ) -> Optional[str]:
         """
         一个用于简单图文生成的精简方法。
         不涉及对话历史或上下文，仅根据输入提示和图片生成文本。
-        非常适合用于如“投喂”等一次性功能。
+        非常适合用于如"投喂"等一次性功能。
+        使用自定义端点（goldenglow）进行生成。
 
         Args:
             prompt: 提供给模型的输入提示。
@@ -1496,8 +1470,21 @@ class GeminiService:
         Returns:
             生成的文本字符串，如果失败则返回 None。
         """
-        if not client:
-            raise ValueError("装饰器未能提供客户端实例。")
+        # 使用自定义端点配置
+        model_name = app_config.FEEDING_MODEL
+        endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
+        if not endpoint_config or not all(
+            [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
+        ):
+            log.error(f"投喂功能的自定义端点配置不完整: {model_name}")
+            return None
+
+        # 创建自定义端点客户端
+        http_options = types.HttpOptions(base_url=endpoint_config["base_url"])
+        client = genai.Client(
+            api_key=endpoint_config["api_key"], http_options=http_options
+        )
+        log.info(f"投喂功能使用自定义端点: {endpoint_config['base_url']}")
 
         # --- 新增：处理 GIF 图片 ---
         if mime_type == "image/gif":
@@ -1528,11 +1515,13 @@ class GeminiService:
             **app_config.GEMINI_VISION_GEN_CONFIG, safety_settings=self.safety_settings
         )
 
+        final_model_name = endpoint_config.get("model_name", self.default_model_name)
+
         response = await client.aio.models.generate_content(
-            model=self.default_model_name, contents=request_contents, config=gen_config
+            model=final_model_name, contents=request_contents, config=gen_config
         )
 
-        if response.parts:
+        if response.parts and response.text:
             return response.text.strip()
         elif response.prompt_feedback and response.prompt_feedback.block_reason:
             log.warning(
@@ -1543,21 +1532,32 @@ class GeminiService:
         log.warning(f"未能为图文生成有效回复。Response: {response}")
         return "我好像没看懂这张图里是什么，可以换一张或者稍后再试试吗？"
 
-    @_api_key_handler
-    async def generate_confession_response(
-        self, prompt: str, client: Any = None
-    ) -> Optional[str]:
+    async def generate_confession_response(self, prompt: str) -> Optional[str]:
         """
         专用于生成忏悔回应的方法。
+        使用自定义端点（goldenglow）进行生成。
         """
-        if not client:
-            raise ValueError("装饰器未能提供客户端实例。")
+        # 使用自定义端点配置
+        model_name = app_config.CONFESSION_MODEL
+        endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
+        if not endpoint_config or not all(
+            [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
+        ):
+            log.error(f"忏悔功能的自定义端点配置不完整: {model_name}")
+            return None
+
+        # 创建自定义端点客户端
+        http_options = types.HttpOptions(base_url=endpoint_config["base_url"])
+        client = genai.Client(
+            api_key=endpoint_config["api_key"], http_options=http_options
+        )
+        log.info(f"忏悔功能使用自定义端点: {endpoint_config['base_url']}")
 
         gen_config = types.GenerateContentConfig(
             **app_config.GEMINI_CONFESSION_GEN_CONFIG,
             safety_settings=self.safety_settings,
         )
-        final_model_name = self.default_model_name
+        final_model_name = endpoint_config.get("model_name", self.default_model_name)
 
         if app_config.DEBUG_CONFIG["LOG_AI_FULL_CONTEXT"]:
             log.info("--- 忏悔功能 · 完整 AI 上下文 ---")
@@ -1568,7 +1568,7 @@ class GeminiService:
             model=final_model_name, contents=[prompt], config=gen_config
         )
 
-        if response.parts:
+        if response.parts and response.text:
             return response.text.strip()
 
         log.warning(

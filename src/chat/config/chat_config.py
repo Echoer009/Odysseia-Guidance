@@ -104,10 +104,17 @@ TAROT_CONFIG = {
     "CARD_FILE_EXTENSION": ".jpg",  # 图片文件的扩展名
 }
 
-# --- RAG (Retrieval-Augmented Generation) 配置 ---
-# 用于查询重写的模型。通常可以使用一个更小、更快的模型来降低成本和延迟。
-QUERY_REWRITING_MODEL = "gemini-2.5-flash-lite"
+# --- 各功能使用的自定义端点模型配置 ---
+# 暖贴功能使用的模型
+THREAD_PRAISE_MODEL = "gemini-2.5-pro-custom"
 
+# 投喂功能使用的模型
+FEEDING_MODEL = "gemini-2.5-pro-custom"
+
+# 忏悔功能使用的模型
+CONFESSION_MODEL = "gemini-2.5-pro-custom"
+
+# --- RAG (Retrieval-Augmented Generation) 配置 ---
 # RAG 搜索返回的结果数量
 RAG_N_RESULTS_DEFAULT = 5  # 普通聊天的默认值
 RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
