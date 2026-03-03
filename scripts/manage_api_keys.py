@@ -1,7 +1,10 @@
 import os
 import json
+import random
 import re
 import sys
+import asyncio
+from typing import Optional
 
 # 将项目根目录添加到 sys.path，以便可以导入项目模块（如果需要）
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,6 +74,9 @@ def reformat_keys_in_env():
     new_keys_block = f'GOOGLE_API_KEYS_LIST="{formatted_keys_str}"'
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
+    if env_content is None:
+        print("错误: 无法读取 .env 文件内容")
+        return
     new_env_content = re.sub(
         r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
@@ -130,6 +136,9 @@ def add_keys_to_env():
     new_keys_block = f'GOOGLE_API_KEYS_LIST="{formatted_keys_str}"'
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
+    if env_content is None:
+        print("错误: 无法读取 .env 文件内容")
+        return
     new_env_content = re.sub(
         r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
@@ -246,6 +255,9 @@ def run_default_removal():
         new_keys_block = 'GOOGLE_API_KEYS_LIST=""'
 
     # 使用正则表达式替换 .env 文件中的行 (移除 DOTALL 防止贪婪匹配)
+    if env_content is None:
+        print("错误: 无法读取 .env 文件内容")
+        return
     new_env_content = re.sub(
         r'GOOGLE_API_KEYS_LIST=".*?"',
         new_keys_block,
@@ -260,6 +272,128 @@ def run_default_removal():
         print(f"剩余 {len(updated_keys)} 个密钥。")
     except IOError as e:
         print(f"错误: 写入 .env 文件失败: {e}")
+
+
+async def test_api_key(api_key: str, model_name: str = "gemini-2.5-flash") -> dict:
+    """
+    测试指定的 API 密钥是否可用
+
+    Args:
+        api_key: 要测试的 API 密钥
+        model_name: 要使用的模型名称
+
+    Returns:
+        包含测试结果的字典
+    """
+    from google import genai
+    from google.genai import types as genai_types
+    from google.genai import errors as genai_errors
+
+    base_url = os.getenv("GEMINI_API_BASE_URL")
+    if not base_url:
+        base_url = "https://brain-girl.echoer009.workers.dev/K6QeZf0mQ4l51paQA5/gemini"
+
+    result = {
+        "api_key": api_key[-8:] + "...",  # 只显示后8位
+        "model": model_name,
+        "success": False,
+        "error_type": None,
+        "error_message": None,
+        "response": None,
+    }
+
+    try:
+        # 创建客户端
+        http_options = genai_types.HttpOptions(base_url=base_url)
+        client = genai.Client(api_key=api_key, http_options=http_options)
+
+        # 发送测试请求
+        loop = asyncio.get_event_loop()
+        gen_config = genai_types.GenerateContentConfig(
+            temperature=0.7, max_output_tokens=100
+        )
+
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.models.generate_content(
+                model=model_name, contents=["你好，请回复一句话。"], config=gen_config
+            ),
+        )
+
+        if response.parts:
+            result["success"] = True
+            text = response.text if response.text is not None else ""
+            result["response"] = text.strip()[:100]  # 限制显示长度
+        else:
+            result["error_type"] = "EmptyResponse"
+            result["error_message"] = "API 返回了空响应"
+
+    except genai_errors.ClientError as e:
+        result["error_type"] = "ClientError"
+        result["error_message"] = str(e)
+    except genai_errors.ServerError as e:
+        result["error_type"] = "ServerError"
+        result["error_message"] = str(e)
+    except Exception as e:
+        result["error_type"] = type(e).__name__
+        result["error_message"] = str(e)
+
+    return result
+
+
+def run_test(
+    score_threshold: Optional[int] = None, model_name: str = "gemini-2.5-flash"
+):
+    """
+    执行 API 密钥测试
+
+    Args:
+        score_threshold: 要测试的密钥分数阈值，None 表示测试所有密钥
+        model_name: 要使用的模型名称
+    """
+    print(f"--- 正在测试 API 密钥 (模型: {model_name}) ---")
+
+    reputations = load_reputations()
+    if reputations is None:
+        return
+
+    current_keys, _ = get_keys_from_env()
+    if current_keys is None:
+        return
+
+    # 筛选符合分数条件的密钥
+    keys_to_test = []
+    for key, data in reputations.items():
+        if key in current_keys and isinstance(data, dict) and "reputation" in data:
+            score = data["reputation"]
+            if score_threshold is None or score == score_threshold:
+                keys_to_test.append((key, score))
+
+    if not keys_to_test:
+        print(
+            f"没有找到分数 {'=' if score_threshold is not None else ''} {score_threshold} 的密钥。"
+        )
+        return
+
+    # 随机选择一个密钥进行测试
+    selected_key, selected_score = random.choice(keys_to_test)
+    print(f"\n随机选择的密钥: {selected_key[-8:]}... (分数: {selected_score})")
+    print("正在发送测试请求...")
+
+    # 异步运行测试
+    result = asyncio.run(test_api_key(selected_key, model_name))
+
+    print("\n--- 测试结果 ---")
+    print(f"密钥: {result['api_key']}")
+    print(f"模型: {result['model']}")
+    print(f"状态: {'✓ 成功' if result['success'] else '✗ 失败'}")
+
+    if result["success"]:
+        print(f"响应: {result['response']}")
+    else:
+        print(f"错误类型: {result['error_type']}")
+        print(f"错误信息: {result['error_message']}")
+    print("----------------")
 
 
 def main():
@@ -294,9 +428,44 @@ def main():
             reformat_keys_in_env()
         elif command == "add":
             add_keys_to_env()
+        elif command == "test":
+            # 解析 test 命令参数
+            score_threshold = None
+            model_name = "gemini-2.5-flash"
+
+            # 解析可选参数
+            i = 2
+            while i < len(sys.argv):
+                if sys.argv[i] == "--score" and i + 1 < len(sys.argv):
+                    try:
+                        score_threshold = int(sys.argv[i + 1])
+                        i += 2
+                    except ValueError:
+                        print("错误: --score 参数需要一个整数")
+                        return
+                elif sys.argv[i] == "--model" and i + 1 < len(sys.argv):
+                    model_name = sys.argv[i + 1]
+                    i += 2
+                else:
+                    i += 1
+
+            run_test(score_threshold, model_name)
         else:
             print(f"错误: 未知命令 '{command}'")
-            print("可用命令: status, reformat, add")
+            print("可用命令: status, reformat, add, test")
+            print("\ntest 命令用法:")
+            print(
+                "  python scripts/manage_api_keys.py test                    # 随机测试一个密钥"
+            )
+            print(
+                "  python scripts/manage_api_keys.py test --score 0          # 测试分数为 0 的密钥"
+            )
+            print(
+                "  python scripts/manage_api_keys.py test --score -220       # 测试分数为 -220 的密钥"
+            )
+            print(
+                "  python scripts/manage_api_keys.py test --model gemini-2.5-flash  # 指定模型"
+            )
     else:
         run_default_removal()
 
