@@ -274,16 +274,20 @@ class CategorySelect(ShopSelect["SimpleShopView"]):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        view = self.view
+        if view is None:
+            return
+
         selected_category = self.values[0]
         item_select = ItemSelect(
-            selected_category, self.view.grouped_items[selected_category]
+            selected_category, view.grouped_items[selected_category]
         )
-        self.view.clear_items()
-        self.view.add_item(item_select)
-        self.view.add_item(BackToCategoriesButton())
-        self.view.add_item(PurchaseButton())
-        self.view.add_item(RefreshBalanceButton())
-        await self.view._update_shop_embed(interaction, category=selected_category)
+        view.clear_items()
+        view.add_item(item_select)
+        view.add_item(BackToCategoriesButton())
+        view.add_item(PurchaseButton())
+        view.add_item(RefreshBalanceButton())
+        await view._update_shop_embed(interaction, category=selected_category)
 
 
 class ItemSelect(ShopSelect["SimpleShopView"]):
@@ -321,11 +325,15 @@ class BackToCategoriesButton(ShopButton["SimpleShopView"]):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.clear_items()
-        self.view.add_item(CategorySelect(list(self.view.grouped_items.keys())))
-        self.view.add_item(PurchaseButton())
-        self.view.add_item(RefreshBalanceButton())
-        await self.view._update_shop_embed(interaction)
+        view = self.view
+        if view is None:
+            return
+
+        view.clear_items()
+        view.add_item(CategorySelect(list(view.grouped_items.keys())))
+        view.add_item(PurchaseButton())
+        view.add_item(RefreshBalanceButton())
+        await view._update_shop_embed(interaction)
 
 
 class LoanButton(ShopButton["SimpleShopView"]):
