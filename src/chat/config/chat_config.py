@@ -210,7 +210,7 @@ GEMINI_THREAD_PRAISE_CONFIG = {
 # 用于生成个人记忆摘要的配置
 GEMINI_SUMMARY_GEN_CONFIG = {
     "temperature": 0.3,  # 降低温度，使输出更确定性
-    "max_output_tokens": 4000,  # 提高token限制，给模型更多空间处理
+    "max_output_tokens": 8000,  # 提高token限制，给模型更多空间处理
 }
 
 # 用于生成忏悔回应的配置
