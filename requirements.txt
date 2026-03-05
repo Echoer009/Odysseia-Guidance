@@ -29,6 +29,8 @@ gunicorn
 eventlet
 docker
 psutil
+cachetools
+httpx
 
 # 测试依赖
 pytest
