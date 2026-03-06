@@ -80,6 +80,19 @@ class ChannelConfigBot(discord.Client):
         else:
             print("  使用默认配置（聊天启用，暖贴启用）")
 
+        # 获取暖贴频道
+        warm_up_channels = await self.db_manager.get_warm_up_channels(self.guild_id)
+        print("\n【暖贴频道】")
+        if warm_up_channels:
+            for channel_id in warm_up_channels:
+                channel = guild.get_channel(channel_id)
+                if channel:
+                    print(f"  ✓ #{channel.name} (ID: {channel_id})")
+                else:
+                    print(f"  ? 未知频道 (ID: {channel_id})")
+        else:
+            print("  未设置任何暖贴频道")
+
         # 获取所有频道配置
         channel_configs = await self.db_manager.get_all_channel_configs_for_guild(
             self.guild_id
@@ -205,9 +218,10 @@ class ChannelConfigBot(discord.Client):
             print("3. 设置频率限制模式")
             print("4. 清除冷却设置")
             print("5. 查看当前配置")
+            print("6. 暖贴功能管理")
             print("0. 退出")
 
-            choice = input("\n请选择操作 (0-5): ").strip()
+            choice = input("\n请选择操作 (0-6): ").strip()
 
             if choice == "0":
                 print("\n退出配置...")
@@ -252,6 +266,8 @@ class ChannelConfigBot(discord.Client):
                         print("  冷却设置: 无限制")
                 else:
                     print("  未设置特定配置，使用默认设置")
+            elif choice == "6":
+                await self.manage_warm_up_channels(guild)
             else:
                 print("无效的选择，请重新输入。")
 
@@ -426,6 +442,156 @@ class ChannelConfigBot(discord.Client):
 
         print(f"\n✓ 频道 #{channel.name} 的冷却设置已清除")
 
+    async def manage_warm_up_channels(self, guild):
+        """暖贴频道管理菜单"""
+        assert self.db_manager is not None, "Database manager not initialized"
+
+        while True:
+            print("\n【暖贴功能管理】")
+            print("1. 列出暖贴频道")
+            print("2. 添加暖贴频道")
+            print("3. 移除暖贴频道")
+            print("4. 启用/禁用全局暖贴开关")
+            print("0. 返回主菜单")
+
+            choice = input("\n请选择操作 (0-4): ").strip()
+
+            if choice == "0":
+                break
+            elif choice == "1":
+                await self.list_warm_up_channels(guild)
+            elif choice == "2":
+                await self.add_warm_up_channel(guild)
+            elif choice == "3":
+                await self.remove_warm_up_channel(guild)
+            elif choice == "4":
+                await self.toggle_global_warm_up(guild)
+            else:
+                print("无效的选择，请重新输入。")
+
+    async def list_warm_up_channels(self, guild):
+        """列出暖贴频道"""
+        assert self.db_manager is not None, "Database manager not initialized"
+
+        warm_up_channels = await self.db_manager.get_warm_up_channels(self.guild_id)
+        print("\n【暖贴频道列表】")
+        if warm_up_channels:
+            for channel_id in warm_up_channels:
+                channel = guild.get_channel(channel_id)
+                if channel:
+                    print(f"  ✓ #{channel.name} (ID: {channel_id})")
+                else:
+                    print(f"  ? 未知频道 (ID: {channel_id})")
+            print(f"\n共 {len(warm_up_channels)} 个暖贴频道")
+        else:
+            print("  未设置任何暖贴频道")
+
+    async def add_warm_up_channel(self, guild):
+        """添加暖贴频道"""
+        assert self.db_manager is not None, "Database manager not initialized"
+
+        print("\n【添加暖贴频道】")
+        print("可用的论坛频道：")
+        forum_channels = [
+            c for c in guild.channels if isinstance(c, discord.ForumChannel)
+        ]
+        for i, channel in enumerate(forum_channels, 1):
+            print(f"  {i}. #{channel.name} (ID: {channel.id})")
+
+        if not forum_channels:
+            print("  该服务器没有论坛频道")
+            return
+
+        channel_id_str = input("\n请输入要添加的频道ID: ").strip()
+        try:
+            channel_id = int(channel_id_str)
+        except ValueError:
+            print("无效的频道ID")
+            return
+
+        # 检查频道是否是论坛频道
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            print(f"错误：找不到频道 ID {channel_id}")
+            return
+        if not isinstance(channel, discord.ForumChannel):
+            print("错误：只能为论坛频道启用暖贴功能")
+            return
+
+        # 检查是否已经是暖贴频道
+        if await self.db_manager.is_warm_up_channel(self.guild_id, channel_id):
+            print(f"频道 #{channel.name} 已经是暖贴频道了")
+            return
+
+        # 添加暖贴频道
+        await self.db_manager.add_warm_up_channel(self.guild_id, channel_id)
+        print(f"\n✓ 已为频道 #{channel.name} 启用暖贴功能")
+
+    async def remove_warm_up_channel(self, guild):
+        """移除暖贴频道"""
+        assert self.db_manager is not None, "Database manager not initialized"
+
+        print("\n【移除暖贴频道】")
+        warm_up_channels = await self.db_manager.get_warm_up_channels(self.guild_id)
+
+        if not warm_up_channels:
+            print("未设置任何暖贴频道")
+            return
+
+        print("当前的暖贴频道：")
+        for i, channel_id in enumerate(warm_up_channels, 1):
+            channel = guild.get_channel(channel_id)
+            if channel:
+                print(f"  {i}. #{channel.name} (ID: {channel_id})")
+            else:
+                print(f"  {i}. 未知频道 (ID: {channel_id})")
+
+        channel_id_str = input("\n请输入要移除的频道ID: ").strip()
+        try:
+            channel_id = int(channel_id_str)
+        except ValueError:
+            print("无效的频道ID")
+            return
+
+        # 检查是否是暖贴频道
+        if not await self.db_manager.is_warm_up_channel(self.guild_id, channel_id):
+            print(f"频道 ID {channel_id} 不是暖贴频道")
+            return
+
+        # 移除暖贴频道
+        await self.db_manager.remove_warm_up_channel(self.guild_id, channel_id)
+        print(f"\n✓ 已为频道 ID {channel_id} 禁用暖贴功能")
+
+    async def toggle_global_warm_up(self, guild):
+        """启用/禁用全局暖贴开关"""
+        assert self.db_manager is not None, "Database manager not initialized"
+
+        print("\n【启用/禁用全局暖贴开关】")
+        global_config = await self.db_manager.get_global_chat_config(self.guild_id)
+        current_state = global_config["warm_up_enabled"] if global_config else True
+
+        print(f"当前状态: {'启用' if current_state else '禁用'}")
+        print("1. 启用")
+        print("2. 禁用")
+
+        choice = input("\n请选择 (1-2): ").strip()
+
+        new_state = None
+        if choice == "1":
+            new_state = True
+            print("\n✓ 全局暖贴功能已启用")
+        elif choice == "2":
+            new_state = False
+            print("\n✓ 全局暖贴功能已禁用")
+        else:
+            print("无效的选择")
+            return
+
+        # 保存配置
+        await self.db_manager.update_global_chat_config(
+            self.guild_id, warm_up_enabled=new_state
+        )
+
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -438,6 +604,10 @@ async def main():
 
   # 修改特定频道的配置（交互式）
   python scripts/manage_channel_config.py 123456789 987654321
+
+功能：
+  - 查看和修改聊天设置（启用/禁用、冷却等）
+  - 暖贴频道管理（添加/移除暖贴频道、全局开关）
         """,
     )
 
