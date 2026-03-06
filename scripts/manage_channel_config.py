@@ -669,6 +669,8 @@ async def main():
         print("错误：机器人令牌无效，请检查令牌是否正确")
     except KeyboardInterrupt:
         print("\n操作已取消")
+    finally:
+        await client.close()
 
 
 if __name__ == "__main__":
