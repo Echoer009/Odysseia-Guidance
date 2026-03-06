@@ -101,10 +101,7 @@ class ForumSearchService:
                 return
 
             # 4. 为每个块生成嵌入并准备数据
-            ids_to_add = []
-            documents_to_add = []
-            embeddings_to_add = []
-            metadatas_to_add = []
+            chunks_data = []
 
             beijing_created_at = (
                 thread.created_at.astimezone(BEIJING_TZ)
@@ -113,39 +110,36 @@ class ForumSearchService:
             )
 
             for i, chunk in enumerate(chunks):
-                chunk_id = f"{thread.id}:{i}"
                 gemini_service = self._get_gemini_service()
                 embedding = await gemini_service.generate_embedding(
                     text=chunk, title=title, task_type="retrieval_document"
                 )
                 if embedding:
-                    ids_to_add.append(chunk_id)
-                    documents_to_add.append(chunk)
-                    embeddings_to_add.append(embedding)
-                    metadatas_to_add.append(
+                    chunks_data.append(
                         {
-                            "thread_id": thread.id,
-                            "thread_name": title,
-                            "author_name": author_name,
-                            "author_id": author_id or 0,
-                            "category_name": category_name,
-                            "channel_id": thread.parent_id,
-                            "guild_id": thread.guild.id,
-                            "created_at": beijing_created_at.isoformat(),
-                            "created_timestamp": beijing_created_at.timestamp(),
+                            "chunk_index": i,
+                            "chunk_text": chunk,
+                            "embedding": embedding,
                         }
                     )
 
-            # 5. 批量写入数据库
-            if ids_to_add:
-                self.vector_db_service.add_documents(
-                    ids=ids_to_add,
-                    documents=documents_to_add,
-                    embeddings=embeddings_to_add,
-                    metadatas=metadatas_to_add,
+            # 5. 写入数据库
+            if chunks_data:
+                await self.vector_db_service.add_documents(
+                    thread_id=str(thread.id),
+                    thread_name=title,
+                    author_name=author_name,
+                    author_id=str(author_id) if author_id else "",
+                    category_name=category_name,
+                    channel_id=str(thread.parent_id),
+                    guild_id=str(thread.guild.id),
+                    created_at=beijing_created_at,
+                    created_timestamp=beijing_created_at.timestamp(),
+                    original_content=content,
+                    chunks_data=chunks_data,
                 )
                 log.info(
-                    f"成功将帖子 {thread.id} 的 {len(ids_to_add)} 个块添加到向量数据库。"
+                    f"成功将帖子 {thread.id} 的 {len(chunks_data)} 个块添加到向量数据库。"
                 )
 
         except Exception as e:
@@ -162,11 +156,6 @@ class ForumSearchService:
             log.warning("论坛搜索服务尚未准备就绪，无法添加文档。")
             return
 
-        all_ids_to_add = []
-        all_documents_to_add = []
-        all_embeddings_to_add = []
-        all_metadatas_to_add = []
-
         gemini_service = self._get_gemini_service()
 
         for doc_id, document, metadata in zip(ids, documents, metadatas):
@@ -177,43 +166,67 @@ class ForumSearchService:
                     log.warning(f"文档 {doc_id} 的内容无法分块，已跳过。")
                     continue
 
-                title = metadata.get("thread_name", "")
-
                 # 2. 为每个块生成嵌入
+                chunks_data = []
                 for i, chunk in enumerate(chunks):
-                    chunk_id = f"{doc_id}:{i}"
                     embedding = await gemini_service.generate_embedding(
-                        text=chunk, title=title, task_type="retrieval_document"
+                        text=chunk,
+                        title=metadata.get("thread_name", ""),
+                        task_type="retrieval_document",
                     )
                     if embedding:
-                        all_ids_to_add.append(chunk_id)
-                        all_documents_to_add.append(chunk)
-                        all_embeddings_to_add.append(embedding)
-                        # 清理元数据：移除 ChromaDB 的保留键，防止崩溃
-                        safe_metadata = metadata.copy() if metadata else {}
-                        if "chroma:document" in safe_metadata:
-                            del safe_metadata["chroma:document"]
+                        chunks_data.append(
+                            {
+                                "chunk_index": i,
+                                "chunk_text": chunk,
+                                "embedding": embedding,
+                            }
+                        )
 
-                        # 确保清理后的元数据不为空
-                        if not safe_metadata:
-                            safe_metadata["recovered_doc_id"] = str(doc_id)
+                # 3. 写入数据库 (使用新 API)
+                if chunks_data:
+                    # 解析 created_at 时间
+                    created_at_str = metadata.get("created_at")
+                    created_at = datetime.now(BEIJING_TZ)
+                    created_timestamp = created_at.timestamp()
+                    if created_at_str:
+                        try:
+                            if isinstance(created_at_str, (int, float)):
+                                created_at = datetime.fromtimestamp(
+                                    created_at_str, BEIJING_TZ
+                                )
+                                created_timestamp = float(created_at_str)
+                            else:
+                                created_at = datetime.fromisoformat(created_at_str)
+                                if created_at.tzinfo is None:
+                                    created_at = created_at.replace(tzinfo=BEIJING_TZ)
+                                created_timestamp = float(created_at.timestamp())
+                        except Exception as e:
+                            log.warning(
+                                f"无法解析文档 {doc_id} 的 created_at: {e}，使用当前时间"
+                            )
 
-                        all_metadatas_to_add.append(safe_metadata)
+                    await self.vector_db_service.add_documents(
+                        thread_id=str(doc_id),
+                        thread_name=metadata.get("thread_name", ""),
+                        author_name=metadata.get("author_name", ""),
+                        author_id=str(metadata.get("author_id", "")),
+                        category_name=metadata.get("category_name", ""),
+                        channel_id=str(metadata.get("channel_id", "")),
+                        guild_id=str(metadata.get("guild_id", "")),
+                        created_at=created_at,
+                        created_timestamp=created_timestamp,
+                        original_content=document,
+                        chunks_data=chunks_data,
+                    )
+                    log.info(
+                        f"成功将文档 {doc_id} 的 {len(chunks_data)} 个块添加到向量数据库。"
+                    )
 
             except Exception as e:
                 log.error(f"为文档 {doc_id} 生成嵌入时发生错误: {e}", exc_info=True)
 
-        # 3. 最终批量写入数据库
-        if all_ids_to_add:
-            self.vector_db_service.add_documents(
-                ids=all_ids_to_add,
-                documents=all_documents_to_add,
-                embeddings=all_embeddings_to_add,
-                metadatas=all_metadatas_to_add,
-            )
-            log.info(
-                f"成功将 {len(ids)} 个原始文档（共 {len(all_ids_to_add)} 个块）添加到向量数据库。"
-            )
+        log.info(f"成功将 {len(ids)} 个原始文档添加到向量数据库。")
 
     async def get_oldest_indexed_thread_timestamp(self, channel_id: int) -> str | None:
         """
@@ -227,36 +240,20 @@ class ForumSearchService:
         """
         try:
             log.info(f"正在查询频道 {channel_id} 中已索引的最旧帖子...")
-            # 使用 get 方法获取所有匹配频道的文档的元数据
-            results = self.vector_db_service.get(
-                where={"channel_id": channel_id}, include=["metadatas"]
+            # 使用新的 API 方法
+            oldest_timestamp = (
+                await self.vector_db_service.get_oldest_indexed_thread_timestamp(
+                    channel_id=str(channel_id)
+                )
             )
 
-            metadatas = results.get("metadatas")
-            if not metadatas:
+            if oldest_timestamp:
+                log.info(
+                    f"频道 {channel_id} 中最旧的已索引帖子的时间戳是: {oldest_timestamp}"
+                )
+            else:
                 log.info(f"在频道 {channel_id} 中未找到任何已索引的帖子。")
-                return None
 
-            # 从元数据中提取所有的时间戳
-            timestamps = [
-                meta["created_at"]
-                for meta in metadatas
-                if "created_at" in meta
-                and isinstance(meta["created_at"], (str, int, float))
-            ]
-
-            if not timestamps:
-                log.warning(f"频道 {channel_id} 的已索引帖子中缺少 created_at 元数据。")
-                return None
-
-            # 找到并返回最早的时间戳
-            oldest_timestamp = min(timestamps)
-            # 确保返回字符串类型
-            if not isinstance(oldest_timestamp, str):
-                oldest_timestamp = str(oldest_timestamp)
-            log.info(
-                f"频道 {channel_id} 中最旧的已索引帖子的时间戳是: {oldest_timestamp}"
-            )
             return oldest_timestamp
 
         except Exception as e:
@@ -289,45 +286,12 @@ class ForumSearchService:
             List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
         try:
-            # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
-            where_filter = {}
-            if filters:
-                conditions = []
-                for key, value in filters.items():
-                    if value is None:
-                        continue
+            # 1. 构建过滤器（直接传递给 PostgreSQL）
+            # ChromaDB 的 $eq, $in, $gte, $lte 语法需要转换为 SQLAlchemy 语法
+            # ForumVectorDBService 的 search 方法会自动处理这些转换
+            filters_dict = filters if filters else {}
 
-                    if key == "start_date":
-                        start_dt_naive = datetime.strptime(value, "%Y-%m-%d")
-                        start_dt_aware = start_dt_naive.replace(tzinfo=BEIJING_TZ)
-                        start_timestamp = start_dt_aware.timestamp()
-                        conditions.append(
-                            {"created_timestamp": {"$gte": start_timestamp}}
-                        )
-                    elif key == "end_date":
-                        end_dt_naive = datetime.strptime(value, "%Y-%m-%d")
-                        end_dt_aware = datetime.combine(
-                            end_dt_naive, datetime.time.max
-                        ).replace(tzinfo=BEIJING_TZ)
-                        end_timestamp = end_dt_aware.timestamp()
-                        conditions.append(
-                            {"created_timestamp": {"$lte": end_timestamp}}
-                        )
-                    else:
-                        # 如果值是列表，使用 '$in' 进行 "或" 匹配
-                        if isinstance(value, list):
-                            conditions.append({key: {"$in": value}})
-                        # 否则，使用 '$eq' 进行精确匹配
-                        else:
-                            conditions.append({key: {"$eq": value}})
-
-                if conditions:
-                    if len(conditions) > 1:
-                        where_filter = {"$and": conditions}
-                    else:
-                        where_filter = conditions[0]
-
-            log.info(f"论坛搜索数据库过滤器 (where): {where_filter or '无'}")
+            log.info(f"论坛搜索数据库过滤器: {filters_dict or '无'}")
 
             # 2. 根据是否有有效 query 决定执行语义搜索还是元数据浏览
             if query and query.strip():
@@ -344,11 +308,11 @@ class ForumSearchService:
                     log.warning("无法为查询生成嵌入向量。")
                     return []
 
-                search_results = self.vector_db_service.search(
+                search_results = await self.vector_db_service.search(
                     query_embedding=query_embedding,
                     n_results=n_results,
-                    where_filter=where_filter,
                     max_distance=config.FORUM_RAG_MAX_DISTANCE,
+                    filters=filters_dict,
                 )
                 # 移除正文内容以减少 Token 消耗和日志干扰
                 for result in search_results:
@@ -357,21 +321,21 @@ class ForumSearchService:
             else:
                 # --- 元数据浏览逻辑 ---
                 log.info("执行元数据浏览 (无查询关键词)。")
-                if not where_filter:
+                if not filters_dict:
                     log.warning("无关键词浏览模式下必须提供有效的过滤器。")
                     return []
 
                 # 直接从数据库获取所有匹配的文档
                 log.info(
-                    f"[FORUM_SEARCH] 准备调用 vector_db.get 进行元数据浏览。过滤器: {where_filter}。注意：此处未传递 limit。"
+                    f"[FORUM_SEARCH] 准备调用 vector_db.get 进行元数据浏览。过滤器: {filters_dict}。"
                 )
                 import time
 
                 start_time = time.monotonic()
 
-                results = self.vector_db_service.get(
-                    where=where_filter if where_filter else None,  # type: ignore[arg-type]
-                    include=["metadatas"],
+                results = await self.vector_db_service.get(
+                    filters=filters_dict,
+                    limit=n_results,
                 )
 
                 duration = time.monotonic() - start_time
@@ -389,7 +353,7 @@ class ForumSearchService:
                 metadatas = metadatas or []
                 reconstructed_results = [
                     {"id": id, "metadata": meta, "distance": 0.0}
-                    for id, meta in zip(ids, metadatas)  # type: ignore[arg-type]
+                    for id, meta in zip(ids, metadatas)
                 ]
 
                 # 按创建时间倒序排序

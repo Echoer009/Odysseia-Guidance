@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy import (
     Column,
     Integer,
@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     Index,
+    Float,
     func,
 )
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
@@ -23,6 +24,7 @@ GENERAL_KNOWLEDGE_SCHEMA = "general_knowledge"
 COMMUNITY_SCHEMA = "community"
 SHOP_SCHEMA = "shop"
 USER_SCHEMA = "user"
+FORUM_SCHEMA = "forum"
 
 Base = declarative_base()
 
@@ -407,3 +409,106 @@ class ShopItem(Base):
 
     def __repr__(self):
         return f"<ShopItem(id={self.id}, name='{self.name}', price={self.price})>"
+
+
+# --- 论坛帖子模型 (关联表结构) ---
+
+
+class ForumDocument(Base):
+    """
+    代表一个完整的论坛帖子。
+    存储帖子元数据，与分块建立一对多关系。
+    """
+
+    __tablename__ = "forum_documents"
+    __table_args__ = {"schema": FORUM_SCHEMA}
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    thread_id: Mapped[str] = mapped_column(
+        String,
+        unique=True,
+        nullable=False,
+        comment="Discord帖子ID",
+    )
+    thread_name: Mapped[str] = mapped_column(Text, nullable=False, comment="帖子标题")
+    author_name: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, comment="作者显示名称"
+    )
+    author_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, comment="作者Discord ID"
+    )
+    category_name: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, comment="论坛频道名称"
+    )
+    channel_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, comment="父频道ID"
+    )
+    guild_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, comment="服务器ID"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, comment="帖子创建时间"
+    )
+    created_timestamp: Mapped[float] = mapped_column(
+        Float, nullable=False, comment="Unix时间戳"
+    )
+    original_content: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="完整原始内容"
+    )
+    source_metadata: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, comment="来自ChromaDB的完整元数据备份"
+    )
+
+    # 与分块的一对多关系
+    chunks: Mapped[List["ForumChunk"]] = relationship(
+        "ForumChunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<ForumDocument(id={self.id}, thread_id='{self.thread_id}')>"
+
+
+class ForumChunk(Base):
+    """
+    代表来自 ForumDocument 的一个文本块，及其对应的向量。
+    我们将在此表上执行向量搜索。
+    """
+
+    __tablename__ = "forum_chunks"
+    __table_args__ = (
+        # HNSW 索引用于向量搜索
+        Index(
+            "idx_forum_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+        ),
+        {"schema": FORUM_SCHEMA},
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    # 链接回父文档的外键
+    document_id = Column(
+        Integer,
+        ForeignKey(f"{FORUM_SCHEMA}.forum_documents.id"),
+        nullable=False,
+    )
+
+    chunk_index = Column(Integer, nullable=False, comment="分块在帖子中的序号")
+    chunk_text = Column(Text, nullable=False, comment="这个特定文本块的内容")
+
+    embedding = Column(
+        HALFVEC(EMBEDDING_DIMENSION),
+        nullable=False,
+        comment="此文本块的半精度嵌入向量",
+    )
+
+    created_at = Column(DateTime, server_default=func.now())
+
+    # 回到 ForumDocument 的多对一关系
+    document = relationship("ForumDocument", back_populates="chunks")
+
+    def __repr__(self):
+        return f"<ForumChunk(id={self.id}, document_id={self.document_id}, chunk_index={self.chunk_index})>"
