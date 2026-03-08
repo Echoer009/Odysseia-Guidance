@@ -37,10 +37,18 @@ HIDDEN_TOOLS = ["issue_user_warning"]
 
 # --- Ollama Embedding 配置 ---
 # 用于本地 embedding 服务的配置
-OLLAMA_CONFIG = {
-    "BASE_URL": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-    "MODEL": os.getenv("OLLAMA_MODEL", "bge-m3"),
-}
+# 在 Docker 环境中强制使用服务名称 ollama:11434，忽略环境变量中的 localhost
+RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "False").lower() == "true"
+if RUNNING_IN_DOCKER:
+    OLLAMA_CONFIG = {
+        "BASE_URL": "http://ollama:11434",
+        "MODEL": "bge-m3",
+    }
+else:
+    OLLAMA_CONFIG = {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "MODEL": os.getenv("OLLAMA_MODEL", "bge-m3"),
+    }
 
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
