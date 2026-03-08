@@ -6,6 +6,8 @@ services:
       - .env
     environment:
       - RUNNING_IN_DOCKER=true
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=bge-m3
 
     # --- 部署方式二选一 ---
     # 方式一 (推荐): 从本地源代码构建
