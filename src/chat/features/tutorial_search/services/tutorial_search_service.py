@@ -220,13 +220,15 @@ class TutorialSearchService:
         log.info(f"收到来自用户 '{user_id}' 的教程知识库搜索请求: '{query}'")
 
         try:
-            from src.chat.services.gemini_service import gemini_service
+            from src.chat.services.ollama_embedding_service import (
+                ollama_embedding_service,
+            )
 
-            query_embedding = await gemini_service.generate_embedding(
+            query_embedding = await ollama_embedding_service.generate_embedding(
                 text=query, task_type="retrieval_query"
             )
             if not query_embedding:
-                log.info("RAG功能未启用：未配置API密钥，跳过教程检索。")
+                log.info("RAG功能未启用：Ollama服务不可用，跳过教程检索。")
                 return []
         except Exception as e:
             log.error(f"为查询 '{query}' 生成 embedding 时出错: {e}", exc_info=True)

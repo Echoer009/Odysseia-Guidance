@@ -301,5 +301,6 @@ src/chat/features/games/blackjack-web/vite.config.ts
 
 # Docker persistent data
 /pgdata/
+/ollama_data/
 # Ignore tutorial source files, as they are processed into the database
 tutorial/

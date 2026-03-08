@@ -37,5 +37,6 @@ Dockerfile.postgres
 
 # 数据和日志的最佳实践
 pgdata/
+ollama_data/
 logs.txt
 *.log

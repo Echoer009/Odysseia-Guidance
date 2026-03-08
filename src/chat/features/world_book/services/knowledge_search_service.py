@@ -5,7 +5,7 @@ from typing import Any, List, Dict
 
 from sqlalchemy import text
 from src.database.database import AsyncSessionLocal
-from src.chat.services.gemini_service import gemini_service
+from src.chat.services.ollama_embedding_service import ollama_embedding_service
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ class KnowledgeSearchService:
         log.info(f"收到知识库混合搜索请求: '{query}'")
 
         try:
-            query_embedding = await gemini_service.generate_embedding(
+            query_embedding = await ollama_embedding_service.generate_embedding(
                 text=query, task_type="retrieval_query"
             )
             if not query_embedding:

@@ -234,21 +234,23 @@ class IncrementalRAGService:
     """
 
     def __init__(self):
-        self.gemini_service = None
+        self.ollama_embedding_service = None
         self.parade_conn = None
 
-    def _get_gemini_service(self):
-        """延迟导入 Gemini 服务以避免循环导入。"""
-        if self.gemini_service is None:
-            from src.chat.services.gemini_service import gemini_service
+    def _get_ollama_embedding_service(self):
+        """延迟导入 Ollama embedding 服务以避免循环导入。"""
+        if self.ollama_embedding_service is None:
+            from src.chat.services.ollama_embedding_service import (
+                ollama_embedding_service,
+            )
 
-            self.gemini_service = gemini_service
-        return self.gemini_service
+            self.ollama_embedding_service = ollama_embedding_service
+        return self.ollama_embedding_service
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
-        gemini_service = self._get_gemini_service()
-        return gemini_service.is_available()
+        ollama_embedding_service = self._get_ollama_embedding_service()
+        return ollama_embedding_service.check_connection_sync()
 
     def _get_parade_connection(self):
         """获取 Parade DB 连接"""
@@ -488,8 +490,8 @@ class IncrementalRAGService:
                     log.debug(f"正在为块 {chunk_index} 生成嵌入向量...")
 
                     # 生成嵌入向量
-                    gemini_service = self._get_gemini_service()
-                    embedding = await gemini_service.generate_embedding(
+                    ollama_embedding_service = self._get_ollama_embedding_service()
+                    embedding = await ollama_embedding_service.generate_embedding(
                         text=chunk_content,
                         title=entry.get("title", entry_id),
                         task_type="retrieval_document",

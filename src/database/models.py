@@ -15,7 +15,7 @@ from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
 from pgvector.sqlalchemy import HALFVEC
 
 # --- 全局配置 ---
-EMBEDDING_DIMENSION = 3072  # 所有RAG统一使用3072维度
+EMBEDDING_DIMENSION = 1024  # bge-m3 模型使用 1024 维度
 
 # --- Schema 名称 ---
 TUTORIALS_SCHEMA = "tutorials"

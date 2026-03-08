@@ -298,6 +298,16 @@ class VectorDBService:
                 res for res in unfiltered_results if res["distance"] <= max_distance
             ]
 
+            # 打印所有结果的距离值用于调试
+            if unfiltered_results:
+                distance_info = ", ".join(
+                    [
+                        f"{res['id'][:15]}:{res['distance']:.4f}"
+                        for res in unfiltered_results
+                    ]
+                )
+                log.info(f"距离详情: {distance_info}")
+
             log.info(
                 f"原始召回 {len(unfiltered_results)} 个结果, 距离阈值过滤后剩余 {len(filtered_results)} 个。"
             )

@@ -35,6 +35,13 @@ DISABLED_TOOLS = (
 # 这些工具是系统必须保留的，不应该让用户控制
 HIDDEN_TOOLS = ["issue_user_warning"]
 
+# --- Ollama Embedding 配置 ---
+# 用于本地 embedding 服务的配置
+OLLAMA_CONFIG = {
+    "BASE_URL": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    "MODEL": os.getenv("OLLAMA_MODEL", "bge-m3"),
+}
+
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -122,8 +129,10 @@ FORUM_SEARCH_DEFAULT_LIMIT = 5  # 论坛搜索工具返回结果的默认数量
 
 # RAG 搜索结果的距离阈值。分数越低越相似。
 # 只有距离小于或等于此值的知识才会被采纳。
-RAG_MAX_DISTANCE = 1.2
-FORUM_RAG_MAX_DISTANCE = 1.0
+# 注意：bge-m3 模型使用余弦距离，范围是 [0, 2]
+# 0 表示完全匹配，1 表示完全相反，2 表示最不相关
+RAG_MAX_DISTANCE = 0.5  # bge-m3 模型的推荐值（教程搜索）
+FORUM_RAG_MAX_DISTANCE = 0.4  # bge-m3 模型的推荐值（论坛搜索）
 
 # --- 教程 RAG 配置 ---
 TUTORIAL_RAG_CONFIG = {

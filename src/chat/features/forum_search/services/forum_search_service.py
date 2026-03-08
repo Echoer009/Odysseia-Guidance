@@ -26,21 +26,26 @@ class ForumSearchService:
     """
 
     def __init__(self):
-        self.gemini_service = None
+        self.ollama_embedding_service = None
         self.vector_db_service = forum_vector_db_service
 
-    def _get_gemini_service(self):
-        """延迟导入 Gemini 服务以避免循环导入。"""
-        if self.gemini_service is None:
-            from src.chat.services.gemini_service import gemini_service
+    def _get_ollama_embedding_service(self):
+        """延迟导入 Ollama embedding 服务以避免循环导入。"""
+        if self.ollama_embedding_service is None:
+            from src.chat.services.ollama_embedding_service import (
+                ollama_embedding_service,
+            )
 
-            self.gemini_service = gemini_service
-        return self.gemini_service
+            self.ollama_embedding_service = ollama_embedding_service
+        return self.ollama_embedding_service
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好。"""
-        gemini_service = self._get_gemini_service()
-        return gemini_service.is_available() and self.vector_db_service.is_available()
+        ollama_embedding_service = self._get_ollama_embedding_service()
+        return (
+            ollama_embedding_service.check_connection_sync()
+            and self.vector_db_service.is_available()
+        )
 
     async def process_thread(self, thread: discord.Thread):
         """
@@ -114,8 +119,8 @@ class ForumSearchService:
 
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{thread.id}:{i}"
-                gemini_service = self._get_gemini_service()
-                embedding = await gemini_service.generate_embedding(
+                ollama_embedding_service = self._get_ollama_embedding_service()
+                embedding = await ollama_embedding_service.generate_embedding(
                     text=chunk, title=title, task_type="retrieval_document"
                 )
                 if embedding:
@@ -167,7 +172,7 @@ class ForumSearchService:
         all_embeddings_to_add = []
         all_metadatas_to_add = []
 
-        gemini_service = self._get_gemini_service()
+        ollama_embedding_service = self._get_ollama_embedding_service()
 
         for doc_id, document, metadata in zip(ids, documents, metadatas):
             try:
@@ -182,7 +187,7 @@ class ForumSearchService:
                 # 2. 为每个块生成嵌入
                 for i, chunk in enumerate(chunks):
                     chunk_id = f"{doc_id}:{i}"
-                    embedding = await gemini_service.generate_embedding(
+                    embedding = await ollama_embedding_service.generate_embedding(
                         text=chunk, title=title, task_type="retrieval_document"
                     )
                     if embedding:
@@ -336,8 +341,8 @@ class ForumSearchService:
                     log.info("RAG功能未启用：未配置API密钥，跳过语义搜索。")
                     return []
                 log.info(f"执行语义搜索，查询: '{query}'")
-                gemini_service = self._get_gemini_service()
-                query_embedding = await gemini_service.generate_embedding(
+                ollama_embedding_service = self._get_ollama_embedding_service()
+                query_embedding = await ollama_embedding_service.generate_embedding(
                     text=query, task_type="retrieval_query"
                 )
                 if not query_embedding:

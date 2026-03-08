@@ -30,6 +30,7 @@ services:
       - bot_network
     depends_on:
       - db
+      - ollama
 
   blackjack_web:
     # build:
@@ -90,6 +91,20 @@ services:
     volumes:
       # 数据持久化到本地 ./pgdata 目录，并使用 PG16 的标准数据路径
       - ./pgdata:/var/lib/postgresql/data
+    networks:
+      - bot_network
+
+  ollama:
+    # Ollama 官方镜像，用于本地运行 bge-m3 embedding 模型
+    image: ollama/ollama:latest
+    container_name: odysseia_ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
     networks:
       - bot_network
 

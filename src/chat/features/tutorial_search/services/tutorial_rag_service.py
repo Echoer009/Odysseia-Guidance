@@ -5,7 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.database import AsyncSessionLocal
 from src.database.models import TutorialDocument, KnowledgeChunk
-from src.chat.services.gemini_service import gemini_service
+from src.chat.services.ollama_embedding_service import ollama_embedding_service
 from sqlalchemy.future import select
 
 log = logging.getLogger(__name__)
@@ -47,8 +47,8 @@ class TutorialRAGService:
                     return
 
                 # 3. 为完整内容生成一个嵌入
-                embedding = await gemini_service.generate_embedding(
-                    text=content, task_type="retrieval_document"
+                embedding = await ollama_embedding_service.generate_embedding(
+                    text=str(content), task_type="retrieval_document"
                 )
 
                 if not embedding:
