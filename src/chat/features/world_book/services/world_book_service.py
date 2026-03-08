@@ -81,8 +81,9 @@ class WorldBookService:
         import re
 
         clean_query = regex_service.clean_user_input(latest_query)
-        # 进一步移除 Discord 提及
-        summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query).strip()
+        # 进一步移除 Discord 提及（包括 <@123456789> 和 @username 格式）
+        summarized_query = re.sub(r"<@!?&?\d+>\s*", "", clean_query)
+        summarized_query = re.sub(r"@\S+\s*", "", summarized_query).strip()
         log.info(f"原始查询: '{summarized_query}'")
 
         # 4. 确保查询字符串不为空

@@ -529,7 +529,8 @@ class PromptService:
 
         formatted_entries = []
         for i, entry in enumerate(entries):
-            content_value = entry.get("content")
+            # 兼容两种字段名: "content" (旧格式) 和 "chunk_text" (新格式)
+            content_value = entry.get("content") or entry.get("chunk_text")
             metadata = entry.get("metadata", {})
             distance = entry.get("distance")
 
@@ -552,24 +553,76 @@ class PromptService:
                 "price",
             ]
 
-            # 过滤掉包含“未提供”的行以及在排除列表中的字段
-            filtered_lines = []
-            for line in content_str.split("\n"):
-                # 检查是否包含“未提供”
-                if "未提供" in line:
-                    continue
-                # 检查是否以任何一个被排除的字段开头
-                if any(line.strip().startswith(field) for field in EXCLUDED_FIELDS):
-                    continue
-                # 新增检查：过滤掉冒号后为空的行，例如 "background: "
-                if ":" in line:
-                    key, value = line.split(":", 1)
-                    if not value.strip():
-                        continue
-                filtered_lines.append(line)
+            # 检测是否为JSON格式并分别处理
+            is_json = False
+            try:
+                # 尝试解析JSON
+                json_data = json.loads(content_str)
+                if isinstance(json_data, dict):
+                    is_json = True
+            except (json.JSONDecodeError, TypeError):
+                is_json = False
 
-            if not filtered_lines:
-                continue  # 如果过滤后内容为空，则跳过此条目
+            filtered_lines = []
+
+            if is_json:
+                # JSON格式：只过滤掉值为"未提供"的字段，保留其他内容
+                filtered_dict = {}
+                for key, value in json_data.items():
+                    # 跳过排除的字段
+                    if key in EXCLUDED_FIELDS:
+                        continue
+                    # 跳过值为"未提供"的字段
+                    if isinstance(value, str) and value.strip() == "未提供":
+                        continue
+                    # 跳过空值
+                    if not value or (isinstance(value, str) and not value.strip()):
+                        continue
+                    filtered_dict[key] = value
+
+                if filtered_dict:
+                    # 将过滤后的字典重新格式化为JSON字符串
+                    filtered_lines = [
+                        json.dumps(filtered_dict, ensure_ascii=False, indent=2)
+                    ]
+                    log.info(
+                        f"[RAG过滤] JSON格式内容 (条目{i + 1}, id:{entry.get('id')}) 过滤后保留字段: {list(filtered_dict.keys())}"
+                    )
+                else:
+                    log.warning(
+                        f"[RAG过滤] JSON格式内容 (条目{i + 1}, id:{entry.get('id')}) 过滤后无有效内容，已跳过"
+                    )
+                    continue
+            else:
+                # 非JSON格式：按原有的行过滤逻辑处理
+                for line in content_str.split("\n"):
+                    # 检查是否完全等于"未提供"（而不是包含）
+                    if line.strip() == "未提供":
+                        log.info(
+                            f"[RAG过滤] 过滤掉'未提供'行 (条目{i + 1}, id:{entry.get('id')})"
+                        )
+                        continue
+                    # 检查是否以任何一个被排除的字段开头
+                    if any(line.strip().startswith(field) for field in EXCLUDED_FIELDS):
+                        log.info(
+                            f"[RAG过滤] 过滤掉排除字段行 (条目{i + 1}, id:{entry.get('id')}): {line[:150]}"
+                        )
+                        continue
+                    # 过滤掉冒号后为空的行，例如 "background: "
+                    if ":" in line:
+                        key, value = line.split(":", 1)
+                        if not value.strip():
+                            log.info(
+                                f"[RAG过滤] 过滤掉空值行 (条目{i + 1}, id:{entry.get('id')}): {line[:150]}"
+                            )
+                            continue
+                    filtered_lines.append(line)
+
+                if not filtered_lines:
+                    log.warning(
+                        f"[RAG过滤] 条目{i + 1} (id:{entry.get('id')}) 过滤后内容为空，已跳过！原始内容长度:{len(content_str)}"
+                    )
+                    continue  # 如果过滤后内容为空，则跳过此条目
 
             final_content = "\n".join(filtered_lines)
 

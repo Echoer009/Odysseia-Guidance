@@ -6,6 +6,7 @@ from typing import Any, List, Dict
 from sqlalchemy import text
 from src.database.database import AsyncSessionLocal
 from src.chat.services.ollama_embedding_service import ollama_embedding_service
+from src.chat.config import chat_config
 
 log = logging.getLogger(__name__)
 
@@ -18,13 +19,16 @@ class KnowledgeSearchService:
 
     def __init__(self):
         log.info("KnowledgeSearchService 已初始化")
-        # 在未来可以从配置中加载参数
+        # 从配置中加载参数
         self.config = {
-            "TOP_K_VECTOR": 10,
-            "TOP_K_FTS": 10,
-            "RRF_K": 60,
-            "HYBRID_SEARCH_FINAL_K": 5,
+            "TOP_K_VECTOR": chat_config.WORLD_BOOK_RAG_CONFIG.get("TOP_K_VECTOR", 10),
+            "TOP_K_FTS": chat_config.WORLD_BOOK_RAG_CONFIG.get("TOP_K_FTS", 10),
+            "RRF_K": chat_config.WORLD_BOOK_RAG_CONFIG.get("RRF_K", 60),
+            "HYBRID_SEARCH_FINAL_K": chat_config.WORLD_BOOK_RAG_CONFIG.get(
+                "HYBRID_SEARCH_FINAL_K", 5
+            ),
         }
+        log.info(f"KnowledgeSearchService 配置: {self.config}")
 
     def _clean_fts_query(self, query: str) -> str:
         """
@@ -104,6 +108,9 @@ class KnowledgeSearchService:
             LIMIT :final_k;
             """
         )
+        log.info(
+            f"执行混合搜索: query_text='{query_text[:100]}...', final_k={self.config['HYBRID_SEARCH_FINAL_K']}"
+        )
         result = await session.execute(
             sql_query,
             {
@@ -116,7 +123,9 @@ class KnowledgeSearchService:
             },
         )
         # SQLAlchemy 2.x 的 Row 对象需要通过 ._mapping 转换为字典
-        return [dict(row._mapping) for row in result.fetchall()]
+        rows = result.fetchall()
+        log.info(f"混合搜索返回 {len(rows)} 个结果")
+        return [dict(row._mapping) for row in rows]
 
     async def search(self, query: str) -> List[Dict[str, Any]]:
         """
