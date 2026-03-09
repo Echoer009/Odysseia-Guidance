@@ -19,49 +19,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# 保存当前环境变量
-original_env = os.environ.copy()
-
-# 清除可能影响ChromaDB的环境变量
-env_keys_to_remove = [
-    k
-    for k in os.environ
-    if k.upper()
-    in [
-        "DISCORD_TOKEN",
-        "GUILD_ID",
-        "DEVELOPER_USER_IDS",
-        "ADMIN_ROLE_IDS",
-        "GEMINI_API_BASE_URL",
-        "GOOGLE_API_KEYS_LIST",
-        "CHAT_ENABLED",
-        "RAG_QUERY_REWRITING_ENABLED",
-        "BRAIN_GIRL_APP_ID",
-        "LOG_AI_FULL_CONTEXT",
-        "VITE_DISCORD_CLIENT_ID",
-        "DISCORD_CLIENT_SECRET",
-        "FORUM_SEARCH_CHANNEL_IDS",
-        "UNRESTRICTED_CHANNEL_IDS",
-        "CUSTOM_GEMINI_URL",
-        "CUSTOM_GEMINI_API_KEY",
-        "POSTGRES_DB",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-        "DB_PORT",
-        "DISABLED_TOOLS",
-        "COIN_REWARD_GUILD_IDS",
-    ]
-]
-
-for key in env_keys_to_remove:
-    del os.environ[key]
-
-# 导入chromadb（在清除环境变量之后）
+# 不加载.env文件，直接导入chromadb
 import chromadb
 
-# 恢复环境变量
-os.environ.update(original_env)
-
+# 现在可以安全地导入配置
 from src.chat.config import chat_config as config
 
 
