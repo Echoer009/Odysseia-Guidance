@@ -99,18 +99,35 @@ class ForumMigrationService:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
+            # 检查表结构
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            log.info(f"ChromeDB 中的表: {tables}")
+
+            # 检查 embeddings 表结构
+            cursor.execute("PRAGMA table_info(embeddings)")
+            embeddings_columns = cursor.fetchall()
+            log.info(f"embeddings 表结构: {embeddings_columns}")
+
+            # 检查 embedding_fulltext_search_content 表是否存在
+            if "embedding_fulltext_search_content" in tables:
+                cursor.execute("PRAGMA table_info(embedding_fulltext_search_content)")
+                fts_columns = cursor.fetchall()
+                log.info(f"embedding_fulltext_search_content 表结构: {fts_columns}")
+
             # 确定文本列名称
             doc_col = "c0"
             log.info(f"文本列: {doc_col}")
 
             # 主查询：获取 ID、文本和元数据
+            # 尝试不同的 JOIN 方式
             query = f"""
                 SELECT 
                     e.id AS internal_id,
                     e.embedding_id AS thread_id,
                     fts.{doc_col} AS content
                 FROM embeddings e
-                JOIN embedding_fulltext_search_content fts ON e.id = fts.rowid
+                LEFT JOIN embedding_fulltext_search_content fts ON e.id = fts.rowid
             """
 
             cursor.execute(query)
@@ -119,6 +136,11 @@ class ForumMigrationService:
             cursor.execute("SELECT COUNT(*) FROM embeddings")
             total_records = cursor.fetchone()[0]
             log.info(f"总记录数: {total_records}")
+
+            # 测试查询结果数量
+            cursor.execute(query)
+            test_result = cursor.fetchall()
+            log.info(f"查询返回 {len(test_result)} 条记录")
 
             # 准备副游标查询元数据
             meta_cursor = conn.cursor()
