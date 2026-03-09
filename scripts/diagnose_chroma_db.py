@@ -15,14 +15,21 @@ import sys
 import sqlite3
 from pathlib import Path
 
+# 清除所有环境变量，只保留PATH
+original_env = os.environ.copy()
+os.environ.clear()
+os.environ["PATH"] = original_env.get("PATH", "")
+
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# 不加载.env文件，直接导入chromadb
+# 导入chromadb
 import chromadb
 
-# 现在可以安全地导入配置
+# 恢复环境变量
+os.environ.update(original_env)
+
 from src.chat.config import chat_config as config
 
 
