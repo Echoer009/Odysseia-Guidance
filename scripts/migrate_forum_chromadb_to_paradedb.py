@@ -273,13 +273,25 @@ class ForumMigrationService:
         with open(filepath, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    async def import_to_paradedb(self):
+    async def import_to_paradedb(self, clean: bool = False):
         """
         步骤2：读取 JSON 文件，使用 Ollama 向量化并导入 ParadeDB
+
+        支持断点续传：
+        - 脚本会在每次成功导入后更新 JSON 文件中的 processed_threads
+        - 如果脚本中断，重新运行时会跳过已处理的 thread_id
+
+        Args:
+            clean: 是否在导入前清理数据库中的所有 forum_threads 数据
         """
         log.info("=" * 60)
         log.info("步骤2：导入数据到 ParadeDB")
         log.info("=" * 60)
+
+        # 如果需要清理数据库
+        if clean:
+            log.warning("清理模式：将删除所有 forum_threads 数据")
+            await self._clean_forum_threads()
 
         if not self.ollama_service:
             log.error("OllamaEmbeddingService 未初始化")
@@ -290,18 +302,68 @@ class ForumMigrationService:
         threads = data.get("threads", [])
         total_count = data.get("total_count", len(threads))
 
-        log.info(f"共 {total_count} 条帖子待导入")
+        # 获取已处理的 thread_id 列表
+        processed_thread_ids = set(data.get("processed_threads", []))
+        log.info(f"已处理的 thread_id 数量: {len(processed_thread_ids)}")
+
+        # 如果是清理模式，重置已处理列表
+        if clean:
+            processed_thread_ids = set()
+            data["processed_threads"] = []
+            self._save_to_json(data, self.export_file)
+            log.info("已重置已处理列表")
+
+        # 过滤出未处理的 threads
+        unprocessed_threads = [
+            t for t in threads if t["thread_id"] not in processed_thread_ids
+        ]
+        log.info(f"待导入的 thread 数量: {len(unprocessed_threads)}")
+
+        if not unprocessed_threads:
+            log.info("所有数据已导入完成！")
+            return
 
         # 批处理导入
-        imported_count = 0
+        imported_count = len(processed_thread_ids)
+        failed_count = 0
+
+        if not self.ollama_service:
+            log.error("OllamaEmbeddingService 未初始化")
+            raise ValueError("OllamaEmbeddingService 未初始化")
+
+        # 加载数据
+        data = self._load_from_json(self.export_file)
+        threads = data.get("threads", [])
+        total_count = data.get("total_count", len(threads))
+
+        # 获取已处理的 thread_id 列表
+        processed_thread_ids = set(data.get("processed_threads", []))
+        log.info(f"已处理的 thread_id 数量: {len(processed_thread_ids)}")
+
+        # 过滤出未处理的 threads
+        unprocessed_threads = [
+            t for t in threads if t["thread_id"] not in processed_thread_ids
+        ]
+        log.info(f"待导入的 thread 数量: {len(unprocessed_threads)}")
+
+        if not unprocessed_threads:
+            log.info("所有数据已导入完成！")
+            return
+
+        # 批处理导入
+        imported_count = len(processed_thread_ids)
         failed_count = 0
 
         # 使用进度条
-        with tqdm(total=total_count, desc="导入数据", unit="条") as pbar:
-            for i in range(0, len(threads), BATCH_SIZE):
-                batch = threads[i : i + BATCH_SIZE]
+        with tqdm(
+            total=total_count, desc="导入数据", unit="条", initial=imported_count
+        ) as pbar:
+            for i in range(0, len(unprocessed_threads), BATCH_SIZE):
+                batch = unprocessed_threads[i : i + BATCH_SIZE]
                 batch_num = i // BATCH_SIZE + 1
-                total_batches = (len(threads) + BATCH_SIZE - 1) // BATCH_SIZE
+                total_batches = (
+                    len(unprocessed_threads) + BATCH_SIZE - 1
+                ) // BATCH_SIZE
 
                 # 并发向量化
                 embedding_tasks = []
@@ -339,6 +401,13 @@ class ForumMigrationService:
                     try:
                         await self._insert_thread(thread, embedding)  # type: ignore
                         imported_count += 1
+
+                        # 标记为已处理
+                        processed_thread_ids.add(thread["thread_id"])
+                        data["processed_threads"] = sorted(list(processed_thread_ids))
+
+                        # 更新 JSON 文件（每成功导入一条就保存）
+                        self._save_to_json(data, self.export_file)
 
                         # 更新进度条
                         pbar.update(1)
@@ -433,6 +502,14 @@ class ForumMigrationService:
                     )
                     session.add(new_thread)
 
+    async def _clean_forum_threads(self):
+        """清理 forum_threads 表中的所有数据"""
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                # 删除所有记录
+                await session.execute(text("DELETE FROM forum.forum_threads"))
+                log.info("已清理 forum_threads 表")
+
 
 async def main():
     """主函数"""
@@ -444,6 +521,11 @@ async def main():
         choices=["export", "import", "all"],
         default="all",
         help="执行的步骤：export=导出, import=导入, all=全部（默认）",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="在导入前清理 forum_threads 表中的所有数据（慎用）",
     )
     args = parser.parse_args()
 
@@ -466,7 +548,7 @@ async def main():
 
         # 步骤2：导入
         if args.step in ["import", "all"]:
-            await migration_service.import_to_paradedb()
+            await migration_service.import_to_paradedb(clean=args.clean)
 
         log.info("迁移完成！")
 
