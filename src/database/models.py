@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     Text,
     DateTime,
@@ -23,6 +24,7 @@ GENERAL_KNOWLEDGE_SCHEMA = "general_knowledge"
 COMMUNITY_SCHEMA = "community"
 SHOP_SCHEMA = "shop"
 USER_SCHEMA = "user"
+FORUM_SCHEMA = "forum"
 
 Base = declarative_base()
 
@@ -407,3 +409,95 @@ class ShopItem(Base):
 
     def __repr__(self):
         return f"<ShopItem(id={self.id}, name='{self.name}', price={self.price})>"
+
+
+# --- 论坛搜索模型 (ParadeDB) ---
+
+
+class ForumThread(Base):
+    """
+    代表一个完整的论坛帖子。
+    使用单表结构，不进行文本分块，支持混合搜索（向量+BM25）。
+    """
+
+    __tablename__ = "forum_threads"
+    __table_args__ = (
+        # HNSW 向量索引用于向量相似度搜索
+        Index(
+            "idx_forum_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+        ),
+        # 创建时间索引用于排序
+        Index("idx_forum_created_at", "created_at"),
+        # 分类名称索引用于过滤
+        Index("idx_forum_category", "category_name"),
+        # 作者ID索引用于过滤
+        Index("idx_forum_author", "author_id"),
+        # 频道ID索引用于过滤
+        Index("idx_forum_channel", "channel_id"),
+        {"schema": FORUM_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # Discord 帖子唯一标识
+    thread_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, comment="Discord帖子的唯一ID"
+    )
+
+    # 帖子基本信息
+    thread_name: Mapped[str] = mapped_column(Text, nullable=False, comment="帖子标题")
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="帖子完整内容（首楼）"
+    )
+
+    # 作者信息
+    author_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="作者的Discord ID"
+    )
+    author_name: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="作者的显示名称"
+    )
+
+    # 分类和频道信息
+    category_name: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="论坛频道名称（分类）"
+    )
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="父频道的Discord ID"
+    )
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="服务器的Discord ID"
+    )
+
+    # 时间戳
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, comment="帖子创建时间（Discord时间）"
+    )
+
+    # 可选字段
+    source_metadata: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="来自旧系统的完整元数据备份"
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(
+        HALFVEC(EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="整帖内容的向量嵌入（用于语义搜索）",
+    )
+
+    # 数据库管理时间戳
+    created_at_db: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), comment="数据库记录创建时间"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="数据库记录更新时间",
+    )
+
+    def __repr__(self):
+        return f"<ForumThread(id={self.id}, thread_id={self.thread_id}, thread_name='{self.thread_name}')>"

@@ -4,19 +4,11 @@ import logging
 import discord
 from discord.ext import commands
 import asyncio
-from typing import TYPE_CHECKING
 
 from src.chat.config import chat_config
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
-
-if TYPE_CHECKING:
-    from src.chat.features.forum_search.cogs.forum_sync_cog import ForumSyncCog
-    from src.chat.features.odysseia_coin.cogs.coin_cog import CoinCog
-    from src.chat.features.thread_commentor.cogs.thread_commentor_cog import (
-        ThreadCommentorCog,
-    )
 
 log = logging.getLogger(__name__)
 
@@ -141,10 +133,7 @@ class ThreadEventHandlerCog(commands.Cog):
         # 为每个潜在的目标模块启动一个独立的、非阻塞的异步任务。
         # 每个任务自己负责检查是否需要执行。
 
-        # TEMPORARILY DISABLED: ChromaDB is crashing, disabling forum sync to prevent bot crashes
-        # asyncio.create_task(self._dispatch_to_forum_sync(thread))
-        log.warning("[Central Dispatcher] ForumSync 已临时禁用，跳过RAG索引任务。")
-
+        asyncio.create_task(self._dispatch_to_forum_sync(thread))
         asyncio.create_task(self._dispatch_to_coin_cog(thread))
         asyncio.create_task(self._dispatch_to_thread_commentor(thread))
 

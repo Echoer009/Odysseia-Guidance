@@ -450,71 +450,47 @@ class SearchVectorDBModal(discord.ui.Modal):
             return
 
         try:
-            if not forum_vector_db_service or not forum_vector_db_service.client:
+            if (
+                not forum_vector_db_service
+                or not forum_vector_db_service.is_available()
+            ):
                 raise ConnectionError("未能连接到向量数据库服务。")
 
-            collection = forum_vector_db_service.client.get_collection(
-                name=forum_vector_db_service.collection_name or ""
+            # 使用 forum_search_service 进行搜索（语义搜索 + 元数据过滤）
+            from src.chat.features.forum_search.services.forum_search_service import (
+                forum_search_service,
             )
 
-            # 性能优化：ChromaDB 不支持模糊搜索，我们先只获取元数据进行过滤
-            all_items = collection.get(include=["metadatas"])
-
-            if not all_items or not all_items["ids"]:
+            if not forum_search_service.is_ready():
                 await interaction.followup.send(
-                    "❌ 向量数据库中没有任何帖子。", ephemeral=True
+                    "论坛搜索服务未就绪，请稍后再试。", ephemeral=True
                 )
                 return
 
-            # 在 Python 中对元数据进行不区分大小写的“包含”过滤
-            keyword_lower = keyword.lower()
-            matching_ids = []
-            metadatas = all_items.get("metadatas")
-            ids = all_items.get("ids")
-            if metadatas and ids:
-                for i, metadata in enumerate(metadatas):
-                    if metadata:
-                        thread_name = str(metadata.get("thread_name", "")).lower()
-                        if keyword_lower in thread_name:
-                            matching_ids.append(ids[i])
+            # 执行搜索
+            results = await forum_search_service.search(
+                query=keyword,
+                n_results=100,  # 获取更多结果用于浏览
+                filters=None,
+            )
 
-            if not matching_ids:
+            if not results:
                 await interaction.followup.send(
-                    f"❌ 未在元数据中找到包含 `{keyword}` 的帖子。", ephemeral=True
+                    f"❌ 未找到包含 `{keyword}` 的帖子。", ephemeral=True
                 )
                 return
 
-            # 仅获取匹配到的条目的完整数据
-            results = collection.get(
-                ids=matching_ids, include=["metadatas", "documents"]
-            )
-
-            # 格式化结果 (因为后续代码期望一个字典列表)
-            formatted_results = []
-            ids = results.get("ids")
-            metadatas = results.get("metadatas")
-            documents = results.get("documents")
-            if ids and metadatas and documents:
-                for i in range(len(ids)):
-                    formatted_results.append(
-                        {
-                            "id": ids[i],
-                            "metadata": metadatas[i],
-                            "document": documents[i],
-                        }
-                    )
-
-            self.db_view.current_list_items = formatted_results
+            self.db_view.current_list_items = results
             self.db_view.current_page = 0
             self.db_view.total_pages = (
-                len(formatted_results) + self.db_view.items_per_page - 1
+                len(results) + self.db_view.items_per_page - 1
             ) // self.db_view.items_per_page
             self.db_view.search_mode = True
             self.db_view.search_keyword = keyword
 
             await self.db_view.update_view()
             await interaction.followup.send(
-                f"✅ 找到 {len(formatted_results)} 条元数据包含 `{keyword}` 的帖子。",
+                f"✅ 找到 {len(results)} 条包含 `{keyword}` 的帖子。",
                 ephemeral=True,
             )
 

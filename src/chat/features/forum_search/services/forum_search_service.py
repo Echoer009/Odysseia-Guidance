@@ -9,9 +9,6 @@ from zoneinfo import ZoneInfo
 from src.chat.features.forum_search.services.forum_vector_db_service import (
     forum_vector_db_service,
 )
-from src.chat.features.world_book.services.incremental_rag_service import (
-    create_text_chunks,
-)
 from src.chat.services.regex_service import regex_service
 from src.chat.config import chat_config as config
 
@@ -23,6 +20,7 @@ BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 class ForumSearchService:
     """
     核心服务，负责处理论坛帖子的索引和搜索。
+    使用 ParadeDB (PostgreSQL + pgvector) 进行向量搜索和 BM25 全文搜索。
     """
 
     def __init__(self):
@@ -49,7 +47,8 @@ class ForumSearchService:
 
     async def process_thread(self, thread: discord.Thread):
         """
-        处理单个论坛帖子，将其内容向量化并存入数据库。
+        处理单个论坛帖子，将其整帖内容向量化并存入 ParadeDB。
+        注意：ParadeDB 使用单表结构，不进行文本分块。
         """
         if not self.is_ready():
             log.warning("论坛搜索服务尚未准备就绪，无法处理帖子。")
@@ -68,7 +67,7 @@ class ForumSearchService:
             title = thread.name.replace("\n", " ").replace("\r", " ")
             content = first_message.content
 
-            # 2. 获取作者信息 (更稳健的方式)
+            # 3. 获取作者信息 (更稳健的方式)
             author_id = thread.owner_id
             author_name = "未知作者"
             if author_id:
@@ -94,64 +93,60 @@ class ForumSearchService:
                     # 使用 display_name，因为它能更好地反映用户在服务器中的昵称
                     author_name = author.display_name
 
-            # 提取论坛频道的名称作为分类
+            # 4. 提取论坛频道的名称作为分类
             raw_category_name = thread.parent.name if thread.parent else "未知分类"
             category_name = regex_service.clean_channel_name(raw_category_name)
-            document_text = content
 
-            # 3. 文本分块
-            chunks = create_text_chunks(document_text, max_chars=1000)
-            if not chunks:
-                log.warning(f"帖子 {thread.id} 的内容无法分块。")
+            # 5. 构建用于向量化的文本（标题 + 内容）
+            # ParadeDB 使用整帖向量化，不进行分块
+            document_text = f"{title}\n\n{content}"
+
+            # 6. 为整帖生成嵌入向量
+            ollama_embedding_service = self._get_ollama_embedding_service()
+            embedding = await ollama_embedding_service.generate_embedding(
+                text=document_text, title=title, task_type="retrieval_document"
+            )
+            if not embedding:
+                log.warning(f"无法为帖子 {thread.id} 生成嵌入向量。")
                 return
 
-            # 4. 为每个块生成嵌入并准备数据
-            ids_to_add = []
-            documents_to_add = []
-            embeddings_to_add = []
-            metadatas_to_add = []
+            # 7. 构建源元数据
+            source_metadata = {
+                "thread_id": thread.id,
+                "thread_name": title,
+                "author_id": author_id or 0,
+                "author_name": author_name,
+                "category_name": category_name,
+                "channel_id": thread.parent_id,
+                "guild_id": thread.guild.id,
+            }
 
-            beijing_created_at = (
-                thread.created_at.astimezone(BEIJING_TZ)
-                if thread.created_at
-                else datetime.now(BEIJING_TZ)
+            # 8. 写入 ParadeDB
+            # Discord 的 created_at 是带时区的，需要转换为不带时区的 datetime
+            created_at = (
+                thread.created_at if thread.created_at else datetime.now(BEIJING_TZ)
+            )
+            if created_at.tzinfo is not None:
+                created_at = created_at.replace(tzinfo=None)
+
+            success = await self.vector_db_service.add_document(
+                thread_id=thread.id,
+                thread_name=title,
+                content=content,
+                author_id=author_id or 0,
+                author_name=author_name,
+                category_name=category_name,
+                channel_id=thread.parent_id,
+                guild_id=thread.guild.id,
+                created_at=created_at,
+                embedding=embedding,
+                source_metadata=source_metadata,
             )
 
-            for i, chunk in enumerate(chunks):
-                chunk_id = f"{thread.id}:{i}"
-                ollama_embedding_service = self._get_ollama_embedding_service()
-                embedding = await ollama_embedding_service.generate_embedding(
-                    text=chunk, title=title, task_type="retrieval_document"
-                )
-                if embedding:
-                    ids_to_add.append(chunk_id)
-                    documents_to_add.append(chunk)
-                    embeddings_to_add.append(embedding)
-                    metadatas_to_add.append(
-                        {
-                            "thread_id": thread.id,
-                            "thread_name": title,
-                            "author_name": author_name,
-                            "author_id": author_id or 0,
-                            "category_name": category_name,
-                            "channel_id": thread.parent_id,
-                            "guild_id": thread.guild.id,
-                            "created_at": beijing_created_at.isoformat(),
-                            "created_timestamp": beijing_created_at.timestamp(),
-                        }
-                    )
-
-            # 5. 批量写入数据库
-            if ids_to_add:
-                self.vector_db_service.add_documents(
-                    ids=ids_to_add,
-                    documents=documents_to_add,
-                    embeddings=embeddings_to_add,
-                    metadatas=metadatas_to_add,
-                )
-                log.info(
-                    f"成功将帖子 {thread.id} 的 {len(ids_to_add)} 个块添加到向量数据库。"
-                )
+            if success:
+                log.info(f"成功将帖子 {thread.id} 添加到 ParadeDB。")
+            else:
+                log.warning(f"添加帖子 {thread.id} 到 ParadeDB 失败。")
 
         except Exception as e:
             log.error(f"处理帖子 {thread.id} 时发生错误: {e}", exc_info=True)
@@ -160,65 +155,71 @@ class ForumSearchService:
         self, ids: List[str], documents: List[str], metadatas: List[Dict[str, Any]]
     ):
         """
-        从备份数据批量添加文档，包含重新分块和向量化。
+        从备份数据批量添加文档，包含向量化。
         这是为 --restore-from 功能设计的核心方法。
+        注意：ParadeDB 使用单表结构，不进行文本分块。
         """
         if not self.is_ready():
             log.warning("论坛搜索服务尚未准备就绪，无法添加文档。")
             return
 
-        all_ids_to_add = []
-        all_documents_to_add = []
-        all_embeddings_to_add = []
-        all_metadatas_to_add = []
-
         ollama_embedding_service = self._get_ollama_embedding_service()
 
         for doc_id, document, metadata in zip(ids, documents, metadatas):
             try:
-                # 1. 文本分块 (与 process_thread 逻辑保持一致)
-                chunks = create_text_chunks(document, max_chars=1000)
-                if not chunks:
-                    log.warning(f"文档 {doc_id} 的内容无法分块，已跳过。")
+                # 1. 提取元数据
+                title = metadata.get("thread_name", "")
+                author_id = metadata.get("author_id", 0)
+                author_name = metadata.get("author_name", "未知作者")
+                category_name = metadata.get("category_name", "未知分类")
+                channel_id = metadata.get("channel_id", 0)
+                guild_id = metadata.get("guild_id", 0)
+
+                # 2. 解析创建时间
+                created_at_str = metadata.get("created_at")
+                if created_at_str:
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str)
+                    except Exception:
+                        created_at = datetime.now(BEIJING_TZ)
+                else:
+                    created_at = datetime.now(BEIJING_TZ)
+
+                # 3. 构建用于向量化的文本（标题 + 内容）
+                document_text = f"{title}\n\n{document}"
+
+                # 4. 生成嵌入向量
+                embedding = await ollama_embedding_service.generate_embedding(
+                    text=document_text, title=title, task_type="retrieval_document"
+                )
+                if not embedding:
+                    log.warning(f"无法为文档 {doc_id} 生成嵌入向量。")
                     continue
 
-                title = metadata.get("thread_name", "")
+                # 5. 写入 ParadeDB
+                success = await self.vector_db_service.add_document(
+                    thread_id=int(doc_id),
+                    thread_name=title,
+                    content=document,
+                    author_id=author_id,
+                    author_name=author_name,
+                    category_name=category_name,
+                    channel_id=channel_id,
+                    guild_id=guild_id,
+                    created_at=created_at,
+                    embedding=embedding,
+                    source_metadata=metadata,
+                )
 
-                # 2. 为每个块生成嵌入
-                for i, chunk in enumerate(chunks):
-                    chunk_id = f"{doc_id}:{i}"
-                    embedding = await ollama_embedding_service.generate_embedding(
-                        text=chunk, title=title, task_type="retrieval_document"
-                    )
-                    if embedding:
-                        all_ids_to_add.append(chunk_id)
-                        all_documents_to_add.append(chunk)
-                        all_embeddings_to_add.append(embedding)
-                        # 清理元数据：移除 ChromaDB 的保留键，防止崩溃
-                        safe_metadata = metadata.copy() if metadata else {}
-                        if "chroma:document" in safe_metadata:
-                            del safe_metadata["chroma:document"]
-
-                        # 确保清理后的元数据不为空
-                        if not safe_metadata:
-                            safe_metadata["recovered_doc_id"] = str(doc_id)
-
-                        all_metadatas_to_add.append(safe_metadata)
+                if success:
+                    log.info(f"成功添加文档 {doc_id} 到 ParadeDB。")
+                else:
+                    log.warning(f"添加文档 {doc_id} 到 ParadeDB 失败。")
 
             except Exception as e:
-                log.error(f"为文档 {doc_id} 生成嵌入时发生错误: {e}", exc_info=True)
-
-        # 3. 最终批量写入数据库
-        if all_ids_to_add:
-            self.vector_db_service.add_documents(
-                ids=all_ids_to_add,
-                documents=all_documents_to_add,
-                embeddings=all_embeddings_to_add,
-                metadatas=all_metadatas_to_add,
-            )
-            log.info(
-                f"成功将 {len(ids)} 个原始文档（共 {len(all_ids_to_add)} 个块）添加到向量数据库。"
-            )
+                log.error(
+                    f"为文档 {doc_id} 添加到 ParadeDB 时发生错误: {e}", exc_info=True
+                )
 
     async def get_oldest_indexed_thread_timestamp(self, channel_id: int) -> str | None:
         """
@@ -230,135 +231,88 @@ class ForumSearchService:
         Returns:
             str | None: 最旧帖子的ISO 8601格式时间戳字符串，如果该频道没有任何帖子被索引，则返回None。
         """
-        try:
-            log.info(f"正在查询频道 {channel_id} 中已索引的最旧帖子...")
-            # 使用 get 方法获取所有匹配频道的文档的元数据
-            results = self.vector_db_service.get(
-                where={"channel_id": channel_id}, include=["metadatas"]
-            )
-
-            metadatas = results.get("metadatas")
-            if not metadatas:
-                log.info(f"在频道 {channel_id} 中未找到任何已索引的帖子。")
-                return None
-
-            # 从元数据中提取所有的时间戳
-            timestamps = [
-                meta["created_at"]
-                for meta in metadatas
-                if "created_at" in meta
-                and isinstance(meta["created_at"], (str, int, float))
-            ]
-
-            if not timestamps:
-                log.warning(f"频道 {channel_id} 的已索引帖子中缺少 created_at 元数据。")
-                return None
-
-            # 找到并返回最早的时间戳
-            oldest_timestamp = min(timestamps)
-            # 确保返回字符串类型
-            if not isinstance(oldest_timestamp, str):
-                oldest_timestamp = str(oldest_timestamp)
-            log.info(
-                f"频道 {channel_id} 中最旧的已索引帖子的时间戳是: {oldest_timestamp}"
-            )
-            return oldest_timestamp
-
-        except Exception as e:
-            log.error(
-                f"查询频道 {channel_id} 最旧帖子时间戳时发生错误: {e}", exc_info=True
-            )
-            return None
+        return await self.vector_db_service.get_oldest_indexed_thread_timestamp(
+            channel_id
+        )
 
     async def search(
         self,
         query: str | None = None,
         n_results: int = 5,
         filters: Dict[str, Any] | None = None,
+        use_hybrid: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        执行高级语义搜索或按元数据浏览。
-        - 如果提供了有效的 `query`，则执行语义搜索。
+        执行高级搜索或按元数据浏览。
+        - 如果 `use_hybrid=True` 且提供了有效的 `query`，则执行混合搜索（向量 + BM25）。
+        - 如果 `use_hybrid=False` 且提供了有效的 `query`，则执行 BM25 全文搜索。
         - 如果 `query` 为 None 或空字符串，则按 `filters` 浏览，并按时间倒序返回最新结果。
 
         Args:
             query (str, optional): 搜索查询。
-            n_results (int): 返回结果的数量。
+            n_results (int): 返回结果的数量（仅用于 BM25 搜索和浏览模式，混合搜索使用配置中的 HYBRID_SEARCH_FINAL_K）。
             filters (Dict[str, Any], optional): 一个包含元数据过滤条件的字典。
                 - `category_name` (str): 按指定的论坛频道名称进行过滤。
                 - `author_id` (int): 按作者的Discord ID进行过滤。
                 - `author_name` (str): 按作者的显示名称进行过滤。
                 - `start_date` (str): 筛选发布日期在此日期之后的帖子 (格式: YYYY-MM-DD)。
                 - `end_date` (str): 筛选发布日期在此日期之前的帖子 (格式: YYYY-MM-DD)。
+            use_hybrid (bool): 是否使用混合搜索（向量 + BM25）。
         Returns:
             List[Dict[str, Any]]: 一个包含搜索结果字典的列表。
         """
         try:
-            # 1. 构建 ChromaDB 的元数据过滤器 (where 子句)
+            # 1. 构建过滤条件
             where_filter = {}
             if filters:
-                conditions = []
                 for key, value in filters.items():
                     if value is None:
                         continue
 
-                    if key == "start_date":
-                        start_dt_naive = datetime.strptime(value, "%Y-%m-%d")
-                        start_dt_aware = start_dt_naive.replace(tzinfo=BEIJING_TZ)
-                        start_timestamp = start_dt_aware.timestamp()
-                        conditions.append(
-                            {"created_timestamp": {"$gte": start_timestamp}}
-                        )
-                    elif key == "end_date":
-                        end_dt_naive = datetime.strptime(value, "%Y-%m-%d")
-                        end_dt_aware = datetime.combine(
-                            end_dt_naive, datetime.time.max
-                        ).replace(tzinfo=BEIJING_TZ)
-                        end_timestamp = end_dt_aware.timestamp()
-                        conditions.append(
-                            {"created_timestamp": {"$lte": end_timestamp}}
-                        )
-                    else:
-                        # 如果值是列表，使用 '$in' 进行 "或" 匹配
-                        if isinstance(value, list):
-                            conditions.append({key: {"$in": value}})
-                        # 否则，使用 '$eq' 进行精确匹配
-                        else:
-                            conditions.append({key: {"$eq": value}})
+                    if key in [
+                        "start_date",
+                        "end_date",
+                        "category_name",
+                        "author_id",
+                        "author_name",
+                        "channel_id",
+                    ]:
+                        where_filter[key] = value
 
-                if conditions:
-                    if len(conditions) > 1:
-                        where_filter = {"$and": conditions}
-                    else:
-                        where_filter = conditions[0]
+            log.info(f"论坛搜索数据库过滤器: {where_filter or '无'}")
 
-            log.info(f"论坛搜索数据库过滤器 (where): {where_filter or '无'}")
-
-            # 2. 根据是否有有效 query 决定执行语义搜索还是元数据浏览
+            # 2. 根据是否有有效 query 决定执行混合搜索、BM25 搜索还是元数据浏览
             if query and query.strip():
-                # --- 语义搜索逻辑 (需要 Gemini) ---
-                if not self.is_ready():
-                    log.info("RAG功能未启用：未配置API密钥，跳过语义搜索。")
-                    return []
-                log.info(f"执行语义搜索，查询: '{query}'")
-                ollama_embedding_service = self._get_ollama_embedding_service()
-                query_embedding = await ollama_embedding_service.generate_embedding(
-                    text=query, task_type="retrieval_query"
-                )
-                if not query_embedding:
-                    log.warning("无法为查询生成嵌入向量。")
-                    return []
+                if use_hybrid:
+                    # --- 混合搜索逻辑（向量 + BM25）---
+                    if not self.is_ready():
+                        log.info("RAG功能未启用：未配置API密钥，跳过混合搜索。")
+                        return []
+                    log.info(f"执行混合搜索，查询: '{query}'")
+                    ollama_embedding_service = self._get_ollama_embedding_service()
+                    query_embedding = await ollama_embedding_service.generate_embedding(
+                        text=query, task_type="retrieval_query"
+                    )
+                    if not query_embedding:
+                        log.warning("无法为查询生成嵌入向量。")
+                        return []
 
-                search_results = self.vector_db_service.search(
-                    query_embedding=query_embedding,
-                    n_results=n_results,
-                    where_filter=where_filter,
-                    max_distance=config.FORUM_RAG_MAX_DISTANCE,
-                )
-                # 移除正文内容以减少 Token 消耗和日志干扰
-                for result in search_results:
-                    result.pop("content", None)
-                return search_results
+                    search_results = await self.vector_db_service.search_hybrid(
+                        query_embedding=query_embedding,
+                        query_text=query,
+                        where_filter=where_filter,
+                        max_distance=config.FORUM_RAG_MAX_DISTANCE,
+                    )
+                    return search_results
+                else:
+                    # --- BM25 全文搜索逻辑 ---
+                    log.info(f"执行 BM25 全文搜索，查询: '{query}'")
+                    search_results = await self.vector_db_service.search_bm25(
+                        query=query,
+                        n_results=n_results,
+                        where_filter=where_filter,
+                    )
+                    return search_results
             else:
                 # --- 元数据浏览逻辑 ---
                 log.info("执行元数据浏览 (无查询关键词)。")
@@ -367,15 +321,12 @@ class ForumSearchService:
                     return []
 
                 # 直接从数据库获取所有匹配的文档
-                log.info(
-                    f"[FORUM_SEARCH] 准备调用 vector_db.get 进行元数据浏览。过滤器: {where_filter}。注意：此处未传递 limit。"
-                )
                 import time
 
                 start_time = time.monotonic()
 
-                results = self.vector_db_service.get(
-                    where=where_filter if where_filter else None,  # type: ignore[arg-type]
+                results = await self.vector_db_service.get(
+                    where=where_filter if where_filter else None,
                     include=["metadatas"],
                 )
 
@@ -390,11 +341,10 @@ class ForumSearchService:
                     return []
 
                 # 重构结果以便排序
-                # 确保 metadatas 不为 None（虽然 .get() 已提供默认值）
                 metadatas = metadatas or []
                 reconstructed_results = [
                     {"id": id, "metadata": meta, "distance": 0.0}
-                    for id, meta in zip(ids, metadatas)  # type: ignore[arg-type]
+                    for id, meta in zip(ids, metadatas)
                 ]
 
                 # 按创建时间倒序排序

@@ -164,6 +164,14 @@ WORLD_BOOK_RAG_CONFIG = {
     "MAX_PARENT_DOCS": 5,  # 世界之书返回更多父文档
 }
 
+# --- Forum 搜索 RAG 配置 ---
+FORUM_RAG_CONFIG = {
+    "TOP_K_VECTOR": 20,  # 向量搜索返回的初始结果数量
+    "TOP_K_FTS": 20,  # 全文搜索返回的初始结果数量
+    "HYBRID_SEARCH_FINAL_K": 5,  # 混合搜索后最终选择的帖子数量
+    "RRF_K": 60,  # RRF 算法中的排名常数
+}
+
 # --- 模型生成配置 ---
 # 为不同的模型别名定义独立的生成参数。
 # Key 是我们在代码中使用的模型别名 (例如 "gemini-3-flash-custom")。
@@ -374,14 +382,6 @@ PROMPT_CONFIG = {
 }
 
 
-# --- Vector DB (ChromaDB) ---
-VECTOR_DB_PATH = "data/chroma_db"
-VECTOR_DB_COLLECTION_NAME = "world_book"
-
-# --- 论坛帖子语义搜索 Vector DB ---
-FORUM_VECTOR_DB_PATH = "data/forum_chroma_db"
-FORUM_VECTOR_DB_COLLECTION_NAME = "forum_threads"
-
 # --- 论坛帖子轮询配置 ---
 # 在这里添加需要轮询的论坛频道ID
 FORUM_SEARCH_CHANNEL_IDS = _parse_ids("FORUM_SEARCH_CHANNEL_IDS")
@@ -392,6 +392,10 @@ FORUM_POLL_THREAD_LIMIT = 100
 # 轮询任务的并发数
 FORUM_POLL_CONCURRENCY = 20
 
+# --- 论坛帖子 ChromeDB 迁移配置 ---
+# 用于数据迁移脚本，迁移完成后可删除
+FORUM_VECTOR_DB_PATH = "data/forum_chroma_db"
+FORUM_VECTOR_DB_COLLECTION_NAME = "forum_threads"
 
 # --- 世界之书向量化任务配置 ---
 WORLD_BOOK_CONFIG = {

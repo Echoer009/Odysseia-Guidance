@@ -173,7 +173,6 @@ def setup_logging():
     #    将所有 google.*, httpx, urllib3 等库的日志级别设为 WARNING，
     #    这样可以屏蔽掉它们所有 INFO 和 DEBUG 级别的冗余日志。
     logging.getLogger("google_genai").setLevel(logging.WARNING)
-    logging.getLogger("chromadb").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
@@ -186,7 +185,7 @@ class GuidanceBot(commands.Bot):
         # 设置机器人需要监听的事件
         intents = discord.Intents.default()
         intents.members = True  # 需要监听成员加入、角色变化
-        intents.message_content = True  # 根据 discord.py v2.0+ 的要求
+        intents.messages = True  # 需要监听消息内容
         intents.reactions = True  # 需要监听反应事件
 
         # 解析 GUILD_ID 环境变量，支持用逗号分隔的多个 ID
