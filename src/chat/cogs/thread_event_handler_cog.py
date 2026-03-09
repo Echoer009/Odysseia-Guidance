@@ -4,11 +4,19 @@ import logging
 import discord
 from discord.ext import commands
 import asyncio
+from typing import TYPE_CHECKING
 
 from src.chat.config import chat_config
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
+
+if TYPE_CHECKING:
+    from src.chat.features.forum_search.cogs.forum_sync_cog import ForumSyncCog
+    from src.chat.features.odysseia_coin.cogs.coin_cog import CoinCog
+    from src.chat.features.thread_commentor.cogs.thread_commentor_cog import (
+        ThreadCommentorCog,
+    )
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +43,15 @@ class ThreadEventHandlerCog(commands.Cog):
         await asyncio.sleep(delay)
         forum_sync_cog = self.bot.get_cog("ForumSyncCog")
         if forum_sync_cog:
-            await forum_sync_cog.handle_new_thread(thread)
+            # 类型断言：我们知道这个Cog有handle_new_thread方法
+            assert isinstance(forum_sync_cog, commands.Cog)
+            # 使用getattr来避免类型检查错误
+            if hasattr(forum_sync_cog, "handle_new_thread"):
+                await getattr(forum_sync_cog, "handle_new_thread")(thread)
+            else:
+                log.warning(
+                    "[ForumSync Dispatch] ForumSyncCog 没有handle_new_thread方法。"
+                )
         else:
             log.warning("[ForumSync Dispatch] 找不到 ForumSyncCog 实例，任务取消。")
 
@@ -53,7 +69,17 @@ class ThreadEventHandlerCog(commands.Cog):
             first_message = await anext(thread.history(limit=1, oldest_first=True))
             coin_cog = self.bot.get_cog("CoinCog")
             if coin_cog:
-                await coin_cog.handle_new_thread_reward(thread, first_message)
+                # 类型断言：我们知道这个Cog有handle_new_thread_reward方法
+                assert isinstance(coin_cog, commands.Cog)
+                # 使用getattr来避免类型检查错误
+                if hasattr(coin_cog, "handle_new_thread_reward"):
+                    await getattr(coin_cog, "handle_new_thread_reward")(
+                        thread, first_message
+                    )
+                else:
+                    log.warning(
+                        "[CoinCog Dispatch] CoinCog 没有handle_new_thread_reward方法。"
+                    )
             else:
                 log.warning("[CoinCog Dispatch] 找不到 CoinCog 实例，任务取消。")
         except (discord.NotFound, StopAsyncIteration):
@@ -81,8 +107,17 @@ class ThreadEventHandlerCog(commands.Cog):
             log.info(f"[Commentor Dispatch] 帖子 {thread.id} 符合暖贴条件，开始处理...")
             thread_commentor_cog = self.bot.get_cog("ThreadCommentorCog")
             if thread_commentor_cog:
-                # 该Cog有自己的内部延迟逻辑
-                await thread_commentor_cog.handle_new_thread_comment(thread)
+                # 类型断言：我们知道这个Cog有handle_new_thread_comment方法
+                assert isinstance(thread_commentor_cog, commands.Cog)
+                # 使用getattr来避免类型检查错误
+                if hasattr(thread_commentor_cog, "handle_new_thread_comment"):
+                    await getattr(thread_commentor_cog, "handle_new_thread_comment")(
+                        thread
+                    )
+                else:
+                    log.warning(
+                        "[Commentor Dispatch] ThreadCommentorCog 没有handle_new_thread_comment方法。"
+                    )
             else:
                 log.warning(
                     "[Commentor Dispatch] 找不到 ThreadCommentorCog 实例，任务取消。"
@@ -105,7 +140,11 @@ class ThreadEventHandlerCog(commands.Cog):
         # --- 任务分发逻辑 ---
         # 为每个潜在的目标模块启动一个独立的、非阻塞的异步任务。
         # 每个任务自己负责检查是否需要执行。
-        asyncio.create_task(self._dispatch_to_forum_sync(thread))
+
+        # TEMPORARILY DISABLED: ChromaDB is crashing, disabling forum sync to prevent bot crashes
+        # asyncio.create_task(self._dispatch_to_forum_sync(thread))
+        log.warning("[Central Dispatcher] ForumSync 已临时禁用，跳过RAG索引任务。")
+
         asyncio.create_task(self._dispatch_to_coin_cog(thread))
         asyncio.create_task(self._dispatch_to_thread_commentor(thread))
 

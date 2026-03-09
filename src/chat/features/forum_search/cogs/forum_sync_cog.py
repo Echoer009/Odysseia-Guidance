@@ -78,6 +78,9 @@ class ForumSyncCog(commands.Cog):
         self, thread: discord.Thread, semaphore: asyncio.Semaphore
     ):
         """并发处理单个帖子的辅助函数"""
+        # TEMPORARILY DISABLED: ChromaDB is crashing, disabling forum sync to prevent bot crashes
+        return
+
         async with semaphore:
             try:
                 # 使用 aiosqlite 连接池来处理并发写入
@@ -110,6 +113,10 @@ class ForumSyncCog(commands.Cog):
         """
         历史回溯任务：每天运行一次，从每个频道已索引的最旧帖子开始，向更早的帖子回溯处理一批。
         """
+        # TEMPORARILY DISABLED: ChromaDB is crashing, disabling forum sync to prevent bot crashes
+        log.warning("[ForumSyncCog] 历史回溯任务已临时禁用，跳过执行。")
+        return
+
         log.info("开始每日论坛历史回溯任务...")
         if not forum_search_service.is_ready():
             log.warning("论坛搜索服务未就绪，跳过此次回溯。")
@@ -228,6 +235,12 @@ class ForumSyncCog(commands.Cog):
         """
         由中央事件处理器调用的公共方法，用于处理新的帖子。
         """
+        # TEMPORARILY DISABLED: ChromaDB is crashing, disabling forum sync to prevent bot crashes
+        log.warning(
+            f"[ForumSyncCog] ForumSync已临时禁用，跳过处理帖子: {thread.name} ({thread.id})"
+        )
+        return
+
         try:
             log.info(
                 f"[ForumSyncCog] 接收到新帖子进行处理: {thread.name} ({thread.id})"
