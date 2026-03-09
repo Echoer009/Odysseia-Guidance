@@ -153,6 +153,8 @@ class ForumMigrationService:
 
             # 使用进度条
             with tqdm(total=total_records, desc="提取数据", unit="条") as pbar:
+                # 重新执行查询，因为 fetchall 已经消耗了结果
+                cursor.execute(query)
                 while True:
                     row = cursor.fetchone()
                     if not row:
