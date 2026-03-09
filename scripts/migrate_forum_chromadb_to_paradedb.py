@@ -115,6 +115,11 @@ class ForumMigrationService:
 
             cursor.execute(query)
 
+            # 获取总记录数
+            cursor.execute("SELECT COUNT(*) FROM embeddings")
+            total_records = cursor.fetchone()[0]
+            log.info(f"总记录数: {total_records}")
+
             # 准备副游标查询元数据
             meta_cursor = conn.cursor()
 
@@ -124,82 +129,87 @@ class ForumMigrationService:
 
             log.info("开始提取数据...")
 
-            while True:
-                row = cursor.fetchone()
-                if not row:
-                    break
+            # 使用进度条
+            with tqdm(total=total_records, desc="提取数据", unit="条") as pbar:
+                while True:
+                    row = cursor.fetchone()
+                    if not row:
+                        break
 
-                thread_id = row["thread_id"]
-                content = row["content"]
-                internal_id = row["internal_id"]
+                    thread_id = row["thread_id"]
+                    content = row["content"]
+                    internal_id = row["internal_id"]
 
-                # 转换 thread_id 为整数
-                # ChromeDB 的 embedding_id 格式是 "thread_id:0"，需要提取冒号前的部分
-                try:
-                    if isinstance(thread_id, str) and ":" in thread_id:
-                        thread_id = thread_id.split(":")[0]
-                    thread_id = int(thread_id)
-                except (ValueError, TypeError):
-                    log.warning(f"无效的 thread_id: {row['thread_id']}，跳过")
-                    skipped += 1
-                    continue
+                    # 转换 thread_id 为整数
+                    # ChromeDB 的 embedding_id 格式是 "thread_id:0"，需要提取冒号前的部分
+                    try:
+                        if isinstance(thread_id, str) and ":" in thread_id:
+                            thread_id = thread_id.split(":")[0]
+                        thread_id = int(thread_id)
+                    except (ValueError, TypeError):
+                        log.warning(f"无效的 thread_id: {row['thread_id']}，跳过")
+                        skipped += 1
+                        pbar.update(1)
+                        continue
 
-                # 转换内容为字符串
-                if not isinstance(content, str):
-                    content = str(content) if content is not None else ""
+                    # 转换内容为字符串
+                    if not isinstance(content, str):
+                        content = str(content) if content is not None else ""
 
-                if not content.strip():
-                    log.warning(f"帖子 {thread_id} 内容为空，跳过")
-                    skipped += 1
-                    continue
+                    if not content.strip():
+                        log.warning(f"帖子 {thread_id} 内容为空，跳过")
+                        skipped += 1
+                        pbar.update(1)
+                        continue
 
-                # 提取元数据
-                metadata = {}
-                try:
-                    meta_cursor.execute(
-                        "SELECT key, string_value, int_value, float_value, bool_value FROM embedding_metadata WHERE id = ?",
-                        (internal_id,),
-                    )
-                    meta_rows = meta_cursor.fetchall()
+                    # 提取元数据
+                    metadata = {}
+                    try:
+                        meta_cursor.execute(
+                            "SELECT key, string_value, int_value, float_value, bool_value FROM embedding_metadata WHERE id = ?",
+                            (internal_id,),
+                        )
+                        meta_rows = meta_cursor.fetchall()
 
-                    for m_row in meta_rows:
-                        key = m_row[0]
-                        # 依次判断哪一列有值
-                        if m_row[1] is not None:
-                            val = m_row[1]  # string
-                        elif m_row[2] is not None:
-                            val = m_row[2]  # int
-                        elif m_row[3] is not None:
-                            val = m_row[3]  # float
-                        elif m_row[4] is not None:
-                            val = bool(m_row[4])  # bool
-                        else:
-                            val = None
+                        for m_row in meta_rows:
+                            key = m_row[0]
+                            # 依次判断哪一列有值
+                            if m_row[1] is not None:
+                                val = m_row[1]  # string
+                            elif m_row[2] is not None:
+                                val = m_row[2]  # int
+                            elif m_row[3] is not None:
+                                val = m_row[3]  # float
+                            elif m_row[4] is not None:
+                                val = bool(m_row[4])  # bool
+                            else:
+                                val = None
 
-                        if val is not None:
-                            metadata[key] = val
+                            if val is not None:
+                                metadata[key] = val
 
-                except Exception as e:
-                    log.warning(f"提取元数据失败 (thread_id: {thread_id}): {e}")
+                    except Exception as e:
+                        log.warning(f"提取元数据失败 (thread_id: {thread_id}): {e}")
 
-                # 构建帖子数据
-                thread_data = {
-                    "thread_id": thread_id,
-                    "thread_name": metadata.get("thread_name", "无标题"),
-                    "content": content,
-                    "author_id": metadata.get("author_id", 0),
-                    "author_name": metadata.get("author_name", "未知作者"),
-                    "category_name": metadata.get("category_name", "未知分类"),
-                    "channel_id": metadata.get("channel_id", 0),
-                    "guild_id": metadata.get("guild_id", 0),
-                    "created_at": metadata.get("created_at", None),
-                }
+                    # 构建帖子数据
+                    thread_data = {
+                        "thread_id": thread_id,
+                        "thread_name": metadata.get("thread_name", "无标题"),
+                        "content": content,
+                        "author_id": metadata.get("author_id", 0),
+                        "author_name": metadata.get("author_name", "未知作者"),
+                        "category_name": metadata.get("category_name", "未知分类"),
+                        "channel_id": metadata.get("channel_id", 0),
+                        "guild_id": metadata.get("guild_id", 0),
+                        "created_at": metadata.get("created_at", None),
+                    }
 
-                threads.append(thread_data)
-                count += 1
+                    threads.append(thread_data)
+                    count += 1
 
-                if count % 500 == 0:
-                    log.info(f"已提取 {count} 条记录...")
+                    # 更新进度条
+                    pbar.update(1)
+                    pbar.set_postfix({"成功": count, "跳过": skipped})
 
             conn.close()
 
@@ -262,52 +272,60 @@ class ForumMigrationService:
         imported_count = 0
         failed_count = 0
 
-        for i in range(0, len(threads), BATCH_SIZE):
-            batch = threads[i : i + BATCH_SIZE]
-            batch_num = i // BATCH_SIZE + 1
-            total_batches = (len(threads) + BATCH_SIZE - 1) // BATCH_SIZE
+        # 使用进度条
+        with tqdm(total=total_count, desc="导入数据", unit="条") as pbar:
+            for i in range(0, len(threads), BATCH_SIZE):
+                batch = threads[i : i + BATCH_SIZE]
+                batch_num = i // BATCH_SIZE + 1
+                total_batches = (len(threads) + BATCH_SIZE - 1) // BATCH_SIZE
 
-            log.info(
-                f"处理批次 {batch_num}/{total_batches} (线程 {i + 1}-{i + len(batch)})"
-            )
+                # 并发向量化
+                embedding_tasks = []
+                for thread in batch:
+                    task = self._generate_embedding(thread)
+                    embedding_tasks.append(task)
 
-            # 并发向量化
-            embedding_tasks = []
-            for thread in batch:
-                task = self._generate_embedding(thread)
-                embedding_tasks.append(task)
+                embeddings = await asyncio.gather(
+                    *embedding_tasks, return_exceptions=True
+                )
 
-            embeddings = await asyncio.gather(*embedding_tasks, return_exceptions=True)
+                # 批量写入数据库
+                for idx, thread in enumerate(batch):
+                    result = embeddings[idx]
 
-            # 批量写入数据库
-            for idx, thread in enumerate(batch):
-                result = embeddings[idx]
+                    if isinstance(result, Exception):
+                        log.error(
+                            f"生成 embedding 失败 (thread_id: {thread['thread_id']}): {result}"
+                        )
+                        failed_count += 1
+                        pbar.update(1)
+                        continue
 
-                if isinstance(result, Exception):
-                    log.error(
-                        f"生成 embedding 失败 (thread_id: {thread['thread_id']}): {result}"
-                    )
-                    failed_count += 1
-                    continue
+                    if not result:
+                        log.warning(
+                            f"Embedding 为空 (thread_id: {thread['thread_id']})"
+                        )
+                        failed_count += 1
+                        pbar.update(1)
+                        continue
 
-                if not result:
-                    log.warning(f"Embedding 为空 (thread_id: {thread['thread_id']})")
-                    failed_count += 1
-                    continue
+                    embedding = result
 
-                embedding = result
+                    # 写入数据库
+                    try:
+                        await self._insert_thread(thread, embedding)  # type: ignore
+                        imported_count += 1
 
-                # 写入数据库
-                try:
-                    await self._insert_thread(thread, embedding)  # type: ignore
-                    imported_count += 1
+                        # 更新进度条
+                        pbar.update(1)
+                        pbar.set_postfix({"成功": imported_count, "失败": failed_count})
 
-                    if imported_count % 100 == 0:
-                        log.info(f"已导入 {imported_count} 条记录")
-
-                except Exception as e:
-                    log.error(f"写入数据库失败 (thread_id: {thread['thread_id']}): {e}")
-                    failed_count += 1
+                    except Exception as e:
+                        log.error(
+                            f"写入数据库失败 (thread_id: {thread['thread_id']}): {e}"
+                        )
+                        failed_count += 1
+                        pbar.update(1)
 
         log.info("=" * 60)
         log.info(f"导入完成：成功 {imported_count} 条，失败 {failed_count} 条")
