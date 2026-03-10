@@ -293,6 +293,49 @@ class LowQualityPostCleaner:
             await session.commit()
             return True
 
+    async def find_empty_vector_posts(self) -> List[Dict[str, Any]]:
+        """查找有向量但内容为空的帖子（向量不应该存在）"""
+        limit = self.config["limit"]
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content
+                    FROM forum.forum_threads
+                    WHERE embedding IS NOT NULL
+                        AND (content IS NULL OR LENGTH(TRIM(content)) = 0)
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+            rows = result.fetchall()
+            self.last_results = [dict(row._mapping) for row in rows]
+            return self.last_results
+
+    async def clear_vector(self, thread_id: int) -> bool:
+        """清除指定帖子的向量（保留帖子记录但删除向量）"""
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text(
+                    "UPDATE forum.forum_threads SET embedding = NULL WHERE thread_id = :thread_id"
+                ),
+                {"thread_id": thread_id},
+            )
+            await session.commit()
+            return True
+
     async def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
         async with AsyncSessionLocal() as session:
@@ -503,12 +546,14 @@ def print_help():
 ║   /empty [长度]         - 查找内容为空的帖子 (默认 <5 字符)                     ║
 ║   /punctuation          - 查找内容只有标点符号的帖子                            ║
 ║   /mention              - 查找内容只有@提及的帖子 (如 <@1372139178535686225>)   ║
+║   /emptyvec             - 查找有向量但内容为空的帖子 (需清理向量)                ║
 ║   /exact <内容>         - 查找内容完全等于指定文本的帖子                         ║
 ║   /find <标题> [内容]    - 使用自定义模式查找帖子                               ║
 ║   /view <thread_id>     - 查看帖子完整内容                                     ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ 删除操作:                                                                     ║
 ║   /del <thread_id>      - 直接删除指定帖子                                     ║
+║   /clearvec <thread_id> - 清除指定帖子的向量 (保留帖子记录)                     ║
 ║   /add <thread_id|序号> - 添加帖子到待删除列表                                  ║
 ║   /addall               - 将上次查询结果全部添加到待删除列表                     ║
 ║   /pending              - 查看待删除列表                                        ║
@@ -632,6 +677,10 @@ async def main():
                 posts = await cleaner.find_mention_only_posts()
                 await cleaner.interactive_review(posts)
 
+            elif cmd == "/emptyvec":
+                posts = await cleaner.find_empty_vector_posts()
+                await cleaner.interactive_review(posts)
+
             elif cmd == "/exact":
                 if len(parts) < 2:
                     print("⚠️ 用法: /exact <内容>")
@@ -694,6 +743,28 @@ async def main():
                         print(f"✅ 已删除帖子: {thread_id}")
                     else:
                         print("❌ 已取消删除")
+                except ValueError:
+                    print(f"⚠️ 无效的 thread_id: {parts[1]}")
+
+            elif cmd == "/clearvec":
+                if len(parts) < 2:
+                    print("⚠️ 用法: /clearvec <thread_id>")
+                    continue
+                try:
+                    thread_id = int(parts[1])
+                    post = await cleaner.get_post_by_id(thread_id)
+                    if not post:
+                        print(f"❌ 未找到帖子: {thread_id}")
+                        continue
+
+                    print("\n⚠️ 即将清除以下帖子的向量 (保留帖子记录):")
+                    cleaner.print_post_list([post], show_content=True, show_index=False)
+                    confirm = input("确认清除向量? (输入 'yes' 确认): ").strip().lower()
+                    if confirm == "yes":
+                        await cleaner.clear_vector(thread_id)
+                        print(f"✅ 已清除帖子向量: {thread_id}")
+                    else:
+                        print("❌ 已取消操作")
                 except ValueError:
                     print(f"⚠️ 无效的 thread_id: {parts[1]}")
 

@@ -215,6 +215,7 @@ class ForumSearchDebugger:
                     fr.*,
                     fr.rrf_score
                 FROM fused_ranks fr
+                WHERE (fr.vector_distance IS NULL OR fr.vector_distance <= :max_distance)
                 ORDER BY fr.rrf_score DESC
                 LIMIT :final_k
                 """
@@ -227,6 +228,7 @@ class ForumSearchDebugger:
                 "top_k_fts": self.config["top_k_fts"],
                 "rrf_k": self.config["rrf_k"],
                 "final_k": self.config["final_k"],
+                "max_distance": self.config["max_distance"],
             }
 
             # 添加过滤条件
@@ -260,9 +262,7 @@ class ForumSearchDebugger:
                     sql_query = text(
                         sql_query.text.replace(
                             "ORDER BY fr.rrf_score DESC",
-                            "WHERE "
-                            + " AND ".join(conditions)
-                            + " ORDER BY fr.rrf_score DESC",
+                            " AND ".join(conditions) + " ORDER BY fr.rrf_score DESC",
                         )
                     )
 
@@ -398,10 +398,14 @@ class ForumSearchDebugger:
                     ft.embedding <=> CAST(:query_vector AS halfvec) as vector_distance
                 FROM forum.forum_threads ft
                 WHERE ft.embedding IS NOT NULL
+                    AND ft.embedding <=> CAST(:query_vector AS halfvec) <= :max_distance
                 """
             )
 
-            params: Dict[str, Any] = {"query_vector": str(query_embedding)}
+            params: Dict[str, Any] = {
+                "query_vector": str(query_embedding),
+                "max_distance": self.config["max_distance"],
+            }
             conditions = []
 
             if filters:
