@@ -44,6 +44,9 @@ class OllamaEmbeddingService:
             embedding 向量列表，失败时返回 None
         """
         try:
+            # 清理文本中的无效 Unicode surrogate 字符
+            text = self._clean_text(text)
+
             # bge-m3 支持指令微调，添加指令前缀
             instruction = ""
             if task_type == "retrieval_query":
@@ -78,6 +81,28 @@ class OllamaEmbeddingService:
         except Exception as e:
             log.error(f"生成 embedding 失败: {e}")
         return None
+
+    def _clean_text(self, text: str) -> str:
+        """
+        清理文本中的无效 Unicode 字符（如 surrogate 字符）
+
+        Args:
+            text: 原始文本
+
+        Returns:
+            清理后的文本
+        """
+        if not text:
+            return text
+        # 使用 errors='replace' 编码再解码来处理无效字符
+        # 或者使用 surrogatepass 策略来移除 surrogate 字符
+        try:
+            # 尝试编码为 UTF-8，如果失败则清理
+            text.encode("utf-8")
+            return text
+        except UnicodeEncodeError:
+            # 移除 surrogate 字符
+            return text.encode("utf-8", errors="ignore").decode("utf-8")
 
     async def generate_embeddings_batch(
         self, texts: List[str], task_type: str = "retrieval_document"
