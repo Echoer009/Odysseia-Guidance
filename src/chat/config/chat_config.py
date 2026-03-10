@@ -278,8 +278,8 @@ COIN_REWARD_GUILD_IDS = _parse_ids("COIN_REWARD_GUILD_IDS")
 
 # 新帖子创建后，延迟多久发放奖励（秒）
 COIN_REWARD_DELAY_SECONDS = 30
-# 新帖子创建后，延迟多久进行RAG索引（秒）
-FORUM_SYNC_DELAY_SECONDS = 30
+# 新帖子创建后，延迟多久进行RAG索引（秒）- 1小时让用户有时间编辑内容
+FORUM_SYNC_DELAY_SECONDS = 3600
 # --- 帖子评价功能 ---
 THREAD_COMMENTOR_CONFIG = {
     "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）

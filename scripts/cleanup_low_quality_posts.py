@@ -126,7 +126,7 @@ class LowQualityPostCleaner:
             result = await session.execute(
                 text(
                     """
-                    SELECT 
+                    SELECT
                         thread_id,
                         thread_name,
                         author_name,
@@ -137,9 +137,71 @@ class LowQualityPostCleaner:
                         LENGTH(content) as content_length,
                         content
                     FROM forum.forum_threads
-                    WHERE content IS NOT NULL 
+                    WHERE content IS NOT NULL
                         AND LENGTH(TRIM(content)) > 0
                         AND LENGTH(REGEXP_REPLACE(content, '[^\\w\\u4e00-\\u9fff]', '', 'g')) = 0
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+            rows = result.fetchall()
+            self.last_results = [dict(row._mapping) for row in rows]
+            return self.last_results
+
+    async def find_exact_content_posts(
+        self, exact_content: str
+    ) -> List[Dict[str, Any]]:
+        """查找内容完全等于指定文本的帖子"""
+        limit = self.config["limit"]
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content
+                    FROM forum.forum_threads
+                    WHERE content = :exact_content
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"exact_content": exact_content, "limit": limit},
+            )
+            rows = result.fetchall()
+            self.last_results = [dict(row._mapping) for row in rows]
+            return self.last_results
+
+    async def find_mention_only_posts(self) -> List[Dict[str, Any]]:
+        """查找内容只有 Discord mention (<@数字>) 的帖子"""
+        limit = self.config["limit"]
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content
+                    FROM forum.forum_threads
+                    WHERE content ~ '^<@[0-9]+>$'
                     ORDER BY created_at DESC
                     LIMIT :limit
                     """
@@ -440,6 +502,8 @@ def print_help():
 ║   /short [长度]         - 查找标题很短的帖子 (默认 ≤5 字符)                     ║
 ║   /empty [长度]         - 查找内容为空的帖子 (默认 <5 字符)                     ║
 ║   /punctuation          - 查找内容只有标点符号的帖子                            ║
+║   /mention              - 查找内容只有@提及的帖子 (如 <@1372139178535686225>)   ║
+║   /exact <内容>         - 查找内容完全等于指定文本的帖子                         ║
 ║   /find <标题> [内容]    - 使用自定义模式查找帖子                               ║
 ║   /view <thread_id>     - 查看帖子完整内容                                     ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -562,6 +626,20 @@ async def main():
 
             elif cmd == "/punctuation":
                 posts = await cleaner.find_punctuation_only_posts()
+                await cleaner.interactive_review(posts)
+
+            elif cmd == "/mention":
+                posts = await cleaner.find_mention_only_posts()
+                await cleaner.interactive_review(posts)
+
+            elif cmd == "/exact":
+                if len(parts) < 2:
+                    print("⚠️ 用法: /exact <内容>")
+                    print("   示例: /exact [")
+                    continue
+                # 获取完整的内容（可能包含空格）
+                exact_content = user_input[len("/exact ") :]
+                posts = await cleaner.find_exact_content_posts(exact_content)
                 await cleaner.interactive_review(posts)
 
             elif cmd == "/find":
