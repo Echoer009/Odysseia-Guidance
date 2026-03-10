@@ -288,13 +288,13 @@ class ForumSearchService:
                     if not self.is_ready():
                         log.info("RAG功能未启用：未配置API密钥，跳过混合搜索。")
                         return []
-                    log.info(f"执行混合搜索，查询: '{query}'")
+                    log.info(f"[FORUM_SEARCH] 执行混合搜索，查询: '{query}'")
                     ollama_embedding_service = self._get_ollama_embedding_service()
                     query_embedding = await ollama_embedding_service.generate_embedding(
                         text=query, task_type="retrieval_query"
                     )
                     if not query_embedding:
-                        log.warning("无法为查询生成嵌入向量。")
+                        log.warning("[FORUM_SEARCH] 无法为查询生成嵌入向量。")
                         return []
 
                     search_results = await self.vector_db_service.search_hybrid(
@@ -303,15 +303,45 @@ class ForumSearchService:
                         where_filter=where_filter,
                         max_distance=config.FORUM_RAG_MAX_DISTANCE,
                     )
+
+                    # 详细日志：打印混合搜索返回的结果
+                    log.info(
+                        f"[FORUM_SEARCH] 混合搜索返回 {len(search_results)} 条结果"
+                    )
+                    for i, result in enumerate(search_results):
+                        metadata = result.get("metadata", {})
+                        log.info(
+                            f"[FORUM_SEARCH] 结果 {i + 1}: "
+                            f"thread_id={metadata.get('thread_id')}, "
+                            f"thread_name='{metadata.get('thread_name')}', "
+                            f"category='{metadata.get('category_name')}', "
+                            f"author='{metadata.get('author_name')}', "
+                            f"rrf_score={result.get('distance', 'N/A')}"
+                        )
                     return search_results
                 else:
                     # --- BM25 全文搜索逻辑 ---
-                    log.info(f"执行 BM25 全文搜索，查询: '{query}'")
+                    log.info(f"[FORUM_SEARCH] 执行 BM25 全文搜索，查询: '{query}'")
                     search_results = await self.vector_db_service.search_bm25(
                         query=query,
                         n_results=n_results,
                         where_filter=where_filter,
                     )
+
+                    # 详细日志：打印 BM25 搜索返回的结果
+                    log.info(
+                        f"[FORUM_SEARCH] BM25 搜索返回 {len(search_results)} 条结果"
+                    )
+                    for i, result in enumerate(search_results):
+                        metadata = result.get("metadata", {})
+                        log.info(
+                            f"[FORUM_SEARCH] 结果 {i + 1}: "
+                            f"thread_id={metadata.get('thread_id')}, "
+                            f"thread_name='{metadata.get('thread_name')}', "
+                            f"category='{metadata.get('category_name')}', "
+                            f"author='{metadata.get('author_name')}', "
+                            f"score={result.get('distance', 'N/A')}"
+                        )
                     return search_results
             else:
                 # --- 元数据浏览逻辑 ---
