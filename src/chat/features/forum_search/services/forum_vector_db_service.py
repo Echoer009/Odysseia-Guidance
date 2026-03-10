@@ -421,6 +421,7 @@ class ForumVectorDBService:
                 # 构建结果列表
                 search_results = []
                 for row in rows:
+                    rrf_score = float(row.rrf_score) if row.rrf_score else 0.0
                     search_results.append(
                         {
                             "id": row.thread_id,
@@ -436,10 +437,13 @@ class ForumVectorDBService:
                                 if row.created_at
                                 else None,
                             },
-                            "distance": 0.0,  # 混合搜索不返回距离
+                            "distance": rrf_score,  # 使用 RRF 分数
                         }
                     )
 
+                log.info(
+                    f"[FORUM_SEARCH] search_hybrid 返回 {len(search_results)} 条结果，RRF分数范围: {[r['distance'] for r in search_results]}"
+                )
                 return search_results
 
         except Exception as e:
