@@ -66,6 +66,7 @@ class ForumSearchDebugger:
             "final_k": FORUM_RAG_CONFIG.get("HYBRID_SEARCH_FINAL_K", 5),
             "max_distance": FORUM_RAG_MAX_DISTANCE,
             "use_hybrid": True,
+            "exact_match_boost": FORUM_RAG_CONFIG.get("EXACT_MATCH_BOOST", 1000.0),
         }
         self.config = self.default_config.copy()
 
@@ -114,6 +115,7 @@ class ForumSearchDebugger:
         print(f"  - RRF 常数 K: {self.config['rrf_k']}")
         print(f"  - 最终返回数量: {self.config['final_k']}")
         print(f"  - 最大距离阈值: {self.config['max_distance']}")
+        print(f"  - 精确匹配加成: {self.config.get('exact_match_boost', 1000.0)}")
         print(
             f"  - 搜索模式: {'混合搜索' if self.config['use_hybrid'] else 'BM25 全文搜索'}"
         )
@@ -213,10 +215,21 @@ class ForumSearchDebugger:
                 )
                 SELECT
                     fr.*,
-                    fr.rrf_score
+                    fr.rrf_score,
+                    CASE 
+                        WHEN ft.content ILIKE '%' || :query_text || '%' 
+                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1 
+                        ELSE 0 
+                    END as exact_match,
+                    (fr.rrf_score + CASE 
+                        WHEN ft.content ILIKE '%' || :query_text || '%' 
+                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost 
+                        ELSE 0.0 
+                    END) as final_score
                 FROM fused_ranks fr
+                JOIN forum.forum_threads ft ON fr.id = ft.id
                 WHERE (fr.vector_distance IS NULL OR fr.vector_distance <= :max_distance)
-                ORDER BY fr.rrf_score DESC
+                ORDER BY final_score DESC
                 LIMIT :final_k
                 """
             )
@@ -229,6 +242,7 @@ class ForumSearchDebugger:
                 "rrf_k": self.config["rrf_k"],
                 "final_k": self.config["final_k"],
                 "max_distance": self.config["max_distance"],
+                "exact_match_boost": self.config.get("exact_match_boost", 1000.0),
             }
 
             # 添加过滤条件
@@ -495,12 +509,18 @@ class ForumSearchDebugger:
             # 打印分数
             if search_type == "hybrid":
                 rrf_score = result.get("rrf_score", 0)
+                final_score = result.get("final_score", rrf_score)
+                exact_match = result.get("exact_match", 0)
                 vector_distance = result.get("vector_distance")
                 vector_rank = result.get("vector_rank")
                 bm25_score = result.get("bm25_score")
                 bm25_rank = result.get("bm25_rank")
 
                 print("  📊 分数详情:")
+                # 精确匹配标志
+                if exact_match:
+                    print("     🎯 精确匹配: ✓ (已加成)")
+                print(f"     最终分数: {final_score:.6f}")
                 print(f"     RRF 综合分数: {rrf_score:.6f}")
                 if vector_distance is not None:
                     print(f"     向量距离: {vector_distance:.6f} (排名: {vector_rank})")

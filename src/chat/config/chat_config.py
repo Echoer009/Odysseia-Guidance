@@ -170,6 +170,7 @@ FORUM_RAG_CONFIG = {
     "TOP_K_FTS": 20,  # 全文搜索返回的初始结果数量
     "HYBRID_SEARCH_FINAL_K": 5,  # 混合搜索后最终选择的帖子数量
     "RRF_K": 60,  # RRF 算法中的排名常数
+    "EXACT_MATCH_BOOST": 1000.0,  # 精确匹配（content包含完整query）的额外加分数值
 }
 
 # --- 模型生成配置 ---

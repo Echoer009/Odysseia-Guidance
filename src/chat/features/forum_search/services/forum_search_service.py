@@ -310,13 +310,20 @@ class ForumSearchService:
                     )
                     for i, result in enumerate(search_results):
                         metadata = result.get("metadata", {})
+                        exact_match = result.get("exact_match", False)
+                        rrf_score = result.get(
+                            "rrf_score", result.get("distance", "N/A")
+                        )
+                        final_score = result.get("distance", "N/A")
                         log.info(
                             f"[FORUM_SEARCH] 结果 {i + 1}: "
                             f"thread_id={metadata.get('thread_id')}, "
                             f"thread_name='{metadata.get('thread_name')}', "
                             f"category='{metadata.get('category_name')}', "
                             f"author='{metadata.get('author_name')}', "
-                            f"rrf_score={result.get('distance', 'N/A')}"
+                            f"rrf_score={rrf_score}, "
+                            f"final_score={final_score}, "
+                            f"exact_match={'✓' if exact_match else '✗'}"
                         )
                     return search_results
                 else:

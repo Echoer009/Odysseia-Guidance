@@ -309,11 +309,12 @@ class ForumVectorDBService:
             top_k_fts = FORUM_RAG_CONFIG.get("TOP_K_FTS", 20)
             rrf_k = FORUM_RAG_CONFIG.get("RRF_K", 60)
             final_k = FORUM_RAG_CONFIG.get("HYBRID_SEARCH_FINAL_K", 5)
+            exact_match_boost = FORUM_RAG_CONFIG.get("EXACT_MATCH_BOOST", 1000.0)
 
             async with AsyncSessionLocal() as session:
                 # 构建混合搜索查询
                 # 使用 RRF (Reciprocal Rank Fusion) 合并向量搜索和 BM25 搜索的结果
-                # 与世界书和教程搜索使用相同的实现方式
+                # 新增：精确匹配提权 - 如果 content 包含完整 query，给予额外加成
                 sql_query = text(
                     """
                     WITH semantic_search AS (
@@ -350,7 +351,17 @@ class ForumVectorDBService:
                         ft.channel_id,
                         ft.guild_id,
                         ft.created_at,
-                        fr.rrf_score
+                        fr.rrf_score,
+                        CASE 
+                            WHEN ft.content ILIKE '%' || :query_text || '%' 
+                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1 
+                            ELSE 0 
+                        END as exact_match,
+                        (fr.rrf_score + CASE 
+                            WHEN ft.content ILIKE '%' || :query_text || '%' 
+                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost 
+                            ELSE 0.0 
+                        END) as final_score
                     FROM fused_ranks fr
                     JOIN forum.forum_threads ft ON fr.id = ft.id
                     """
@@ -363,6 +374,7 @@ class ForumVectorDBService:
                     "top_k_vector": top_k_vector,
                     "top_k_fts": top_k_fts,
                     "rrf_k": rrf_k,
+                    "exact_match_boost": exact_match_boost,
                 }
                 conditions = []
 
@@ -406,10 +418,11 @@ class ForumVectorDBService:
                     )
 
                 # 添加排序和限制
+                # 使用 final_score 排序（包含精确匹配加成）
                 sql_query = text(
                     sql_query.text
                     + """
-                    ORDER BY fr.rrf_score DESC
+                    ORDER BY final_score DESC
                     LIMIT :final_k
                     """
                 )
@@ -422,6 +435,8 @@ class ForumVectorDBService:
                 search_results = []
                 for row in rows:
                     rrf_score = float(row.rrf_score) if row.rrf_score else 0.0
+                    final_score = float(row.final_score) if row.final_score else 0.0
+                    exact_match = bool(row.exact_match) if row.exact_match else False
                     search_results.append(
                         {
                             "id": row.thread_id,
@@ -437,12 +452,16 @@ class ForumVectorDBService:
                                 if row.created_at
                                 else None,
                             },
-                            "distance": rrf_score,  # 使用 RRF 分数
+                            "distance": final_score,  # 使用最终分数（含精确匹配加成）
+                            "rrf_score": rrf_score,  # 保留原始 RRF 分数
+                            "exact_match": exact_match,  # 精确匹配标志
                         }
                     )
 
                 log.info(
-                    f"[FORUM_SEARCH] search_hybrid 返回 {len(search_results)} 条结果，RRF分数范围: {[r['distance'] for r in search_results]}"
+                    f"[FORUM_SEARCH] search_hybrid 返回 {len(search_results)} 条结果，"
+                    f"精确匹配: {sum(1 for r in search_results if r.get('exact_match'))} 条，"
+                    f"最终分数范围: {[r['distance'] for r in search_results]}"
                 )
                 return search_results
 
