@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import discord
 from discord.ui import View, Button
+from typing import cast
 
 from src import config as root_config
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
@@ -31,7 +32,9 @@ class CoinManagementView(View):
 
     async def on_timeout(self):
         for item in self.children:
-            item.disabled = True
+            if hasattr(item, "disabled"):
+                button = cast(discord.ui.Button, item)
+                button.disabled = True
         try:
             await self.message.edit(view=self)
         except discord.NotFound:
@@ -48,7 +51,9 @@ class CoinManagementView(View):
         self.clear_items()
 
         # 添加返回数据库浏览器主界面的按钮
-        from src.chat.features.admin_panel.ui.db_view_ui import DBView
+        from src.chat.features.admin_panel.ui.views.db_management_view import (
+            DBManagementView,
+        )
 
         back_button = Button(
             label="返回数据库浏览器", style=discord.ButtonStyle.grey, emoji="⬅️", row=4
@@ -56,7 +61,7 @@ class CoinManagementView(View):
 
         async def back_callback(interaction: discord.Interaction):
             await interaction.response.defer()
-            view = DBView(self.main_interaction.user.id)
+            view = DBManagementView(self.main_interaction.user.id)
             view.message = self.message
             await view.update_view()
 
@@ -128,7 +133,8 @@ class CoinManagementView(View):
                 inline=False,
             )
         if self.target_user_id and not self.target_user:
-            embed.description += f"\n\n⚠️ 未能在服务器内找到ID为 `{self.target_user_id}` 的用户，但仍可操作数据库。"
+            if embed.description:
+                embed.description += f"\n\n⚠️ 未能在服务器内找到ID为 `{self.target_user_id}` 的用户，但仍可操作数据库。"
 
         embed.set_footer(text="Odysseia Admin Panel")
         return embed
@@ -140,8 +146,9 @@ class CoinManagementView(View):
         self.target_user = None
 
         try:
-            member = await self.guild.fetch_member(user_id)
-            self.target_user = member
+            if self.guild:
+                member = await self.guild.fetch_member(user_id)
+                self.target_user = cast(discord.User, member)
         except discord.NotFound:
             try:
                 user = await self.main_interaction.client.fetch_user(user_id)
