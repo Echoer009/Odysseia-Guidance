@@ -178,7 +178,7 @@ async def search_forum_threads(
 
     safe_query = query if query is not None else ""
     results = await forum_search_service.search(
-        safe_query, n_results=limit, filters=filter_dict
+        safe_query, n_results=limit, filters=filter_dict, use_hybrid=True
     )
 
     duration = time.monotonic() - start_time
