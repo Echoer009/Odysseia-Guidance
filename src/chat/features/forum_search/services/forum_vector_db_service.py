@@ -365,7 +365,7 @@ class ForumVectorDBService:
                             ft.id,
                             RANK() OVER (ORDER BY paradedb.score(ft.id) DESC) as rank
                         FROM forum.forum_threads ft
-                        WHERE ft.content @@@ :query_text
+                        WHERE ft.content @@@ :query_text OR ft.thread_name @@@ :query_text
                         LIMIT :top_k_fts
                     ),
                     fused_ranks AS (
