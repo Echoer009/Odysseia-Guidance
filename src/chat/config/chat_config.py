@@ -149,7 +149,7 @@ FORUM_SEARCH_DEFAULT_LIMIT = 5  # 论坛搜索工具返回结果的默认数量
 # 注意：bge-m3 模型使用余弦距离，范围是 [0, 2]
 # 0 表示完全匹配，1 表示完全相反，2 表示最不相关
 RAG_MAX_DISTANCE = 0.5  # bge-m3 模型的推荐值（教程搜索）
-FORUM_RAG_MAX_DISTANCE = 0.4  # bge-m3 模型的推荐值（论坛搜索）
+FORUM_RAG_MAX_DISTANCE = 0.65  # bge-m3 模型的推荐值（论坛搜索）- 放宽以支持语义相似匹配
 
 # --- 教程 RAG 配置 ---
 TUTORIAL_RAG_CONFIG = {
