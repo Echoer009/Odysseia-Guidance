@@ -354,6 +354,7 @@ class ForumVectorDBService:
                     WITH semantic_search AS (
                         SELECT
                             ft.id,
+                            ft.{embedding_col} <=> CAST(:query_vector AS halfvec) as vector_distance,
                             RANK() OVER (ORDER BY ft.{embedding_col} <=> CAST(:query_vector AS halfvec)) as rank
                         FROM forum.forum_threads ft
                         WHERE ft.{embedding_col} IS NOT NULL
@@ -371,6 +372,7 @@ class ForumVectorDBService:
                     fused_ranks AS (
                         SELECT
                             COALESCE(s.id, k.id) as id,
+                            s.vector_distance,
                             (COALESCE(1.0 / (:rrf_k + s.rank), 0.0) + COALESCE(1.0 / (:rrf_k + k.rank), 0.0)) as rrf_score
                         FROM semantic_search s
                         FULL OUTER JOIN keyword_search k ON s.id = k.id
@@ -385,19 +387,21 @@ class ForumVectorDBService:
                         ft.channel_id,
                         ft.guild_id,
                         ft.created_at,
+                        fr.vector_distance,
                         fr.rrf_score,
-                        CASE 
-                            WHEN ft.content ILIKE '%' || :query_text || '%' 
-                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1 
-                            ELSE 0 
+                        CASE
+                            WHEN ft.content ILIKE '%' || :query_text || '%'
+                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1
+                            ELSE 0
                         END as exact_match,
-                        (fr.rrf_score + CASE 
-                            WHEN ft.content ILIKE '%' || :query_text || '%' 
-                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost 
-                            ELSE 0.0 
+                        (fr.rrf_score + CASE
+                            WHEN ft.content ILIKE '%' || :query_text || '%'
+                                 OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost
+                            ELSE 0.0
                         END) as final_score
                     FROM fused_ranks fr
                     JOIN forum.forum_threads ft ON fr.id = ft.id
+                    WHERE (fr.vector_distance IS NULL OR fr.vector_distance <= :max_distance)
                     """
                 )
 
@@ -409,6 +413,7 @@ class ForumVectorDBService:
                     "top_k_fts": top_k_fts,
                     "rrf_k": rrf_k,
                     "exact_match_boost": exact_match_boost,
+                    "max_distance": max_distance,
                 }
                 conditions = []
 
@@ -471,6 +476,9 @@ class ForumVectorDBService:
                     rrf_score = float(row.rrf_score) if row.rrf_score else 0.0
                     final_score = float(row.final_score) if row.final_score else 0.0
                     exact_match = bool(row.exact_match) if row.exact_match else False
+                    vector_distance = (
+                        float(row.vector_distance) if row.vector_distance else None
+                    )
                     search_results.append(
                         {
                             "id": row.thread_id,
@@ -489,6 +497,7 @@ class ForumVectorDBService:
                             "distance": final_score,  # 使用最终分数（含精确匹配加成）
                             "rrf_score": rrf_score,  # 保留原始 RRF 分数
                             "exact_match": exact_match,  # 精确匹配标志
+                            "vector_distance": vector_distance,  # 向量距离
                         }
                     )
 
