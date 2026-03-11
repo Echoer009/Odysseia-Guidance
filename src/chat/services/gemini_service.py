@@ -34,7 +34,8 @@ from src.chat.features.tools.tool_loader import load_tools_from_directory
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
-from src.chat.utils.image_utils import sanitize_image
+
+# [禁用] 图片压缩功能已关闭 - from src.chat.utils.image_utils import sanitize_image
 from src.database.services.token_usage_service import token_usage_service
 from src.database.database import AsyncSessionLocal
 
@@ -750,53 +751,12 @@ class GeminiService:
                 )
 
             for idx, img_data in enumerate(images_to_process, 1):
-                # --- [优化] 仅当图片来源是用户附件时才进行净化 ---
-                if img_data.get("source") == "attachment":
-                    try:
-                        # [修复] 增加健壮性，同时检查 'data' 和 'bytes' 键
-                        image_bytes = img_data.get("data") or img_data.get("bytes")
-                        if not image_bytes:
-                            log.warning(
-                                f"附件图片数据字典中缺少 'data' 或 'bytes' 键，已跳过。Keys: {list(img_data.keys())}"
-                            )
-                            continue
-
-                        log.info(f"正在处理第 {idx}/{len(images_to_process)} 张图片...")
-                        sanitized_bytes, new_mime_type = sanitize_image(image_bytes)
-
-                        # [内存优化] 处理完成后立即删除原始图片数据引用
-                        # 这有助于垃圾回收器及时释放内存
-                        if "data" in img_data:
-                            del img_data["data"]
-                        if "bytes" in img_data:
-                            del img_data["bytes"]
-
-                        # [修复] 保持键名一致性，使用 'data' 存储净化后的字节
-                        sanitized_images_for_endpoint.append(
-                            {
-                                "data": sanitized_bytes,
-                                "mime_type": new_mime_type,
-                                "source": "attachment",  # 来源是确定的
-                            }
-                        )
-
-                        log.info(f"第 {idx}/{len(images_to_process)} 张图片处理完成。")
-
-                        # [内存优化] 如果启用了顺序处理，在每张图片处理后强制垃圾回收
-                        if sequential_processing:
-                            import gc
-
-                            gc.collect()
-
-                    except Exception as e:
-                        # 如果净化失败，记录错误并通知用户
-                        log.error(
-                            f"为自定义端点净化第 {idx} 张图片时失败: {e}", exc_info=True
-                        )
-                        return "呜哇，这张图好像有点问题，我处理不了…可以换一张试试吗？<伤心>"
-                else:
-                    # 对于非附件图片（如表情），直接使用原始数据
-                    sanitized_images_for_endpoint.append(img_data)
+                # --- [禁用] 图片压缩功能已关闭，以保持原图质量供模型识图 ---
+                # 直接使用原始图片数据，不进行任何压缩或尺寸调整
+                sanitized_images_for_endpoint.append(img_data)
+                log.debug(
+                    f"第 {idx}/{len(images_to_process)} 张图片已跳过压缩，使用原始数据。"
+                )
 
         # 复用核心生成逻辑。从此方法抛出的任何异常都将由 generate_response 捕获。
         return await self._execute_generation_cycle(
