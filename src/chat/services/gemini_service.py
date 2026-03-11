@@ -1446,6 +1446,17 @@ class GeminiService:
         # 使用自定义端点配置
         model_name = app_config.THREAD_PRAISE_MODEL
         endpoint_config = app_config.CUSTOM_GEMINI_ENDPOINTS.get(model_name)
+
+        # 调试日志：检查端点配置
+        log.info(f"[暖贴调试] 使用的模型别名: {model_name}")
+        log.info(f"[暖贴调试] 端点配置存在: {endpoint_config is not None}")
+        if endpoint_config:
+            log.info(
+                f"[暖贴调试] base_url 存在: {bool(endpoint_config.get('base_url'))}"
+            )
+            log.info(f"[暖贴调试] api_key 存在: {bool(endpoint_config.get('api_key'))}")
+            log.info(f"[暖贴调试] model_name: {endpoint_config.get('model_name')}")
+
         if not endpoint_config or not all(
             [endpoint_config.get("base_url"), endpoint_config.get("api_key")]
         ):
@@ -1493,21 +1504,46 @@ class GeminiService:
             )
             log.info("------------------------------------")
 
-        response = await client.aio.models.generate_content(
-            model=final_model_name, contents=final_contents, config=gen_config
-        )
+        try:
+            response = await client.aio.models.generate_content(
+                model=final_model_name, contents=final_contents, config=gen_config
+            )
+        except Exception as api_error:
+            log.error(f"[暖贴调试] API 调用异常: {api_error}", exc_info=True)
+            return None
+
+        # 调试日志：检查响应
+        log.info(f"[暖贴调试] API 响应存在: {response is not None}")
+        log.info(f"[暖贴调试] response.parts 存在: {hasattr(response, 'parts')}")
+        if hasattr(response, "parts"):
+            log.info(
+                f"[暖贴调试] response.parts 数量: {len(response.parts) if response.parts else 0}"
+            )
+        if hasattr(response, "prompt_feedback") and response.prompt_feedback:
+            log.info(f"[暖贴调试] prompt_feedback: {response.prompt_feedback}")
+            if hasattr(response.prompt_feedback, "block_reason"):
+                log.info(
+                    f"[暖贴调试] block_reason: {response.prompt_feedback.block_reason}"
+                )
 
         if response.parts:
             # --- (修正) 采用与主对话相同的逻辑，正确分离思考过程和最终回复 ---
             final_text = ""
+            thought_count = 0
+            text_count = 0
             for part in response.parts:
                 # 关键：只有当 part 不是思考过程时，才将其文本内容计入最终回复
                 if hasattr(part, "thought") and part.thought:
                     # 这是思考过程，忽略它
-                    pass
+                    thought_count += 1
                 elif hasattr(part, "text") and part.text:
                     # 这是最终回复
                     final_text += part.text
+                    text_count += 1
+            log.info(
+                f"[暖贴调试] 思考部分数量: {thought_count}, 文本部分数量: {text_count}"
+            )
+            log.info(f"[暖贴调试] 最终文本长度: {len(final_text.strip())}")
             return final_text.strip()
 
         log.warning(f"generate_thread_praise 未能生成有效内容。API 响应: {response}")

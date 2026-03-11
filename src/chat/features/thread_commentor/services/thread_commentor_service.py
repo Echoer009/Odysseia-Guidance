@@ -81,36 +81,77 @@ class ThreadCommentorService:
         针对新创建的帖子生成一段结合用户记忆的个性化夸奖。
         """
         try:
+            log.info(f"[暖贴调试] 开始处理帖子 '{thread.name}' (ID: {thread.id})")
+            log.info(f"[暖贴调试] 用户 ID: {user_id}, 昵称: {user_nickname}")
+
             # 检查用户是否禁用了暖贴功能
-            if await coin_service.has_withered_sunflower(user_id):
+            has_withered = await coin_service.has_withered_sunflower(user_id)
+            log.info(f"[暖贴调试] 用户是否禁用暖贴: {has_withered}")
+            if has_withered:
                 log.info(
                     f"用户 {user_id} 已禁用暖贴功能，跳过对帖子 '{thread.name}' 的评价。"
                 )
                 return None
 
             # 检查用户是否禁用了帖子回复功能
-            if await coin_service.blocks_thread_replies(user_id):
+            blocks_replies = await coin_service.blocks_thread_replies(user_id)
+            log.info(f"[暖贴调试] 用户是否禁用帖子回复: {blocks_replies}")
+            if blocks_replies:
                 log.info(
                     f"用户 {user_id} 已禁用帖子回复功能，跳过对帖子 '{thread.name}' 的评价。"
                 )
                 return None
 
             # 1. 获取帖子的初始消息
-            if thread.starter_message:
-                first_message = thread.starter_message
-            else:
+            # 注意：thread.starter_message 可能返回缓存中不完整的消息对象
+            # 始终使用 fetch_message 来获取完整内容
+            log.info(f"[暖贴调试] 尝试获取帖子初始消息...")
+            try:
+                # 使用 thread.id 作为起始消息的 ID
                 first_message = await thread.fetch_message(thread.id)
+                log.info(f"[暖贴调试] 从 fetch_message 获取成功")
+            except discord.NotFound:
+                log.warning(f"[暖贴调试] 无法找到帖子 {thread.id} 的初始消息")
+                first_message = None
+            except Exception as e:
+                log.error(f"[暖贴调试] 获取帖子初始消息时出错: {e}")
+                first_message = None
 
-            if not first_message or not first_message.content:
+            log.info(f"[暖贴调试] first_message 存在: {first_message is not None}")
+            if first_message:
                 log.info(
-                    f"帖子 '{thread.name}' (ID: {thread.id}) 没有有效的初始消息内容，跳过评价。"
+                    f"[暖贴调试] first_message.content 长度: {len(first_message.content) if first_message.content else 0}"
+                )
+                # 检查是否有附件
+                has_attachments = (
+                    first_message.attachments and len(first_message.attachments) > 0
+                )
+                log.info(f"[暖贴调试] 是否有附件: {has_attachments}")
+
+            if not first_message:
+                log.info(
+                    f"帖子 '{thread.name}' (ID: {thread.id}) 无法获取初始消息，跳过评价。"
                 )
                 return None
 
             # 2. 准备帖子内容
             title = thread.name
             tags = ", ".join([tag.name for tag in thread.applied_tags])
+
+            # 处理内容：如果没有文字但有附件，使用占位符
             content = first_message.content
+            if not content:
+                if first_message.attachments:
+                    # 有附件但没有文字
+                    attachment_count = len(first_message.attachments)
+                    content = f"[用户上传了 {attachment_count} 个附件（图片/文件）]"
+                else:
+                    # 既没有文字也没有附件
+                    log.info(
+                        f"帖子 '{thread.name}' (ID: {thread.id}) 没有有效的初始消息内容，跳过评价。"
+                    )
+                    return None
+
             max_content_length = 1500
             if len(content) > max_content_length:
                 content = content[:max_content_length] + "..."

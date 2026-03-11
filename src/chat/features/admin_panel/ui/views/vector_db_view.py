@@ -208,6 +208,7 @@ class VectorDBView(BaseTableView):
                         page_items.append(
                             {
                                 "id": thread.thread_id,
+                                "content": thread.content or "",  # 添加正文内容
                                 "metadata": {
                                     "thread_id": thread.thread_id,
                                     "thread_name": thread.thread_name,
@@ -276,6 +277,7 @@ class VectorDBView(BaseTableView):
                 ),
                 None,
             )
+
             if not entry:
                 return discord.Embed(
                     title="错误",
@@ -320,6 +322,24 @@ class VectorDBView(BaseTableView):
                 value=metadata.get("created_at", "未知"),
                 inline=False,
             )
+
+            # 添加帖子正文内容
+            content = entry.get("content", "")
+            if content:
+                # Discord Embed 字段值最大 1024 字符，截断处理
+                if len(content) > 1000:
+                    content = content[:1000] + "..."
+                embed.add_field(
+                    name="正文内容",
+                    value=content,
+                    inline=False,
+                )
+            else:
+                embed.add_field(
+                    name="正文内容",
+                    value="*(无内容或内容为空)*",
+                    inline=False,
+                )
 
             if "distance" in entry:
                 embed.add_field(

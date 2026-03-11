@@ -87,13 +87,25 @@ class ThreadEventHandlerCog(commands.Cog):
     async def _dispatch_to_thread_commentor(self, thread: discord.Thread):
         """检查条件后，分发给 ThreadCommentorCog 进行暖贴。"""
         try:
-            should_warm_up = await chat_settings_service.is_warm_up_enabled(
-                thread.guild.id
-            ) and await chat_settings_service.is_warm_up_channel(
+            log.info(f"[Commentor Dispatch] 开始检查帖子 {thread.id} 的暖贴条件...")
+
+            is_enabled = await chat_settings_service.is_warm_up_enabled(thread.guild.id)
+            log.info(f"[Commentor Dispatch] 全局暖贴开关: {is_enabled}")
+
+            is_channel = await chat_settings_service.is_warm_up_channel(
                 thread.guild.id, thread.parent_id
             )
+            log.info(
+                f"[Commentor Dispatch] 频道 {thread.parent_id} 是否为暖贴频道: {is_channel}"
+            )
+
+            should_warm_up = is_enabled and is_channel
+            log.info(f"[Commentor Dispatch] 最终是否暖贴: {should_warm_up}")
 
             if not should_warm_up:
+                log.info(
+                    f"[Commentor Dispatch] 帖子 {thread.id} 不符合暖贴条件，跳过。"
+                )
                 return
 
             log.info(f"[Commentor Dispatch] 帖子 {thread.id} 符合暖贴条件，开始处理...")
