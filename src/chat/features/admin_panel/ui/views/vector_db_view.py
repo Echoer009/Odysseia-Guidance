@@ -60,6 +60,13 @@ class VectorDBView(BaseTableView):
         self.index_missing_button.callback = self.index_missing_threads
         self.add_item(self.index_missing_button)
 
+        # 查询失效帖子按钮
+        self.query_deleted_button = discord.ui.Button(
+            label="查询失效帖子", emoji="🔍", style=discord.ButtonStyle.danger, row=2
+        )
+        self.query_deleted_button.callback = self.query_deleted_threads
+        self.add_item(self.query_deleted_button)
+
     def _add_detail_view_components(self):
         # 详情视图只有返回列表和返回主菜单
         self.back_button = discord.ui.Button(
@@ -486,3 +493,246 @@ class VectorDBView(BaseTableView):
             view=confirm_view,
             ephemeral=True,
         )
+
+    async def query_deleted_threads(self, interaction: discord.Interaction):
+        """查询并显示数据库中已删除的帖子（支持分页、链接跳转、确认清理）"""
+        await interaction.response.send_message(
+            "⏳ 正在查询失效帖子，这可能需要几分钟时间，请稍候...", ephemeral=True
+        )
+
+        try:
+            # 导入清理服务
+            from src.chat.features.forum_search.cogs.forum_cleanup_cog import (
+                forum_cleanup_cog,
+            )
+
+            if forum_cleanup_cog is None:
+                if interaction.message:
+                    await interaction.followup.edit_message(
+                        interaction.message.id,
+                        content="❌ 清理服务未初始化，请稍后重试。",
+                    )
+                return
+
+            # 获取所有频道的失效帖子预览
+            all_deleted_threads = []
+            for channel_id in chat_config.FORUM_SEARCH_CHANNEL_IDS:
+                result = await forum_cleanup_cog.get_deleted_threads_preview(channel_id)
+                # 跳过无效频道或没有失效帖子的情况
+                if not result or not result.get("deleted_threads_info"):
+                    continue
+                channel_name = result.get("channel_name", f"频道{channel_id}")
+                for thread in result["deleted_threads_info"]:
+                    thread["channel_name"] = channel_name
+                    thread["channel_id"] = channel_id
+                    all_deleted_threads.append(thread)
+
+            if not all_deleted_threads:
+                if interaction.message:
+                    await interaction.followup.edit_message(
+                        interaction.message.id,
+                        content="✅ 没有发现失效帖子，数据库中的帖子都是有效的。",
+                    )
+                return
+
+            # 创建分页视图
+            view = DeletedThreadsPaginationView(
+                all_deleted_threads, interaction.user.id, interaction.guild_id
+            )
+            embed = view.build_embed()
+            if interaction.message:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=None,
+                    embed=embed,
+                    view=view,
+                )
+
+        except Exception as e:
+            log.error(f"查询失效帖子时出错: {e}", exc_info=True)
+            if interaction.message:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"❌ 查询过程中发生错误: {e}",
+                )
+
+
+class DeletedThreadsPaginationView(discord.ui.View):
+    """失效帖子分页视图 - 支持分页浏览、链接跳转、确认清理"""
+
+    def __init__(
+        self,
+        deleted_threads: list[Dict[str, Any]],
+        author_id: int,
+        guild_id: int | None,
+        page_size: int = 5,
+    ):
+        super().__init__(timeout=300)  # 5分钟超时
+        self.deleted_threads = deleted_threads
+        self.author_id = author_id
+        self.guild_id = guild_id
+        self.page_size = page_size
+        self.current_page = 0
+        self.total_pages = (len(deleted_threads) + page_size - 1) // page_size
+
+        self._update_buttons()
+
+    def _update_buttons(self):
+        """更新按钮状态"""
+        self.clear_items()
+
+        # 分页按钮
+        if self.current_page > 0:
+            prev_btn = discord.ui.Button(
+                label="上一页", emoji="⬅️", style=discord.ButtonStyle.secondary
+            )
+            prev_btn.callback = self._prev_page_callback
+            self.add_item(prev_btn)
+
+        if self.current_page < self.total_pages - 1:
+            next_btn = discord.ui.Button(
+                label="下一页", emoji="➡️", style=discord.ButtonStyle.secondary
+            )
+            next_btn.callback = self._next_page_callback
+            self.add_item(next_btn)
+
+        # 确认清理按钮
+        cleanup_btn = discord.ui.Button(
+            label="确认清理全部",
+            emoji="🗑️",
+            style=discord.ButtonStyle.danger,
+        )
+        cleanup_btn.callback = self._cleanup_callback
+        self.add_item(cleanup_btn)
+
+        # 取消按钮
+        cancel_btn = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_btn.callback = self._cancel_callback
+        self.add_item(cancel_btn)
+
+    async def _prev_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message(
+                "只有操作者可以控制此视图。", ephemeral=True
+            )
+        self.current_page -= 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _next_page_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message(
+                "只有操作者可以控制此视图。", ephemeral=True
+            )
+        self.current_page += 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _cleanup_callback(self, interaction: discord.Interaction):
+        """执行清理操作"""
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message(
+                "只有操作者可以执行此操作。", ephemeral=True
+            )
+
+        await interaction.response.edit_message(
+            content="⏳ 正在清理失效帖子，请稍候...", embed=None, view=None
+        )
+
+        try:
+            # 导入清理服务
+            from src.chat.features.forum_search.cogs.forum_cleanup_cog import (
+                forum_cleanup_cog,
+            )
+
+            if forum_cleanup_cog is None:
+                if interaction.message:
+                    await interaction.followup.edit_message(
+                        interaction.message.id,
+                        content="❌ 清理服务未初始化，请稍后重试。",
+                    )
+                return
+
+            # 执行清理
+            result = await forum_cleanup_cog.cleanup_all_channels()
+
+            # 构建结果消息
+            if result["total_deleted"] == 0:
+                content = "✅ 清理完成！没有发现失效帖子。"
+            else:
+                channel_details = "\n".join(
+                    [
+                        f"• {ch['channel_name']}: 清理了 {ch['deleted']} 个"
+                        for ch in result["channels"]
+                        if ch["deleted"] > 0
+                    ]
+                )
+                content = (
+                    f"🧹 **清理完成！**\n\n"
+                    f"**共清理 {result['total_deleted']} 个失效帖子**\n"
+                    f"{channel_details}"
+                )
+
+            if interaction.message:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=content,
+                )
+
+        except Exception as e:
+            log.error(f"清理失效帖子时出错: {e}", exc_info=True)
+            if interaction.message:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"❌ 清理过程中发生错误: {e}",
+                )
+
+    async def _cancel_callback(self, interaction: discord.Interaction):
+        """取消操作"""
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message(
+                "只有操作者可以执行此操作。", ephemeral=True
+            )
+        await interaction.response.edit_message(
+            content="已取消清理操作。", embed=None, view=None
+        )
+
+    def build_embed(self) -> discord.Embed:
+        """构建当前页的 Embed"""
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(self.deleted_threads))
+        page_items = self.deleted_threads[start_idx:end_idx]
+
+        embed = discord.Embed(
+            title=f"🔍 失效帖子列表 (共 {len(self.deleted_threads)} 个)",
+            description="以下帖子在 Discord 上已被删除，但数据库中仍有记录：",
+            color=discord.Color.orange(),
+        )
+
+        for i, thread in enumerate(page_items, start=start_idx + 1):
+            thread_id = thread.get("thread_id", "N/A")
+            thread_name = thread.get("thread_name", "未知标题")
+            author_name = thread.get("author_name", "未知作者")
+            channel_name = thread.get("channel_name", "未知频道")
+            channel_id = thread.get("channel_id", 0)
+
+            # 构建 Discord 帖子链接
+            if self.guild_id:
+                thread_link = f"https://discord.com/channels/{self.guild_id}/{channel_id}/{thread_id}"
+                title_text = f"**{i}. [{thread_name[:30]}{'...' if len(thread_name) > 30 else ''}]({thread_link})**"
+            else:
+                title_text = f"**{i}. {thread_name[:30]}{'...' if len(thread_name) > 30 else ''}**"
+
+            embed.add_field(
+                name=title_text,
+                value=f"作者: {author_name} | 频道: {channel_name}\nID: `{thread_id}`",
+                inline=False,
+            )
+
+        embed.set_footer(
+            text=f"第 {self.current_page + 1} / {self.total_pages} 页 | 点击标题可跳转到原帖子位置"
+        )
+
+        return embed

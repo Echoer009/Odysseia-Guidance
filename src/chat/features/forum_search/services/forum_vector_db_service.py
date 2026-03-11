@@ -196,7 +196,8 @@ class ForumVectorDBService:
         try:
             async with AsyncSessionLocal() as session:
                 # 构建 BM25 搜索查询
-                # 使用 @@@ 操作符进行全文搜索，与世界书和教程搜索使用相同的方式
+                # 使用 @@@ 操作符进行全文搜索，同时搜索标题和内容
+                # BM25 索引建立在 content 和 thread_name 字段上
                 sql_query = text(
                     """
                     SELECT
@@ -209,9 +210,12 @@ class ForumVectorDBService:
                         ft.channel_id,
                         ft.guild_id,
                         ft.created_at,
+                        ft.content,
+                        ft.bge_embedding IS NOT NULL as has_bge,
+                        ft.qwen_embedding IS NOT NULL as has_qwen,
                         paradedb.score(ft.id) as score
                     FROM forum.forum_threads ft
-                    WHERE ft.content @@@ :query
+                    WHERE ft.content @@@ :query OR ft.thread_name @@@ :query
                     """
                 )
 
@@ -277,6 +281,9 @@ class ForumVectorDBService:
                     search_results.append(
                         {
                             "id": row.thread_id,
+                            "content": row.content or "",
+                            "has_bge": row.has_bge or False,
+                            "has_qwen": row.has_qwen or False,
                             "metadata": {
                                 "thread_id": row.thread_id,
                                 "thread_name": row.thread_name,
@@ -693,6 +700,110 @@ class ForumVectorDBService:
         except Exception as e:
             log.error(f"从 ParadeDB 获取文档时出错: {e}", exc_info=True)
             return {"ids": [], "metadatas": []}
+
+    async def delete_threads_by_ids(self, thread_ids: List[int]) -> int:
+        """
+        根据 thread_id 列表批量删除帖子。
+
+        Args:
+            thread_ids: 要删除的帖子 ID 列表
+
+        Returns:
+            实际删除的记录数
+        """
+        if not thread_ids:
+            return 0
+
+        try:
+            from sqlalchemy import delete
+
+            async with AsyncSessionLocal() as session:
+                async with session.begin():
+                    stmt = delete(ForumThread).where(
+                        ForumThread.thread_id.in_(thread_ids)
+                    )
+                    result = await session.execute(stmt)
+                    await session.commit()
+                    # 使用 getattr 避免 Pylance 类型检查问题
+                    deleted_count = getattr(result, "rowcount", 0) or 0
+                    log.info(f"批量删除了 {deleted_count} 个帖子记录")
+                    return deleted_count
+
+        except Exception as e:
+            log.error(f"批量删除帖子时出错: {e}", exc_info=True)
+            return 0
+
+    async def get_thread_ids_by_channel(self, channel_id: int) -> List[int]:
+        """
+        获取指定频道中所有已索引的帖子 ID。
+
+        Args:
+            channel_id: 频道 ID
+
+        Returns:
+            该频道中所有帖子的 thread_id 列表
+        """
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(ForumThread.thread_id).where(
+                        ForumThread.channel_id == channel_id
+                    )
+                )
+                return [row[0] for row in result.fetchall()]
+        except Exception as e:
+            log.error(f"获取频道 {channel_id} 的帖子ID时出错: {e}", exc_info=True)
+            return []
+
+    async def get_deleted_threads_info(
+        self, thread_ids: List[int]
+    ) -> List[Dict[str, Any]]:
+        """
+        获取指定帖子 ID 列表的详细信息（用于显示失效帖子列表）。
+
+        Args:
+            thread_ids: 帖子 ID 列表
+
+        Returns:
+            寖子信息列表，每个元素包含:
+            - thread_id: 帖子 ID
+            - thread_name: 帖子标题
+            - author_name: 作者名称
+            - category_name: 分类名称
+            - channel_id: 频道 ID
+            - created_at: 创建时间
+        """
+        if not thread_ids:
+            return []
+
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(
+                        ForumThread.thread_id,
+                        ForumThread.thread_name,
+                        ForumThread.author_name,
+                        ForumThread.category_name,
+                        ForumThread.channel_id,
+                        ForumThread.created_at,
+                    ).where(ForumThread.thread_id.in_(thread_ids))
+                )
+                threads = []
+                for row in result.fetchall():
+                    threads.append(
+                        {
+                            "thread_id": row[0],
+                            "thread_name": row[1],
+                            "author_name": row[2],
+                            "category_name": row[3],
+                            "channel_id": row[4],
+                            "created_at": row[5].isoformat() if row[5] else None,
+                        }
+                    )
+                return threads
+        except Exception as e:
+            log.error(f"获取帖子详情时出错: {e}", exc_info=True)
+            return []
 
 
 # 全局实例

@@ -402,6 +402,10 @@ FORUM_POLL_THREAD_LIMIT = 100
 # 轮询任务的并发数
 FORUM_POLL_CONCURRENCY = 20
 
+# --- 论坛帖子清理配置 ---
+# 是否启用失效帖子清理（可用于调试或临时禁用）
+FORUM_CLEANUP_ENABLED = os.getenv("FORUM_CLEANUP_ENABLED", "true").lower() == "true"
+
 # --- 论坛帖子 ChromeDB 迁移配置 ---
 # 用于数据迁移脚本，迁移完成后可删除
 FORUM_VECTOR_DB_PATH = "data/forum_chroma_db"
