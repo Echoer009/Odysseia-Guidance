@@ -215,7 +215,7 @@ class LowQualityPostCleaner:
     async def find_by_custom_query(
         self, title_pattern: Optional[str] = None, content_pattern: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """使用自定义模式查找帖子"""
+        """使用自定义模式查找帖子 (LIKE 模糊匹配)"""
         limit = self.config["limit"]
 
         conditions = []
@@ -235,7 +235,160 @@ class LowQualityPostCleaner:
             result = await session.execute(
                 text(
                     f"""
-                    SELECT 
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content
+                    FROM forum.forum_threads
+                    WHERE {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                params,
+            )
+            rows = result.fetchall()
+            self.last_results = [dict(row._mapping) for row in rows]
+            return self.last_results
+
+    async def find_by_bm25(
+        self,
+        keyword: str,
+        search_fields: str = "both",
+    ) -> List[Dict[str, Any]]:
+        """
+        使用 BM25 全文检索查找帖子
+
+        Args:
+            keyword: 搜索关键词
+            search_fields: 搜索字段 - "both"(标题+内容), "title"(仅标题), "content"(仅内容)
+
+        Returns:
+            匹配的帖子列表，按 BM25 相关性得分排序
+        """
+        limit = self.config["limit"]
+
+        async with AsyncSessionLocal() as session:
+            # 根据搜索字段选择查询方式
+            if search_fields == "title":
+                # 仅搜索标题
+                query = text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content,
+                        paradedb.score(id) as bm25_score
+                    FROM forum.forum_threads
+                    WHERE thread_name @@@ :keyword
+                    ORDER BY paradedb.score(id) DESC
+                    LIMIT :limit
+                    """
+                )
+            elif search_fields == "content":
+                # 仅搜索内容
+                query = text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content,
+                        paradedb.score(id) as bm25_score
+                    FROM forum.forum_threads
+                    WHERE content @@@ :keyword
+                    ORDER BY paradedb.score(id) DESC
+                    LIMIT :limit
+                    """
+                )
+            else:
+                # 同时搜索标题和内容 (默认)
+                query = text(
+                    """
+                    SELECT
+                        thread_id,
+                        thread_name,
+                        author_name,
+                        category_name,
+                        created_at,
+                        guild_id,
+                        LENGTH(thread_name) as title_length,
+                        LENGTH(content) as content_length,
+                        content,
+                        paradedb.score(id) as bm25_score
+                    FROM forum.forum_threads
+                    WHERE content @@@ :keyword OR thread_name @@@ :keyword
+                    ORDER BY paradedb.score(id) DESC
+                    LIMIT :limit
+                    """
+                )
+
+            result = await session.execute(
+                query,
+                {"keyword": keyword, "limit": limit},
+            )
+            rows = result.fetchall()
+            self.last_results = [dict(row._mapping) for row in rows]
+            return self.last_results
+
+    async def find_by_keywords(
+        self,
+        keywords: List[str],
+        match_all: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        使用多个关键词搜索帖子 (LIKE 模式)
+
+        Args:
+            keywords: 关键词列表，如 ["跑路", "删", "退"]
+            match_all: True 表示必须匹配所有关键词(AND)，False 表示匹配任意关键词(OR)
+
+        Returns:
+            匹配的帖子列表
+        """
+        limit = self.config["limit"]
+
+        if not keywords:
+            return []
+
+        # 构建条件
+        conditions = []
+        for kw in keywords:
+            conditions.append(
+                f"(thread_name LIKE :kw_{len(conditions)} OR content LIKE :kw_{len(conditions)})"
+            )
+
+        # 准备参数
+        params: Dict[str, Any] = {"limit": limit}
+        for i, kw in enumerate(keywords):
+            params[f"kw_{i}"] = f"%{kw}%"
+
+        # AND 或 OR 连接
+        connector = " AND " if match_all else " OR "
+        where_clause = connector.join(conditions)
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(
+                    f"""
+                    SELECT
                         thread_id,
                         thread_name,
                         author_name,
@@ -415,6 +568,11 @@ class LowQualityPostCleaner:
             else:
                 print(f"\n📌 ID: {thread_id}")
 
+            # 显示 BM25 分数（如果有）
+            bm25_score = post.get("bm25_score")
+            if bm25_score is not None:
+                print(f"  📊 BM25得分: {bm25_score:.4f}")
+
             print(f"  📖 标题 ({title_length}字): {thread_name}")
             print(f"  👤 作者: {author_name} | 📂 分类: {category_name}")
             print(
@@ -548,7 +706,21 @@ def print_help():
 ║   /mention              - 查找内容只有@提及的帖子 (如 <@1372139178535686225>)   ║
 ║   /emptyvec             - 查找有向量但内容为空的帖子 (需清理向量)                ║
 ║   /exact <内容>         - 查找内容完全等于指定文本的帖子                         ║
-║   /find <标题> [内容]    - 使用自定义模式查找帖子                               ║
+║   /find <标题> [内容]    - 使用 LIKE 模糊匹配查找帖子                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ 关键词搜索 (BM25全文检索):                                                    ║
+║   /search <关键词>      - BM25搜索标题和内容 (推荐)                             ║
+║                           示例: /search 跑路  /search 删号                      ║
+║   /stitle <关键词>      - BM25仅搜索标题                                        ║
+║   /scontent <关键词>    - BM25仅搜索内容                                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ 多关键词搜索 (LIKE模式):                                                      ║
+║   /keywords <词1,词2...>- 搜索包含任意关键词的帖子 (OR)                        ║
+║                           示例: /keywords 跑路,删号,退群                        ║
+║   /keywords+ <词1,词2...>- 搜索包含所有关键词的帖子 (AND)                      ║
+║                           示例: /keywords+ 跑路,骗子                            ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ 其他查询:                                                                     ║
 ║   /view <thread_id>     - 查看帖子完整内容                                     ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ 删除操作:                                                                     ║
@@ -700,6 +872,59 @@ async def main():
                 posts = await cleaner.find_by_custom_query(
                     title_pattern, content_pattern
                 )
+                await cleaner.interactive_review(posts)
+
+            # BM25 全文检索命令
+            elif cmd == "/search":
+                if len(parts) < 2:
+                    print("⚠️ 用法: /search <关键词>")
+                    print("   示例: /search 跑路  /search 删号  /search 骗子")
+                    continue
+                keyword = user_input[len("/search ") :]
+                print(f"\n🔍 使用 BM25 搜索标题和内容: {keyword}")
+                posts = await cleaner.find_by_bm25(keyword, search_fields="both")
+                await cleaner.interactive_review(posts)
+
+            elif cmd == "/stitle":
+                if len(parts) < 2:
+                    print("⚠️ 用法: /stitle <关键词>")
+                    print("   示例: /stitle 跑路")
+                    continue
+                keyword = user_input[len("/stitle ") :]
+                print(f"\n🔍 使用 BM25 搜索标题: {keyword}")
+                posts = await cleaner.find_by_bm25(keyword, search_fields="title")
+                await cleaner.interactive_review(posts)
+
+            elif cmd == "/scontent":
+                if len(parts) < 2:
+                    print("⚠️ 用法: /scontent <关键词>")
+                    print("   示例: /scontent 跑路")
+                    continue
+                keyword = user_input[len("/scontent ") :]
+                print(f"\n🔍 使用 BM25 搜索内容: {keyword}")
+                posts = await cleaner.find_by_bm25(keyword, search_fields="content")
+                await cleaner.interactive_review(posts)
+
+            # 多关键词搜索命令 (LIKE 模式)
+            elif cmd in ["/keywords", "/keywords+"]:
+                if len(parts) < 2:
+                    print("⚠️ 用法: /keywords <词1,词2,词3...>")
+                    print("   示例: /keywords 跑路,删号,退群")
+                    print("         /keywords+ 跑路,骗子  (必须同时包含)")
+                    continue
+                match_all = cmd == "/keywords+"
+                keywords_str = (
+                    user_input.split(maxsplit=1)[1]
+                    if len(user_input.split(maxsplit=1)) > 1
+                    else ""
+                )
+                keywords = [kw.strip() for kw in keywords_str.split(",") if kw.strip()]
+                if not keywords:
+                    print("⚠️ 请提供至少一个关键词")
+                    continue
+                mode_str = "AND (全部匹配)" if match_all else "OR (任意匹配)"
+                print(f"\n🔍 使用 LIKE 搜索关键词 [{mode_str}]: {', '.join(keywords)}")
+                posts = await cleaner.find_by_keywords(keywords, match_all=match_all)
                 await cleaner.interactive_review(posts)
 
             elif cmd == "/view":
