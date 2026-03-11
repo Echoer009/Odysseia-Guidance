@@ -44,11 +44,20 @@ if RUNNING_IN_DOCKER:
         "BASE_URL": "http://ollama:11434",
         "MODEL": "bge-m3",
     }
+    QWEN_EMBEDDING_CONFIG = {
+        "BASE_URL": "http://ollama:11434",
+        "MODEL": "qwen3-embedding:0.6b",
+    }
 else:
     OLLAMA_CONFIG = {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         "MODEL": os.getenv("OLLAMA_MODEL", "bge-m3"),
     }
+    QWEN_EMBEDDING_CONFIG = {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "MODEL": os.getenv("QWEN_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
+    }
+
 
 # --- Gemini AI 配置 ---
 # 定义要使用的 Gemini 模型名称
@@ -280,7 +289,7 @@ COIN_REWARD_GUILD_IDS = _parse_ids("COIN_REWARD_GUILD_IDS")
 # 新帖子创建后，延迟多久发放奖励（秒）
 COIN_REWARD_DELAY_SECONDS = 30
 # 新帖子创建后，延迟多久进行RAG索引（秒）- 1小时让用户有时间编辑内容
-FORUM_SYNC_DELAY_SECONDS = 3600
+FORUM_SYNC_DELAY_SECONDS = 10  # 临时改为10秒用于测试，原值为3600
 # --- 帖子评价功能 ---
 THREAD_COMMENTOR_CONFIG = {
     "INITIAL_DELAY_SECONDS": 600,  # 暖贴功能的初始延迟（秒）

@@ -6,8 +6,18 @@ from sqlalchemy import select, text
 
 from src.database.database import AsyncSessionLocal
 from src.database.models import ForumThread
+from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
+
+
+async def get_embedding_column() -> str:
+    """根据数据库配置返回当前使用的 embedding 列名"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        return "qwen_embedding" if model == "qwen" else "bge_embedding"
+    except Exception:
+        return "bge_embedding"  # 默认使用 BGE
 
 
 class ForumVectorDBService:
@@ -44,7 +54,8 @@ class ForumVectorDBService:
         channel_id: int,
         guild_id: int,
         created_at,
-        embedding: List[float],
+        bge_embedding: Optional[List[float]],
+        qwen_embedding: Optional[List[float]],
         source_metadata: Optional[dict] = None,
     ) -> bool:
         """
@@ -60,7 +71,8 @@ class ForumVectorDBService:
             channel_id: 频道 ID
             guild_id: 服务器 ID
             created_at: 创建时间
-            embedding: 向量嵌入
+            bge_embedding: BGE-M3 模型的向量嵌入（可选，如果生成失败）
+            qwen_embedding: Qwen3-Embedding 模型的向量嵌入（可选，如果生成失败）
             source_metadata: 源元数据
 
         Returns:
@@ -85,11 +97,15 @@ class ForumVectorDBService:
                         existing_thread.channel_id = channel_id
                         existing_thread.guild_id = guild_id
                         existing_thread.created_at = created_at
-                        existing_thread.embedding = embedding
+                        # 双写：同时更新两个 embedding 列（真正的双写，使用不同的 embedding）
+                        existing_thread.bge_embedding = bge_embedding
+                        existing_thread.qwen_embedding = qwen_embedding
                         existing_thread.source_metadata = source_metadata
-                        log.info(f"更新现有帖子: {thread_id}")
+                        log.info(
+                            f"更新现有帖子: {thread_id} (双写 BGE + Qwen embedding)"
+                        )
                     else:
-                        # 创建新记录
+                        # 创建新记录，双写两个 embedding 列（真正的双写）
                         new_thread = ForumThread(
                             thread_id=thread_id,
                             thread_name=thread_name,
@@ -100,11 +116,12 @@ class ForumVectorDBService:
                             channel_id=channel_id,
                             guild_id=guild_id,
                             created_at=created_at,
-                            embedding=embedding,
                             source_metadata=source_metadata,
+                            bge_embedding=bge_embedding,
+                            qwen_embedding=qwen_embedding,
                         )
                         session.add(new_thread)
-                        log.info(f"添加新帖子: {thread_id}")
+                        log.info(f"添加新帖子: {thread_id} (双写 BGE + Qwen embedding)")
 
                     await session.commit()
                     return True
@@ -311,19 +328,29 @@ class ForumVectorDBService:
             final_k = FORUM_RAG_CONFIG.get("HYBRID_SEARCH_FINAL_K", 5)
             exact_match_boost = FORUM_RAG_CONFIG.get("EXACT_MATCH_BOOST", 1000.0)
 
+            # 根据配置选择使用哪个 embedding 列
+            embedding_col = await get_embedding_column()
+            embedding_model = "Qwen" if embedding_col == "qwen_embedding" else "BGE"
+            # 记录当前搜索配置
+            log.info(
+                f"[论坛搜索配置] Embedding模型: {embedding_model} | 搜索模式: 混合搜索 (向量 + BM25) | "
+                f"向量列: {embedding_col} | TOP_K_VECTOR: {top_k_vector} | "
+                f"TOP_K_FTS: {top_k_fts} | RRF_K: {rrf_k} | FINAL_K: {final_k} | EXACT_MATCH_BOOST: {exact_match_boost}"
+            )
+
             async with AsyncSessionLocal() as session:
                 # 构建混合搜索查询
                 # 使用 RRF (Reciprocal Rank Fusion) 合并向量搜索和 BM25 搜索的结果
                 # 新增：精确匹配提权 - 如果 content 包含完整 query，给予额外加成
                 sql_query = text(
-                    """
+                    f"""
                     WITH semantic_search AS (
                         SELECT
                             ft.id,
-                            RANK() OVER (ORDER BY ft.embedding <=> CAST(:query_vector AS halfvec)) as rank
+                            RANK() OVER (ORDER BY ft.{embedding_col} <=> CAST(:query_vector AS halfvec)) as rank
                         FROM forum.forum_threads ft
-                        WHERE ft.embedding IS NOT NULL
-                        ORDER BY ft.embedding <=> CAST(:query_vector AS halfvec)
+                        WHERE ft.{embedding_col} IS NOT NULL
+                        ORDER BY ft.{embedding_col} <=> CAST(:query_vector AS halfvec)
                         LIMIT :top_k_vector
                     ),
                     keyword_search AS (
@@ -492,8 +519,10 @@ class ForumVectorDBService:
             async with AsyncSessionLocal() as session:
                 # 构建基础查询
                 # 使用 ::halfvec 类型转换需要在 SQL 中直接使用 CAST
+                # 根据配置选择使用哪个 embedding 列
+                embedding_col = await get_embedding_column()
                 sql_query = text(
-                    """
+                    f"""
                     SELECT
                         ft.id,
                         ft.thread_id,
@@ -504,9 +533,9 @@ class ForumVectorDBService:
                         ft.channel_id,
                         ft.guild_id,
                         ft.created_at,
-                        1 - (ft.embedding <=> CAST(:query_vector AS halfvec)) as similarity
+                        1 - (ft.{embedding_col} <=> CAST(:query_vector AS halfvec)) as similarity
                     FROM forum.forum_threads ft
-                    WHERE ft.embedding IS NOT NULL
+                    WHERE ft.{embedding_col} IS NOT NULL
                     """
                 )
 

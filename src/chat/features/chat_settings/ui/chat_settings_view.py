@@ -161,6 +161,16 @@ class ChatSettingsView(View):
             )
         )
 
+        # 第 4 行：Embedding 设置
+        self.add_item(
+            Button(
+                label="🧠 Embedding模型",
+                style=ButtonStyle.secondary,
+                custom_id="embedding_settings",
+                row=4,
+            )
+        )
+
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
         await self._initialize()  # 重新获取所有数据，包括派系
@@ -183,6 +193,8 @@ class ChatSettingsView(View):
             await self.on_ai_model_settings(interaction)
         elif custom_id == "show_token_usage":
             await self.on_show_token_usage(interaction)
+        elif custom_id == "embedding_settings":
+            await self.on_embedding_settings(interaction)
 
         return True
 
@@ -317,3 +329,23 @@ class ChatSettingsView(View):
         embed.add_field(name="📊 平均每次", value=f"{average_per_call:,}", inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def on_embedding_settings(self, interaction: Interaction):
+        """切换到 Embedding 模型设置视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+        from src.chat.features.chat_settings.ui.embedding_settings_view import (
+            EmbeddingSettingsView,
+        )
+
+        embedding_view = await EmbeddingSettingsView.create(interaction, self.message)
+        embed = embedding_view._create_embed()
+        await interaction.edit_original_response(
+            content=None, embed=embed, view=embedding_view
+        )
+        self.stop()

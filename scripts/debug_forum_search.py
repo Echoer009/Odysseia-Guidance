@@ -67,6 +67,7 @@ class ForumSearchDebugger:
             "max_distance": FORUM_RAG_MAX_DISTANCE,
             "use_hybrid": True,
             "exact_match_boost": FORUM_RAG_CONFIG.get("EXACT_MATCH_BOOST", 1000.0),
+            "embedding_column": "qwen_embedding",  # 默认使用 Qwen embedding
         }
         self.config = self.default_config.copy()
 
@@ -119,6 +120,9 @@ class ForumSearchDebugger:
         print(
             f"  - 搜索模式: {'混合搜索' if self.config['use_hybrid'] else 'BM25 全文搜索'}"
         )
+        embedding_col = self.config.get("embedding_column", "qwen_embedding")
+        embedding_model = "Qwen" if embedding_col == "qwen_embedding" else "BGE"
+        print(f"  - Embedding 列: {embedding_col} ({embedding_model})")
 
     def print_categories(self):
         """打印可用的频道分类"""
@@ -155,10 +159,19 @@ class ForumSearchDebugger:
 
         # 构建自定义 SQL 查询以获取详细分数
         from sqlalchemy import text
+        from src.chat.features.forum_search.services.forum_vector_db_service import (
+            get_embedding_column,
+        )
+
+        # 获取当前配置的 embedding 列
+        embedding_col = await get_embedding_column()
+        # 在调试器中可以使用配置覆盖
+        if "embedding_column" in self.config:
+            embedding_col = self.config["embedding_column"]
 
         async with AsyncSessionLocal() as session:
             sql_query = text(
-                """
+                f"""
                 WITH semantic_search AS (
                     SELECT
                         ft.id,
@@ -170,11 +183,11 @@ class ForumSearchDebugger:
                         ft.channel_id,
                         ft.guild_id,
                         ft.created_at,
-                        ft.embedding <=> CAST(:query_vector AS halfvec) as vector_distance,
-                        RANK() OVER (ORDER BY ft.embedding <=> CAST(:query_vector AS halfvec)) as vector_rank
+                        ft.{embedding_col} <=> CAST(:query_vector AS halfvec) as vector_distance,
+                        RANK() OVER (ORDER BY ft.{embedding_col} <=> CAST(:query_vector AS halfvec)) as vector_rank
                     FROM forum.forum_threads ft
-                    WHERE ft.embedding IS NOT NULL
-                    ORDER BY ft.embedding <=> CAST(:query_vector AS halfvec)
+                    WHERE ft.{embedding_col} IS NOT NULL
+                    ORDER BY ft.{embedding_col} <=> CAST(:query_vector AS halfvec)
                     LIMIT :top_k_vector
                 ),
                 keyword_search AS (
@@ -216,15 +229,15 @@ class ForumSearchDebugger:
                 SELECT
                     fr.*,
                     fr.rrf_score,
-                    CASE 
-                        WHEN ft.content ILIKE '%' || :query_text || '%' 
-                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1 
-                        ELSE 0 
+                    CASE
+                        WHEN ft.content ILIKE '%' || :query_text || '%'
+                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN 1
+                        ELSE 0
                     END as exact_match,
-                    (fr.rrf_score + CASE 
-                        WHEN ft.content ILIKE '%' || :query_text || '%' 
-                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost 
-                        ELSE 0.0 
+                    (fr.rrf_score + CASE
+                        WHEN ft.content ILIKE '%' || :query_text || '%'
+                             OR ft.thread_name ILIKE '%' || :query_text || '%' THEN :exact_match_boost
+                        ELSE 0.0
                     END) as final_score
                 FROM fused_ranks fr
                 JOIN forum.forum_threads ft ON fr.id = ft.id
@@ -396,9 +409,18 @@ class ForumSearchDebugger:
 
         start_time = time.monotonic()
 
+        # 获取当前配置的 embedding 列
+        from src.chat.features.forum_search.services.forum_vector_db_service import (
+            get_embedding_column,
+        )
+
+        embedding_col = await get_embedding_column()
+        if "embedding_column" in self.config:
+            embedding_col = self.config["embedding_column"]
+
         async with AsyncSessionLocal() as session:
             sql_query = text(
-                """
+                f"""
                 SELECT
                     ft.id,
                     ft.thread_id,
@@ -409,10 +431,10 @@ class ForumSearchDebugger:
                     ft.channel_id,
                     ft.guild_id,
                     ft.created_at,
-                    ft.embedding <=> CAST(:query_vector AS halfvec) as vector_distance
+                    ft.{embedding_col} <=> CAST(:query_vector AS halfvec) as vector_distance
                 FROM forum.forum_threads ft
-                WHERE ft.embedding IS NOT NULL
-                    AND ft.embedding <=> CAST(:query_vector AS halfvec) <= :max_distance
+                WHERE ft.{embedding_col} IS NOT NULL
+                    AND ft.{embedding_col} <=> CAST(:query_vector AS halfvec) <= :max_distance
                 """
             )
 
@@ -604,6 +626,7 @@ def print_help():
 ║   rrf_k         - RRF 算法中的排名常数 (默认: 60)                             ║
 ║   final_k       - 最终返回的帖子数量 (默认: 5)                                ║
 ║   max_distance  - 最大距离阈值 (默认: 0.4)                                    ║
+║   embedding_column - 向量列名称: bge_embedding 或 qwen_embedding (默认: qwen_embedding) ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """)
 
@@ -660,10 +683,29 @@ async def main():
                     print("⚠️ 用法: /set <参数> <值>")
                     continue
                 param = parts[1]
+                raw_value = parts[2]
                 try:
-                    value = (
-                        int(parts[2]) if param != "max_distance" else float(parts[2])
-                    )
+                    # 根据参数类型转换值
+                    if param in ["top_k_vector", "top_k_fts", "rrf_k", "final_k"]:
+                        value = int(raw_value)
+                    elif param in ["max_distance", "exact_match_boost"]:
+                        value = float(raw_value)
+                    elif param == "embedding_column":
+                        # 验证 embedding 列是否有效
+                        if raw_value in ["bge_embedding", "qwen_embedding"]:
+                            value = raw_value
+                        else:
+                            print(
+                                f"⚠️ 无效的 embedding_column: {raw_value}，必须是 bge_embedding 或 qwen_embedding"
+                            )
+                            continue
+                    elif param == "use_hybrid":
+                        # 布尔值转换
+                        value = raw_value.lower() in ["true", "yes", "1", "y"]
+                    else:
+                        # 其他参数保持原样
+                        value = raw_value
+
                     if param in debugger.config:
                         debugger.config[param] = value
                         print(f"✅ 已设置 {param} = {value}")

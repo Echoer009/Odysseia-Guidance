@@ -5,10 +5,34 @@ from typing import Any, List, Dict
 
 from sqlalchemy import text
 from src.database.database import AsyncSessionLocal
-from src.chat.services.ollama_embedding_service import ollama_embedding_service
+from src.chat.services.ollama_embedding_service import (
+    ollama_embedding_service,
+    qwen_embedding_service,
+)
 from src.chat.config import chat_config
+from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
+
+
+async def get_embedding_column() -> str:
+    """根据数据库配置返回当前使用的 embedding 列名"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        return "qwen_embedding" if model == "qwen" else "bge_embedding"
+    except Exception:
+        return "bge_embedding"  # 默认使用 BGE
+
+
+async def get_embedding_service():
+    """根据数据库配置返回当前使用的 embedding 服务实例"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        if model == "qwen":
+            return qwen_embedding_service
+        return ollama_embedding_service
+    except Exception:
+        return ollama_embedding_service  # 默认使用 BGE
 
 
 class KnowledgeSearchService:
@@ -47,18 +71,27 @@ class KnowledgeSearchService:
         在 community.member_chunks 和 general_knowledge.knowledge_chunks
         两个表中执行混合搜索，并返回融合排序后的 chunk 结果。
         """
+        # 根据配置选择使用哪个 embedding 列
+        embedding_col = await get_embedding_column()
+        # 记录当前搜索配置
+        embedding_model = "Qwen" if embedding_col == "qwen_embedding" else "BGE"
+        log.info(
+            f"[知识库搜索配置] Embedding模型: {embedding_model} | 搜索模式: 混合搜索 (向量 + BM25) | "
+            f"向量列: {embedding_col} | TOP_K_VECTOR: {self.config['TOP_K_VECTOR']} | "
+            f"TOP_K_FTS: {self.config['TOP_K_FTS']} | RRF_K: {self.config['RRF_K']} | FINAL_K: {self.config['HYBRID_SEARCH_FINAL_K']}"
+        )
         # SQL 查询同时搜索两个 chunks 表
         sql_query = text(
-            """
+            f"""
             WITH semantic_search AS (
                 -- 社区成员向量搜索
                 (SELECT
                     'community' as source_table,
                     profile_id as document_id,
                     chunk_text,
-                    RANK() OVER (ORDER BY embedding <=> :query_vector) as rank
+                    RANK() OVER (ORDER BY {embedding_col} <=> :query_vector) as rank
                 FROM community.member_chunks
-                ORDER BY embedding <=> :query_vector
+                ORDER BY {embedding_col} <=> :query_vector
                 LIMIT :top_k_vector)
                 UNION ALL
                 -- 通用知识向量搜索
@@ -66,9 +99,9 @@ class KnowledgeSearchService:
                     'general_knowledge' as source_table,
                     document_id,
                     chunk_text,
-                    RANK() OVER (ORDER BY embedding <=> :query_vector) as rank
+                    RANK() OVER (ORDER BY {embedding_col} <=> :query_vector) as rank
                 FROM general_knowledge.knowledge_chunks
-                ORDER BY embedding <=> :query_vector
+                ORDER BY {embedding_col} <=> :query_vector
                 LIMIT :top_k_vector)
             ),
             keyword_search AS (
@@ -137,7 +170,9 @@ class KnowledgeSearchService:
         log.info(f"收到知识库混合搜索请求: '{query}'")
 
         try:
-            query_embedding = await ollama_embedding_service.generate_embedding(
+            # 根据配置选择对应的 embedding 服务
+            embedding_service = await get_embedding_service()
+            query_embedding = await embedding_service.generate_embedding(
                 text=query, task_type="retrieval_query"
             )
             if not query_embedding:

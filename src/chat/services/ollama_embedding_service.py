@@ -1,28 +1,43 @@
 # -*- coding: utf-8 -*-
-"""Ollama Embedding 服务类，使用本地 bge-m3 模型生成 embedding"""
+"""Ollama Embedding 服务类，支持 bge-m3 和 qwen3-embedding 模型生成 embedding"""
 
 import httpx
 import logging
-from typing import Optional, List
+from typing import Optional, List, Literal
 
-from src.chat.config.chat_config import OLLAMA_CONFIG
+from src.chat.config.chat_config import OLLAMA_CONFIG, QWEN_EMBEDDING_CONFIG
 
 log = logging.getLogger(__name__)
 
+# 支持的 embedding 模型类型
+EmbeddingModelType = Literal["bge", "qwen"]
+
 
 class OllamaEmbeddingService:
-    """Ollama Embedding 服务类，使用本地 bge-m3 模型生成 embedding"""
+    """Ollama Embedding 服务类，支持 bge-m3 和 qwen3-embedding 模型"""
 
-    def __init__(self, base_url: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        model_type: EmbeddingModelType = "bge",
+    ):
         """
         初始化 Ollama Embedding 服务
 
         Args:
             base_url: Ollama 服务地址，默认从配置文件读取
             model: 使用的模型名称，默认从配置文件读取
+            model_type: 模型类型，"bge" 或 "qwen"，决定使用哪个配置
         """
-        self.base_url = base_url or OLLAMA_CONFIG["BASE_URL"]
-        self.model = model or OLLAMA_CONFIG["MODEL"]
+        self.model_type = model_type
+        if model_type == "qwen":
+            config = QWEN_EMBEDDING_CONFIG
+            self.base_url = base_url or config["BASE_URL"]
+            self.model = model or config["MODEL"]
+        else:
+            self.base_url = base_url or OLLAMA_CONFIG["BASE_URL"]
+            self.model = model or OLLAMA_CONFIG["MODEL"]
 
     async def generate_embedding(
         self,
@@ -47,15 +62,16 @@ class OllamaEmbeddingService:
             # 清理文本中的无效 Unicode surrogate 字符
             text = self._clean_text(text)
 
-            # bge-m3 支持指令微调，添加指令前缀
-            instruction = ""
-            if task_type == "retrieval_query":
-                instruction = "为这个句子生成表示以用于检索相关文章："
-            elif task_type == "retrieval_document":
-                instruction = "为这个段落生成表示以用于检索："
-
-            # 组合指令和文本
-            prompt = f"{instruction}{text}" if instruction else text
+            # 根据模型类型决定是否添加指令前缀
+            # bge-m3 支持指令微调，qwen3-embedding 不需要指令前缀
+            prompt = text
+            if self.model_type == "bge":
+                instruction = ""
+                if task_type == "retrieval_query":
+                    instruction = "为这个句子生成表示以用于检索相关文章："
+                elif task_type == "retrieval_document":
+                    instruction = "为这个段落生成表示以用于检索："
+                prompt = f"{instruction}{text}" if instruction else text
 
             # 第一次调用需要加载模型到内存，需要更长的超时时间
             timeout = httpx.Timeout(120.0, connect=10.0)
@@ -121,17 +137,18 @@ class OllamaEmbeddingService:
             return []
 
         try:
-            # bge-m3 支持指令微调，添加指令前缀
-            instruction = ""
-            if task_type == "retrieval_query":
-                instruction = "为这个句子生成表示以用于检索相关文章："
-            elif task_type == "retrieval_document":
-                instruction = "为这个段落生成表示以用于检索："
-
-            # 组合指令和文本
-            prompts = [
-                f"{instruction}{text}" if instruction else text for text in texts
-            ]
+            # 根据模型类型决定是否添加指令前缀
+            # bge-m3 支持指令微调，qwen3-embedding 不需要指令前缀
+            prompts = texts
+            if self.model_type == "bge":
+                instruction = ""
+                if task_type == "retrieval_query":
+                    instruction = "为这个句子生成表示以用于检索相关文章："
+                elif task_type == "retrieval_document":
+                    instruction = "为这个段落生成表示以用于检索："
+                prompts = [
+                    f"{instruction}{text}" if instruction else text for text in texts
+                ]
 
             # 使用 Ollama 的批量 API
             timeout = httpx.Timeout(300.0, connect=10.0)
@@ -204,4 +221,5 @@ class OllamaEmbeddingService:
 
 
 # 全局实例
-ollama_embedding_service = OllamaEmbeddingService()
+ollama_embedding_service = OllamaEmbeddingService(model_type="bge")
+qwen_embedding_service = OllamaEmbeddingService(model_type="qwen")

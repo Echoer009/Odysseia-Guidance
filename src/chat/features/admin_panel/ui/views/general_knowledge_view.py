@@ -119,6 +119,26 @@ class GeneralKnowledgeView(BaseTableView):
                 )
                 count_result = cursor.fetchone()
                 total_rows = count_result["count"] if count_result else 0
+
+                # 查询 knowledge_chunks 表的 embedding 统计
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks"
+                )
+                chunks_result = cursor.fetchone()
+                total_chunks = chunks_result["count"] if chunks_result else 0
+
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks WHERE bge_embedding IS NOT NULL"
+                )
+                bge_result = cursor.fetchone()
+                bge_count = bge_result["count"] if bge_result else 0
+
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks WHERE qwen_embedding IS NOT NULL"
+                )
+                qwen_result = cursor.fetchone()
+                qwen_count = qwen_result["count"] if qwen_result else 0
+
                 self.total_pages = (
                     total_rows + self.items_per_page - 1
                 ) // self.items_per_page
@@ -131,6 +151,13 @@ class GeneralKnowledgeView(BaseTableView):
                 self.current_list_items = page_items
                 embed = discord.Embed(
                     title="浏览：通用知识", color=discord.Color.green()
+                )
+
+                # 添加 embedding 统计信息
+                embed.add_field(
+                    name="📊 Embedding 统计 (Chunks)",
+                    value=f"🟢 BGE: {bge_count}/{total_chunks} | 🔵 Qwen: {qwen_count}/{total_chunks}",
+                    inline=False,
                 )
 
             if not page_items:
@@ -171,6 +198,48 @@ class GeneralKnowledgeView(BaseTableView):
             title=f"查看详情: {title}",
             description=f"表: `general_knowledge.knowledge_documents` | ID: `#{self.current_item_id}`",
             color=discord.Color.blue(),
+        )
+
+        # 查询该知识文档的向量统计信息
+        conn = self._get_db_connection()
+        bge_count = 0
+        qwen_count = 0
+        total_chunks = 0
+        if conn:
+            try:
+                cursor = db_services.get_cursor(conn)
+                # 查询该文档的 chunks 总数
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks WHERE document_id = %s",
+                    (self.current_item_id,),
+                )
+                chunks_result = cursor.fetchone()
+                total_chunks = chunks_result["count"] if chunks_result else 0
+
+                # 查询该文档的 BGE embedding 数量
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks WHERE document_id = %s AND bge_embedding IS NOT NULL",
+                    (self.current_item_id,),
+                )
+                bge_result = cursor.fetchone()
+                bge_count = bge_result["count"] if bge_result else 0
+
+                # 查询该文档的 Qwen embedding 数量
+                cursor.execute(
+                    "SELECT COUNT(*) FROM general_knowledge.knowledge_chunks WHERE document_id = %s AND qwen_embedding IS NOT NULL",
+                    (self.current_item_id,),
+                )
+                qwen_result = cursor.fetchone()
+                qwen_count = qwen_result["count"] if qwen_result else 0
+            finally:
+                if conn:
+                    conn.close()
+
+        # 添加 Embedding 统计信息到详情页
+        embed.add_field(
+            name="📊 Embedding 统计 (Chunks)",
+            value=f"🟢 BGE: {bge_count}/{total_chunks} | 🔵 Qwen: {qwen_count}/{total_chunks}",
+            inline=False,
         )
 
         def _try_parse_json(data: Any) -> Any:

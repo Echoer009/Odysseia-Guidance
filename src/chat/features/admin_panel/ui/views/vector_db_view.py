@@ -68,6 +68,13 @@ class VectorDBView(BaseTableView):
         self.back_button.callback = self.go_to_list_view
         self.add_item(self.back_button)
 
+        # 添加删除按钮
+        self.delete_button = discord.ui.Button(
+            label="删除帖子", emoji="🗑️", style=discord.ButtonStyle.danger
+        )
+        self.delete_button.callback = self.delete_thread
+        self.add_item(self.delete_button)
+
     async def search_vector_db(self, interaction: discord.Interaction):
         modal = SearchVectorDBModal(self)
         await interaction.response.send_modal(modal)
@@ -193,6 +200,21 @@ class VectorDBView(BaseTableView):
                     )
                     total_items = total_result.scalar() or 0
 
+                    # 获取 BGE/Qwen embedding 统计
+                    bge_count_result = await session.execute(
+                        select(func.count(ForumThread.id)).where(
+                            ForumThread.bge_embedding.isnot(None)
+                        )
+                    )
+                    bge_count = bge_count_result.scalar() or 0
+
+                    qwen_count_result = await session.execute(
+                        select(func.count(ForumThread.id)).where(
+                            ForumThread.qwen_embedding.isnot(None)
+                        )
+                    )
+                    qwen_count = qwen_count_result.scalar() or 0
+
                     # 获取分页数据
                     offset = self.current_page * self.items_per_page
                     result = await session.execute(
@@ -209,6 +231,8 @@ class VectorDBView(BaseTableView):
                             {
                                 "id": thread.thread_id,
                                 "content": thread.content or "",  # 添加正文内容
+                                "has_bge": thread.bge_embedding is not None,
+                                "has_qwen": thread.qwen_embedding is not None,
                                 "metadata": {
                                     "thread_id": thread.thread_id,
                                     "thread_name": thread.thread_name,
@@ -231,6 +255,13 @@ class VectorDBView(BaseTableView):
                     title=f"浏览: {table_display_name}", color=discord.Color.purple()
                 )
 
+                # 添加 embedding 统计信息
+                embed.add_field(
+                    name="📊 Embedding 统计",
+                    value=f"🟢 BGE: {bge_count}/{total_items} | 🔵 Qwen: {qwen_count}/{total_items}",
+                    inline=False,
+                )
+
             self.total_pages = (
                 total_items + self.items_per_page - 1
             ) // self.items_per_page
@@ -240,7 +271,7 @@ class VectorDBView(BaseTableView):
             else:
                 list_text = "\n".join(
                     [
-                        f"**`#{item.get('id', 'N/A')}`** - {self._get_entry_title(item)}"
+                        f"**`#{item.get('id', 'N/A')}`** {self._get_embedding_status(item)} - {self._get_entry_title(item)}"
                         for item in page_items
                     ]
                 )
@@ -257,6 +288,20 @@ class VectorDBView(BaseTableView):
                 description=f"加载向量数据库时发生错误: {e}",
                 color=discord.Color.red(),
             )
+
+    def _get_embedding_status(self, item: Dict[str, Any]) -> str:
+        """获取条目的 embedding 状态图标"""
+        has_bge = item.get("has_bge", False)
+        has_qwen = item.get("has_qwen", False)
+
+        if has_bge and has_qwen:
+            return "🟢🔵"  # 两种都有
+        elif has_bge:
+            return "🟢"  # 只有 BGE
+        elif has_qwen:
+            return "🔵"  # 只有 Qwen
+        else:
+            return "⚪"  # 都没有
 
     async def _build_detail_embed(self) -> discord.Embed:
         """构建详情视图的 Embed"""
@@ -323,6 +368,22 @@ class VectorDBView(BaseTableView):
                 inline=False,
             )
 
+            # 添加 Embedding 状态
+            has_bge = entry.get("has_bge", False)
+            has_qwen = entry.get("has_qwen", False)
+            bge_status = "✅ 已生成" if has_bge else "❌ 未生成"
+            qwen_status = "✅ 已生成" if has_qwen else "❌ 未生成"
+            embed.add_field(
+                name="🟢 BGE Embedding",
+                value=bge_status,
+                inline=True,
+            )
+            embed.add_field(
+                name="🔵 Qwen Embedding",
+                value=qwen_status,
+                inline=True,
+            )
+
             # 添加帖子正文内容
             content = entry.get("content", "")
             if content:
@@ -356,3 +417,72 @@ class VectorDBView(BaseTableView):
                 description=f"加载详情时发生错误: {e}",
                 color=discord.Color.red(),
             )
+
+    async def delete_thread(self, interaction: discord.Interaction):
+        """删除当前选中的帖子（从数据库中删除）"""
+        if not self.current_item_id:
+            return await interaction.response.send_message(
+                "没有可删除的条目。", ephemeral=True
+            )
+
+        thread_id = self.current_item_id
+
+        # 确认删除视图
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            try:
+                async with AsyncSessionLocal() as session:
+                    async with session.begin():
+                        # 查找并删除帖子
+                        result = await session.execute(
+                            select(ForumThread).where(
+                                ForumThread.thread_id == int(thread_id)
+                            )
+                        )
+                        thread_to_delete = result.scalar_one_or_none()
+
+                        if thread_to_delete:
+                            await session.delete(thread_to_delete)
+                            log.info(
+                                f"管理员 {interaction.user.display_name} 删除了帖子 {thread_id}"
+                            )
+                            await interaction.response.edit_message(
+                                content=f"🗑️ 帖子 `{thread_id}` 已从向量数据库中删除。",
+                                view=None,
+                            )
+                            # 返回列表视图
+                            self.view_mode = "list"
+                            self.current_item_id = None
+                            await self.update_view()
+                        else:
+                            await interaction.response.edit_message(
+                                content=f"❌ 找不到帖子 `{thread_id}`。", view=None
+                            )
+            except Exception as e:
+                log.error(f"删除帖子时出错: {e}", exc_info=True)
+                await interaction.response.edit_message(
+                    content=f"删除失败: {e}", view=None
+                )
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(
+                content="删除操作已取消。", view=None
+            )
+
+        confirm_button = discord.ui.Button(
+            label="确认删除", style=discord.ButtonStyle.danger
+        )
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.response.send_message(
+            f"**⚠️ 确认删除**\n你确定要从向量数据库中删除帖子 `{thread_id}` 吗？\n\n**注意**：这只会删除向量数据库中的记录，不会删除 Discord 上的原帖子。",
+            view=confirm_view,
+            ephemeral=True,
+        )

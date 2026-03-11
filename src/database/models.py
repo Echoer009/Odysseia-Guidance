@@ -16,7 +16,8 @@ from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
 from pgvector.sqlalchemy import HALFVEC
 
 # --- 全局配置 ---
-EMBEDDING_DIMENSION = 1024  # bge-m3 模型使用 1024 维度
+EMBEDDING_DIMENSION = 1024  # bge-m3 和 qwen3-embedding-0.6B 模型都使用 1024 维度
+QWEN_EMBEDDING_DIMENSION = 1024  # qwen3-embedding-0.6B 模型的维度
 
 # --- Schema 名称 ---
 TUTORIALS_SCHEMA = "tutorials"
@@ -82,11 +83,18 @@ class KnowledgeChunk(Base):
         # ),
         # HNSW 索引定义现在是准确的，包含了 pgvector 必需的操作符类。
         Index(
-            "idx_embedding_hnsw",
-            "embedding",
+            "idx_bge_embedding_hnsw",
+            "bge_embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+            postgresql_ops={"bge_embedding": "halfvec_cosine_ops"},
+        ),
+        Index(
+            "idx_qwen_embedding_hnsw",
+            "qwen_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"qwen_embedding": "halfvec_cosine_ops"},
         ),
         {"schema": TUTORIALS_SCHEMA},
     )
@@ -101,10 +109,15 @@ class KnowledgeChunk(Base):
     chunk_text = Column(Text, nullable=False, comment="这个特定文本块的内容。")
     chunk_order = Column(Integer, nullable=False, comment="文本块在文档中的序列号。")
 
-    embedding = Column(
+    bge_embedding = Column(
         HALFVEC(EMBEDDING_DIMENSION),
         nullable=False,
-        comment="此文本块的半精度嵌入向量。",
+        comment="BGE-M3 模型的嵌入向量。",
+    )
+    qwen_embedding = Column(
+        HALFVEC(QWEN_EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="Qwen3-Embedding-0.6B 模型的嵌入向量。",
     )
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -186,11 +199,18 @@ class GeneralKnowledgeChunk(Base):
     __table_args__ = (
         # HNSW 索引用于向量搜索
         Index(
-            "idx_gk_embedding_hnsw",
-            "embedding",
+            "idx_gk_bge_embedding_hnsw",
+            "bge_embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+            postgresql_ops={"bge_embedding": "halfvec_cosine_ops"},
+        ),
+        Index(
+            "idx_gk_qwen_embedding_hnsw",
+            "qwen_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"qwen_embedding": "halfvec_cosine_ops"},
         ),
         {"schema": GENERAL_KNOWLEDGE_SCHEMA},
     )
@@ -207,10 +227,15 @@ class GeneralKnowledgeChunk(Base):
     chunk_index = Column(Integer, nullable=False, comment="分块在文档中的序号")
     chunk_text = Column(Text, nullable=False, comment="这个特定文本块的内容")
 
-    embedding = Column(
+    bge_embedding = Column(
         HALFVEC(EMBEDDING_DIMENSION),
         nullable=False,
-        comment="此文本块的半精度嵌入向量",
+        comment="BGE-M3 模型的嵌入向量。",
+    )
+    qwen_embedding = Column(
+        HALFVEC(QWEN_EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="Qwen3-Embedding-0.6B 模型的嵌入向量。",
     )
 
     created_at = Column(DateTime, server_default=func.now())
@@ -278,11 +303,18 @@ class CommunityMemberChunk(Base):
     __table_args__ = (
         # HNSW 索引用于向量搜索
         Index(
-            "idx_cm_embedding_hnsw",
-            "embedding",
+            "idx_cm_bge_embedding_hnsw",
+            "bge_embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+            postgresql_ops={"bge_embedding": "halfvec_cosine_ops"},
+        ),
+        Index(
+            "idx_cm_qwen_embedding_hnsw",
+            "qwen_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"qwen_embedding": "halfvec_cosine_ops"},
         ),
         {"schema": COMMUNITY_SCHEMA},
     )
@@ -297,10 +329,15 @@ class CommunityMemberChunk(Base):
     chunk_index = Column(Integer, nullable=False, comment="分块在档案中的序号")
     chunk_text = Column(Text, nullable=False, comment="这个特定文本块的内容")
 
-    embedding = Column(
+    bge_embedding = Column(
         HALFVEC(EMBEDDING_DIMENSION),
         nullable=False,
-        comment="此文本块的半精度嵌入向量",
+        comment="BGE-M3 模型的嵌入向量。",
+    )
+    qwen_embedding = Column(
+        HALFVEC(QWEN_EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="Qwen3-Embedding-0.6B 模型的嵌入向量。",
     )
 
     created_at = Column(DateTime, server_default=func.now())
@@ -424,11 +461,18 @@ class ForumThread(Base):
     __table_args__ = (
         # HNSW 向量索引用于向量相似度搜索
         Index(
-            "idx_forum_embedding_hnsw",
-            "embedding",
+            "idx_forum_bge_embedding_hnsw",
+            "bge_embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "halfvec_cosine_ops"},
+            postgresql_ops={"bge_embedding": "halfvec_cosine_ops"},
+        ),
+        Index(
+            "idx_forum_qwen_embedding_hnsw",
+            "qwen_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"qwen_embedding": "halfvec_cosine_ops"},
         ),
         # 创建时间索引用于排序
         Index("idx_forum_created_at", "created_at"),
@@ -482,10 +526,15 @@ class ForumThread(Base):
     source_metadata: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, comment="来自旧系统的完整元数据备份"
     )
-    embedding: Mapped[list[float] | None] = mapped_column(
+    bge_embedding: Mapped[list[float] | None] = mapped_column(
         HALFVEC(EMBEDDING_DIMENSION),
         nullable=True,
-        comment="整帖内容的向量嵌入（用于语义搜索）",
+        comment="BGE-M3 模型的整帖内容向量嵌入（用于语义搜索）",
+    )
+    qwen_embedding: Mapped[list[float] | None] = mapped_column(
+        HALFVEC(QWEN_EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="Qwen3-Embedding-0.6B 模型的整帖内容向量嵌入（用于语义搜索）",
     )
 
     # 数据库管理时间戳

@@ -288,6 +288,111 @@ class ChatSettingsService:
         """设置全局AI模型。"""
         await self.db_manager.set_global_setting("ai_model", model)
 
+    # --- Embedding Model Settings ---
+
+    def get_available_embedding_models(self) -> List[Dict[str, str]]:
+        """获取所有可用的 Embedding 模型及其配置。"""
+        return [
+            {
+                "id": "bge",
+                "name": "BGE-M3",
+                "model_name": "bge-m3",
+                "description": "通用多语言嵌入模型，需要指令前缀",
+            },
+            {
+                "id": "qwen",
+                "name": "Qwen3-Embedding-0.6B",
+                "model_name": "qwen3-embedding-0.6b",
+                "description": "阿里通义千问嵌入模型，无需指令前缀",
+            },
+        ]
+
+    async def get_current_embedding_model(self) -> str:
+        """获取当前设置的 Embedding 模型 ID。"""
+        model = await self.db_manager.get_global_setting("embedding_model")
+        return model if model else "bge"  # 默认使用 BGE-M3
+
+    async def set_embedding_model(self, model_id: str) -> None:
+        """设置 Embedding 模型。"""
+        available_ids = [m["id"] for m in self.get_available_embedding_models()]
+        if model_id not in available_ids:
+            raise ValueError(f"无效的 Embedding 模型 ID: {model_id}")
+        await self.db_manager.set_global_setting("embedding_model", model_id)
+
+    async def get_embedding_config(self) -> Dict[str, Any]:
+        """获取当前 Embedding 模型的完整配置。"""
+        current_model_id = await self.get_current_embedding_model()
+        models = self.get_available_embedding_models()
+        for model in models:
+            if model["id"] == current_model_id:
+                return model
+        return models[0]  # 默认返回第一个
+
+    # --- Embedding Model Disable Settings ---
+
+    async def get_disabled_embedding_models(self) -> List[str]:
+        """
+        获取被禁用的 Embedding 模型 ID 列表。
+        禁用的模型不会在写入时生成向量（但已有的向量仍可被搜索）。
+        """
+        disabled_str = await self.db_manager.get_global_setting(
+            "disabled_embedding_models"
+        )
+        if not disabled_str:
+            return []
+        # 存储格式为逗号分隔的模型 ID，如 "bge,qwen"
+        return [m.strip() for m in disabled_str.split(",") if m.strip()]
+
+    async def set_disabled_embedding_models(self, model_ids: List[str]) -> None:
+        """
+        设置被禁用的 Embedding 模型列表。
+
+        Args:
+            model_ids: 要禁用的模型 ID 列表（如 ["bge"] 或 ["qwen"]）
+        """
+        available_ids = [m["id"] for m in self.get_available_embedding_models()]
+        for model_id in model_ids:
+            if model_id not in available_ids:
+                raise ValueError(f"无效的 Embedding 模型 ID: {model_id}")
+
+        # 不能禁用所有模型
+        if set(model_ids) == set(available_ids):
+            raise ValueError("不能禁用所有 Embedding 模型，至少需要保留一个")
+
+        disabled_str = ",".join(model_ids) if model_ids else ""
+        await self.db_manager.set_global_setting(
+            "disabled_embedding_models", disabled_str
+        )
+
+    async def is_embedding_model_disabled(self, model_id: str) -> bool:
+        """检查指定的 Embedding 模型是否被禁用。"""
+        disabled_models = await self.get_disabled_embedding_models()
+        return model_id in disabled_models
+
+    async def toggle_embedding_model_disabled(self, model_id: str) -> bool:
+        """
+        切换 Embedding 模型的禁用状态。
+
+        Returns:
+            bool: 切换后的状态（True 表示已禁用）
+        """
+        available_ids = [m["id"] for m in self.get_available_embedding_models()]
+        if model_id not in available_ids:
+            raise ValueError(f"无效的 Embedding 模型 ID: {model_id}")
+
+        disabled_models = await self.get_disabled_embedding_models()
+
+        if model_id in disabled_models:
+            # 取消禁用
+            disabled_models.remove(model_id)
+            await self.set_disabled_embedding_models(disabled_models)
+            return False
+        else:
+            # 添加禁用
+            disabled_models.append(model_id)
+            await self.set_disabled_embedding_models(disabled_models)
+            return True
+
     # --- AI Model Usage ---
 
     async def increment_model_usage(self, model_name: str) -> None:

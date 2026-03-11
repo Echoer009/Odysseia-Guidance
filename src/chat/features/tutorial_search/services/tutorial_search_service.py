@@ -14,6 +14,32 @@ import os
 from src.chat.features.tutorial_search.services.thread_settings_service import (
     thread_settings_service,
 )
+from src.chat.utils.database import chat_db_manager
+from src.chat.services.ollama_embedding_service import (
+    ollama_embedding_service,
+    qwen_embedding_service,
+)
+
+
+async def get_embedding_column() -> str:
+    """根据数据库配置返回当前使用的 embedding 列名"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        return "qwen_embedding" if model == "qwen" else "bge_embedding"
+    except Exception:
+        return "bge_embedding"  # 默认使用 BGE
+
+
+async def get_embedding_service():
+    """根据数据库配置返回当前使用的 embedding 服务实例"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        if model == "qwen":
+            return qwen_embedding_service
+        return ollama_embedding_service
+    except Exception:
+        return ollama_embedding_service  # 默认使用 BGE
+
 
 # --- RAG 追踪日志系统 ---
 LOG_DIR = "logs"
@@ -58,17 +84,19 @@ class TutorialSearchService:
         search_mode: str = "ISOLATED",
     ) -> List:
         """使用原生 SQL 在数据库中执行高效的混合搜索和 RRF 融合，返回最佳 chunk 及其分数。"""
+        # 根据配置选择使用哪个 embedding 列
+        embedding_col = await get_embedding_column()
         # We need to join with tutorial_documents to get the thread_id
         sql_query = text(
-            """
+            f"""
             WITH semantic_search AS (
                 SELECT
                     kc.id,
-                    RANK() OVER (ORDER BY kc.embedding <=> :query_vector) as rank,
+                    RANK() OVER (ORDER BY kc.{embedding_col} <=> :query_vector) as rank,
                     td.thread_id
                 FROM tutorials.knowledge_chunks kc
                 JOIN tutorials.tutorial_documents td ON kc.document_id = td.id
-                ORDER BY kc.embedding <=> :query_vector
+                ORDER BY kc.{embedding_col} <=> :query_vector
                 LIMIT :top_k_vector
             ),
             keyword_search AS (
@@ -220,11 +248,9 @@ class TutorialSearchService:
         log.info(f"收到来自用户 '{user_id}' 的教程知识库搜索请求: '{query}'")
 
         try:
-            from src.chat.services.ollama_embedding_service import (
-                ollama_embedding_service,
-            )
-
-            query_embedding = await ollama_embedding_service.generate_embedding(
+            # 根据配置选择对应的 embedding 服务
+            embedding_service = await get_embedding_service()
+            query_embedding = await embedding_service.generate_embedding(
                 text=query, task_type="retrieval_query"
             )
             if not query_embedding:

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import asyncio
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Optional
 import discord
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -25,10 +26,11 @@ class ForumSearchService:
 
     def __init__(self):
         self.ollama_embedding_service = None
+        self.qwen_embedding_service = None
         self.vector_db_service = forum_vector_db_service
 
     def _get_ollama_embedding_service(self):
-        """延迟导入 Ollama embedding 服务以避免循环导入。"""
+        """延迟导入 Ollama embedding 服务（BGE-M3）以避免循环导入。"""
         if self.ollama_embedding_service is None:
             from src.chat.services.ollama_embedding_service import (
                 ollama_embedding_service,
@@ -36,6 +38,89 @@ class ForumSearchService:
 
             self.ollama_embedding_service = ollama_embedding_service
         return self.ollama_embedding_service
+
+    def _get_qwen_embedding_service(self):
+        """延迟导入 Qwen embedding 服务以避免循环导入。"""
+        if self.qwen_embedding_service is None:
+            from src.chat.services.ollama_embedding_service import (
+                qwen_embedding_service,
+            )
+
+            self.qwen_embedding_service = qwen_embedding_service
+        return self.qwen_embedding_service
+
+    async def _generate_dual_embeddings(
+        self, document_text: str, title: str
+    ) -> Tuple[Optional[List[float]], Optional[List[float]]]:
+        """
+        并行生成 BGE 和 Qwen 两种 embedding。
+        会检查禁用状态，跳过被禁用的模型。
+
+        Args:
+            document_text: 文档文本
+            title: 标题
+
+        Returns:
+            Tuple[bge_embedding, qwen_embedding]: 两种 embedding，如果生成失败或被禁用则为 None
+        """
+        from src.chat.utils.database import chat_db_manager
+
+        # 获取禁用的模型列表
+        try:
+            disabled_str = await chat_db_manager.get_global_setting(
+                "disabled_embedding_models"
+            )
+            disabled_models = (
+                [m.strip() for m in disabled_str.split(",") if m.strip()]
+                if disabled_str
+                else []
+            )
+        except Exception:
+            disabled_models = []
+
+        bge_service = self._get_ollama_embedding_service()
+        qwen_service = self._get_qwen_embedding_service()
+
+        # 根据禁用状态决定是否生成 embedding
+        tasks = []
+        task_names = []
+
+        if "bge" not in disabled_models:
+            tasks.append(
+                bge_service.generate_embedding(
+                    text=document_text, title=title, task_type="retrieval_document"
+                )
+            )
+            task_names.append("bge")
+        else:
+            log.debug("[FORUM_SEARCH] BGE 模型已禁用，跳过生成 embedding")
+
+        if "qwen" not in disabled_models:
+            tasks.append(
+                qwen_service.generate_embedding(
+                    text=document_text, title=title, task_type="retrieval_document"
+                )
+            )
+            task_names.append("qwen")
+        else:
+            log.debug("[FORUM_SEARCH] Qwen 模型已禁用，跳过生成 embedding")
+
+        # 并行生成
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        bge_embedding: Optional[List[float]] = None
+        qwen_embedding: Optional[List[float]] = None
+
+        for i, name in enumerate(task_names):
+            if isinstance(results[i], Exception):
+                log.error(f"生成 {name} embedding 失败: {results[i]}")
+            elif isinstance(results[i], list):
+                if name == "bge":
+                    bge_embedding = list(results[i])  # type: ignore
+                elif name == "qwen":
+                    qwen_embedding = list(results[i])  # type: ignore
+
+        return bge_embedding, qwen_embedding
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好。"""
@@ -101,13 +186,12 @@ class ForumSearchService:
             # ParadeDB 使用整帖向量化，不进行分块
             document_text = f"{title}\n\n{content}"
 
-            # 6. 为整帖生成嵌入向量
-            ollama_embedding_service = self._get_ollama_embedding_service()
-            embedding = await ollama_embedding_service.generate_embedding(
-                text=document_text, title=title, task_type="retrieval_document"
+            # 6. 并行生成两种 embedding（双写策略）
+            bge_embedding, qwen_embedding = await self._generate_dual_embeddings(
+                document_text, title
             )
-            if not embedding:
-                log.warning(f"无法为帖子 {thread.id} 生成嵌入向量。")
+            if not bge_embedding and not qwen_embedding:
+                log.warning(f"无法为帖子 {thread.id} 生成任何嵌入向量。")
                 return
 
             # 7. 构建源元数据
@@ -121,7 +205,7 @@ class ForumSearchService:
                 "guild_id": thread.guild.id,
             }
 
-            # 8. 写入 ParadeDB
+            # 8. 写入 ParadeDB（双写两种 embedding）
             # Discord 的 created_at 是带时区的，需要转换为不带时区的 datetime
             created_at = (
                 thread.created_at if thread.created_at else datetime.now(BEIJING_TZ)
@@ -139,12 +223,13 @@ class ForumSearchService:
                 channel_id=thread.parent_id,
                 guild_id=thread.guild.id,
                 created_at=created_at,
-                embedding=embedding,
+                bge_embedding=bge_embedding,
+                qwen_embedding=qwen_embedding,
                 source_metadata=source_metadata,
             )
 
             if success:
-                log.info(f"成功将帖子 {thread.id} 添加到 ParadeDB。")
+                log.info(f"成功将帖子 {thread.id} 添加到 ParadeDB（双写 BGE + Qwen）。")
             else:
                 log.warning(f"添加帖子 {thread.id} 到 ParadeDB 失败。")
 
@@ -162,8 +247,6 @@ class ForumSearchService:
         if not self.is_ready():
             log.warning("论坛搜索服务尚未准备就绪，无法添加文档。")
             return
-
-        ollama_embedding_service = self._get_ollama_embedding_service()
 
         for doc_id, document, metadata in zip(ids, documents, metadatas):
             try:
@@ -188,15 +271,15 @@ class ForumSearchService:
                 # 3. 构建用于向量化的文本（标题 + 内容）
                 document_text = f"{title}\n\n{document}"
 
-                # 4. 生成嵌入向量
-                embedding = await ollama_embedding_service.generate_embedding(
-                    text=document_text, title=title, task_type="retrieval_document"
+                # 4. 并行生成两种 embedding（双写策略）
+                bge_embedding, qwen_embedding = await self._generate_dual_embeddings(
+                    document_text, title
                 )
-                if not embedding:
-                    log.warning(f"无法为文档 {doc_id} 生成嵌入向量。")
+                if not bge_embedding and not qwen_embedding:
+                    log.warning(f"无法为文档 {doc_id} 生成任何嵌入向量。")
                     continue
 
-                # 5. 写入 ParadeDB
+                # 5. 写入 ParadeDB（双写两种 embedding）
                 success = await self.vector_db_service.add_document(
                     thread_id=int(doc_id),
                     thread_name=title,
@@ -207,12 +290,13 @@ class ForumSearchService:
                     channel_id=channel_id,
                     guild_id=guild_id,
                     created_at=created_at,
-                    embedding=embedding,
+                    bge_embedding=bge_embedding,
+                    qwen_embedding=qwen_embedding,
                     source_metadata=metadata,
                 )
 
                 if success:
-                    log.info(f"成功添加文档 {doc_id} 到 ParadeDB。")
+                    log.info(f"成功添加文档 {doc_id} 到 ParadeDB（双写 BGE + Qwen）。")
                 else:
                     log.warning(f"添加文档 {doc_id} 到 ParadeDB 失败。")
 
@@ -289,8 +373,21 @@ class ForumSearchService:
                         log.info("RAG功能未启用：未配置API密钥，跳过混合搜索。")
                         return []
                     log.info(f"[FORUM_SEARCH] 执行混合搜索，查询: '{query}'")
-                    ollama_embedding_service = self._get_ollama_embedding_service()
-                    query_embedding = await ollama_embedding_service.generate_embedding(
+                    # 根据配置选择对应的 embedding 服务
+                    from src.chat.utils.database import chat_db_manager
+
+                    try:
+                        model = await chat_db_manager.get_global_setting(
+                            "embedding_model"
+                        )
+                        if model == "qwen":
+                            embedding_service = self._get_qwen_embedding_service()
+                        else:
+                            embedding_service = self._get_ollama_embedding_service()
+                    except Exception:
+                        embedding_service = self._get_ollama_embedding_service()
+
+                    query_embedding = await embedding_service.generate_embedding(
                         text=query, task_type="retrieval_query"
                     )
                     if not query_embedding:

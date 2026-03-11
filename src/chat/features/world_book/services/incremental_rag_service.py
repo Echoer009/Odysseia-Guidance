@@ -8,6 +8,17 @@ import json
 import psycopg2
 from psycopg2.extras import DictCursor
 
+from src.chat.utils.database import chat_db_manager
+
+
+async def get_embedding_column() -> str:
+    """根据数据库配置返回当前使用的 embedding 列名"""
+    try:
+        model = await chat_db_manager.get_global_setting("embedding_model")
+        return "qwen_embedding" if model == "qwen" else "bge_embedding"
+    except Exception:
+        return "bge_embedding"  # 默认使用 BGE
+
 
 def async_retry(retries=3, delay=5):
     """
@@ -489,45 +500,116 @@ class IncrementalRAGService:
                 for chunk_index, chunk_content in enumerate(chunks):
                     log.debug(f"正在为块 {chunk_index} 生成嵌入向量...")
 
-                    # 生成嵌入向量
-                    ollama_embedding_service = self._get_ollama_embedding_service()
-                    embedding = await ollama_embedding_service.generate_embedding(
-                        text=chunk_content,
-                        title=entry.get("title", entry_id),
-                        task_type="retrieval_document",
+                    # 导入两个 embedding 服务实例
+                    from src.chat.services.ollama_embedding_service import (
+                        ollama_embedding_service as bge_service,
+                        qwen_embedding_service as qwen_service,
                     )
 
-                    if not embedding:
-                        log.error(f"无法为块 {chunk_index} 生成嵌入向量")
-                        raise Exception(f"无法为块 {chunk_index} 生成嵌入向量")
+                    # 获取禁用的模型列表
+                    try:
+                        disabled_str = await chat_db_manager.get_global_setting(
+                            "disabled_embedding_models"
+                        )
+                        disabled_models = (
+                            [m.strip() for m in disabled_str.split(",") if m.strip()]
+                            if disabled_str
+                            else []
+                        )
+                    except Exception:
+                        disabled_models = []
 
-                    # 将嵌入向量转换为 PostgreSQL vector 类型要求的格式
-                    # vector 类型需要数组格式，如 '[0.1, 0.2, 0.3]'
-                    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+                    # 根据禁用状态决定是否生成 embedding
+                    tasks = []
+                    task_names = []
+
+                    if "bge" not in disabled_models:
+                        tasks.append(
+                            bge_service.generate_embedding(
+                                text=chunk_content,
+                                title=entry.get("title", entry_id),
+                                task_type="retrieval_document",
+                            )
+                        )
+                        task_names.append("bge")
+                    else:
+                        log.debug(
+                            "[INCREMENTAL_RAG] BGE 模型已禁用，跳过生成 embedding"
+                        )
+
+                    if "qwen" not in disabled_models:
+                        tasks.append(
+                            qwen_service.generate_embedding(
+                                text=chunk_content,
+                                title=entry.get("title", entry_id),
+                                task_type="retrieval_document",
+                            )
+                        )
+                        task_names.append("qwen")
+                    else:
+                        log.debug(
+                            "[INCREMENTAL_RAG] Qwen 模型已禁用，跳过生成 embedding"
+                        )
+
+                    # 等待 embedding 任务完成
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # 检查结果
+                    bge_embedding_str: str | None = None
+                    qwen_embedding_str: str | None = None
+
+                    for i, name in enumerate(task_names):
+                        result = results[i]
+                        if isinstance(result, Exception):
+                            log.error(f"生成 {name} embedding 失败: {result}")
+                        elif isinstance(result, list):
+                            embedding_str = "[" + ",".join(str(x) for x in result) + "]"
+                            if name == "bge":
+                                bge_embedding_str = embedding_str
+                            elif name == "qwen":
+                                qwen_embedding_str = embedding_str
+                        else:
+                            log.error(f"无法为块 {chunk_index} 生成 {name} 嵌入向量")
+
+                    # 至少需要一个 embedding 才能继续
+                    if not bge_embedding_str and not qwen_embedding_str:
+                        raise Exception(f"无法为块 {chunk_index} 生成任何嵌入向量")
 
                     if table_type == "community":
-                        # 插入到 community.member_chunks 表
+                        # 插入到 community.member_chunks 表（双写）
                         cursor.execute(
                             """
                             INSERT INTO community.member_chunks
-                            (profile_id, chunk_index, chunk_text, embedding)
-                            VALUES (%s, %s, %s, %s::vector)
+                            (profile_id, chunk_index, chunk_text, bge_embedding, qwen_embedding)
+                            VALUES (%s, %s, %s, %s::vector, %s::vector)
                             """,
-                            (entry_id, chunk_index, chunk_content, embedding_str),
+                            (
+                                entry_id,
+                                chunk_index,
+                                chunk_content,
+                                bge_embedding_str,
+                                qwen_embedding_str,
+                            ),
                         )
                     else:  # general_knowledge
-                        # 插入到 general_knowledge.knowledge_chunks 表
+                        # 插入到 general_knowledge.knowledge_chunks 表（双写）
                         cursor.execute(
                             """
                             INSERT INTO general_knowledge.knowledge_chunks
-                            (document_id, chunk_index, chunk_text, embedding)
-                            VALUES (%s, %s, %s, %s::vector)
+                            (document_id, chunk_index, chunk_text, bge_embedding, qwen_embedding)
+                            VALUES (%s, %s, %s, %s::vector, %s::vector)
                             """,
-                            (entry_id, chunk_index, chunk_content, embedding_str),
+                            (
+                                entry_id,
+                                chunk_index,
+                                chunk_content,
+                                bge_embedding_str,
+                                qwen_embedding_str,
+                            ),
                         )
 
                     success_count += 1
-                    log.debug(f"成功为块 {chunk_index} 生成嵌入向量并存入 Parade DB")
+                    log.debug(f"成功为块 {chunk_index} 生成双嵌入向量并存入 Parade DB")
 
                 conn.commit()
                 cursor.close()
