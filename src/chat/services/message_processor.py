@@ -137,6 +137,54 @@ class MessageProcessor:
 
         return modified_content, emoji_images
 
+    async def _extract_stickers_as_images(
+        self, message: discord.Message
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """从消息中提取贴纸，下载图片，并返回描述文本和图片数据"""
+        sticker_images = []
+        sticker_texts = []
+
+        if not message.stickers:
+            return "", []
+
+        proxy_url = config.PROXY_URL
+        async with aiohttp.ClientSession() as session:
+            for sticker in message.stickers:
+                # 获取贴纸URL
+                sticker_url = sticker.url
+
+                # 下载贴纸图片
+                image_bytes = await self._fetch_image_aio(
+                    session, sticker_url, proxy=proxy_url
+                )
+
+                if image_bytes:
+                    # 确定MIME类型
+                    if sticker.format == discord.StickerFormatType.gif:
+                        mime_type = "image/gif"
+                    elif sticker.format == discord.StickerFormatType.apng:
+                        mime_type = "image/png"
+                    else:
+                        # lottie 格式无法直接处理为图片，但 Discord 会提供 PNG 预览
+                        mime_type = "image/png"
+
+                    sticker_images.append(
+                        {
+                            "mime_type": mime_type,
+                            "data": image_bytes,
+                            "source": "sticker",
+                            "name": sticker.name,
+                        }
+                    )
+                    sticker_texts.append(f"[贴纸: {sticker.name}]")
+                    log.debug(f"成功提取贴纸: {sticker.name}")
+                else:
+                    # 即使下载失败，也添加文本描述
+                    sticker_texts.append(f"[贴纸: {sticker.name}]")
+                    log.warning(f"无法下载贴纸图片: {sticker.name}")
+
+        return " ".join(sticker_texts), sticker_images
+
     async def process_message(
         self, message: discord.Message, bot: discord.Client
     ) -> Optional[Dict[str, Any]]:
@@ -335,9 +383,17 @@ class MessageProcessor:
         )
         image_data_list.extend(emoji_images)
 
+        # 提取贴纸图片
+        sticker_text, sticker_images = await self._extract_stickers_as_images(message)
+        image_data_list.extend(sticker_images)
+
         clean_content = self._clean_message_content(
             content_with_placeholders, message.mentions, bot_user
         )
+
+        # 如果有贴纸，将贴纸描述添加到内容前面
+        if sticker_text:
+            clean_content = f"{sticker_text} {clean_content}"
 
         return {
             "user_content": clean_content,

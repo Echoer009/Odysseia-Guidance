@@ -401,11 +401,14 @@ class PromptService:
         # --- 4. 当前用户输入注入---
         current_user_parts = []
 
-        # 分离表情图片和附件图片
+        # 分离表情图片、贴纸图片和附件图片
         emoji_map = (
             {img["name"]: img for img in images if img.get("source") == "emoji"}
             if images
             else {}
+        )
+        sticker_images = (
+            [img for img in images if img.get("source") == "sticker"] if images else []
         )
         attachment_images = (
             [img for img in images if img.get("source") == "attachment"]
@@ -479,9 +482,19 @@ class PromptService:
 
             current_user_parts.extend(processed_parts)
 
-        # 如果没有任何文本，但有附件，添加一个默认的用户标签
-        if not message and attachment_images:
+        # 如果没有任何文本，但有贴纸或附件，添加一个默认的用户标签
+        if not message and (sticker_images or attachment_images):
             current_user_parts.append(f"用户名:{user_name}, 用户消息:(图片消息)")
+
+        # 追加所有贴纸图片到末尾
+        for img_data in sticker_images:
+            try:
+                pil_image = Image.open(io.BytesIO(img_data["data"]))
+                current_user_parts.append(pil_image)
+            except Exception as e:
+                log.error(
+                    f"Pillow 无法打开贴纸图片 {img_data.get('name', 'unknown')}。错误: {e}。"
+                )
 
         # 追加所有附件图片到末尾
         for img_data in attachment_images:
