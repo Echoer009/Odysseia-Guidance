@@ -329,10 +329,25 @@ class MessageProcessor:
                             ref_msg.content, ref_msg.mentions, bot_user
                         )
 
+                        # 处理被回复消息中的贴纸（在生成引用内容之前）
+                        ref_sticker_text = ""
+                        if ref_msg.stickers:
+                            (
+                                ref_sticker_text,
+                                ref_sticker_images,
+                            ) = await self._extract_stickers_as_images(ref_msg)
+                            image_data_list.extend(ref_sticker_images)
+
                         full_ref_content = [
                             ref for ref in [ref_content_cleaned, embed_content] if ref
                         ]
                         combined_content = "\n".join(full_ref_content).strip()
+
+                        # 如果有贴纸，将贴纸描述添加到引用内容前面
+                        if ref_sticker_text and combined_content:
+                            combined_content = f"{ref_sticker_text} {combined_content}"
+                        elif ref_sticker_text:
+                            combined_content = ref_sticker_text
 
                         if combined_content:
                             lines = combined_content.split("\n")
