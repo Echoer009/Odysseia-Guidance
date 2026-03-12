@@ -12,6 +12,7 @@ from src.chat.features.forum_search.services.forum_vector_db_service import (
 )
 from src.chat.services.regex_service import regex_service
 from src.chat.config import chat_config as config
+from src.chat.utils.document_builder import build_forum_thread_document
 
 log = logging.getLogger(__name__)
 
@@ -182,9 +183,15 @@ class ForumSearchService:
             raw_category_name = thread.parent.name if thread.parent else "未知分类"
             category_name = regex_service.clean_channel_name(raw_category_name)
 
-            # 5. 构建用于向量化的文本（标题 + 内容）
-            # ParadeDB 使用整帖向量化，不进行分块
-            document_text = f"{title}\n\n{content}"
+            # 5. 构建结构化的向量化文本
+            # 使用结构化格式：标题、分类、作者、内容
+            # 这种格式有助于模型理解文档结构，提升检索质量
+            document_text = build_forum_thread_document(
+                thread_name=title,
+                content=content,
+                author_name=author_name,
+                category_name=category_name,
+            )
 
             # 6. 并行生成两种 embedding（双写策略）
             bge_embedding, qwen_embedding = await self._generate_dual_embeddings(
@@ -268,8 +275,13 @@ class ForumSearchService:
                 else:
                     created_at = datetime.now(BEIJING_TZ)
 
-                # 3. 构建用于向量化的文本（标题 + 内容）
-                document_text = f"{title}\n\n{document}"
+                # 3. 构建结构化的向量化文本
+                document_text = build_forum_thread_document(
+                    thread_name=title,
+                    content=document,
+                    author_name=author_name,
+                    category_name=category_name,
+                )
 
                 # 4. 并行生成两种 embedding（双写策略）
                 bge_embedding, qwen_embedding = await self._generate_dual_embeddings(
