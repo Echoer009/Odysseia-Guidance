@@ -84,6 +84,9 @@ class AffectionService:
             log.info(f"为用户 {user_id} 创建了新的好感度记录。")
 
             new_record = await self.db.get_affection(user_id)
+            if new_record is None:
+                log.error(f"创建用户 {user_id} 的好感度记录后无法获取记录")
+                return initial_data
             return dict(new_record)
 
     async def increase_affection_on_message(self, user_id: int) -> Optional[int]:
@@ -142,7 +145,7 @@ class AffectionService:
 
     async def increase_affection_for_gift(
         self, user_id: int, points_to_add: int
-    ) -> (bool, str):
+    ) -> tuple[bool, str]:
         """
         当用户赠送礼物时增加好感度。礼物每天只能送一次。
         返回一个元组 (success: bool, message: str)。
