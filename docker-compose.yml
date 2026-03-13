@@ -45,8 +45,11 @@ services:
       - .env
     environment:
       - RUNNING_IN_DOCKER=true
-    ports:
-      - "${BLACKJACK_PORT:-8000}:8000"
+    #端口不再暴露到主机，通过 Caddy 代理
+    # ports:
+    #   - "${BLACKJACK_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
       - .:/app
       - ./data:/app/data
@@ -55,6 +58,22 @@ services:
     command: uvicorn src.chat.features.games.blackjack-web.app:app --host 0.0.0.0 --port 8000
     depends_on:
       - db
+
+  # Caddy 反向代理 - 提供 HTTPS
+  caddy:
+    image: caddy:latest
+    container_name: caddy_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80" # HTTP (用于证书验证)
+      - "443:443" # HTTPS
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # 证书数据持久化
+    networks:
+      - bot_network
+    depends_on:
+      - blackjack_web
 
   #  config_web:
   #    build:
@@ -113,3 +132,6 @@ services:
 networks:
   bot_network:
     driver: bridge
+
+volumes:
+  caddy_data:
