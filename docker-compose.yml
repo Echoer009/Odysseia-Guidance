@@ -117,11 +117,12 @@ services:
 
   ollama:
     # Ollama 官方镜像，用于本地运行 bge-m3 embedding 模型
+    # 注意：使用 expose 而非 ports，只在 Docker 内部网络可访问，不暴露到公网
     image: ollama/ollama:latest
     container_name: odysseia_ollama
     restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
+    expose:
+      - "11434"
     volumes:
       - ./ollama_data:/root/.ollama
     environment:
