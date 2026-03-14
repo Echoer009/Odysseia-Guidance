@@ -7,7 +7,7 @@ services:
     environment:
       - RUNNING_IN_DOCKER=true
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=bge-m3
+      - OLLAMA_MODEL=qwen3-embedding:0.6b
 
     # --- 部署方式二选一 ---
     # 方式一 (推荐): 从本地源代码构建
@@ -116,7 +116,7 @@ services:
       - bot_network
 
   ollama:
-    # Ollama 官方镜像，用于本地运行 bge-m3 embedding 模型
+    # Ollama 官方镜像，用于本地运行 qwen3-embedding embedding 模型
     # 注意：使用 expose 而非 ports，只在 Docker 内部网络可访问，不暴露到公网
     image: ollama/ollama:latest
     container_name: odysseia_ollama
@@ -129,6 +129,16 @@ services:
       - OLLAMA_HOST=0.0.0.0
     networks:
       - bot_network
+    # 启动后自动拉取 qwen3-embedding 模型
+    entrypoint: >
+      sh -c "
+        ollama serve &
+        sleep 5 &&
+        echo '正在拉取 qwen3-embedding:0.6b 模型...' &&
+        ollama pull qwen3-embedding:0.6b &&
+        echo '模型拉取完成，Ollama 服务已就绪' &&
+        tail -f /dev/null
+      "
 
 networks:
   bot_network:

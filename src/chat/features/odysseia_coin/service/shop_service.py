@@ -6,12 +6,14 @@ import os
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.services.event_service import event_service
 import asyncio
-from sqlalchemy import text
+from sqlalchemy import text, select
 from src.database.database import AsyncSessionLocal
+from src.database.models import ShopItem
 from src.chat.utils.database import chat_db_manager
 from src.chat.features.tutorial_search.services.tutorial_rag_service import (
     tutorial_rag_service,
 )
+from src.chat.config.shop_config import SHOP_ITEMS, BRAIN_GIRL_EATING_IMAGES
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +34,65 @@ class ShopData:
 class ShopService:
     """负责处理与商店相关的数据和业务逻辑"""
 
+    def __init__(self):
+        self._initialized = False
+
+    async def _ensure_shop_items_initialized(self):
+        """
+        确保商店商品数据已初始化。
+        如果商品表为空，则自动从配置填充数据。
+        """
+        if self._initialized:
+            return
+
+        try:
+            async with AsyncSessionLocal() as session:
+                # 检查商品表是否为空
+                result = await session.execute(select(ShopItem).limit(1))
+                existing_item = result.scalar_one_or_none()
+
+                if existing_item is not None:
+                    # 商品表已有数据，无需初始化
+                    self._initialized = True
+                    return
+
+                # 商品表为空，自动填充数据
+                log.info("检测到商店商品表为空，开始自动填充商品数据...")
+                success_count = 0
+
+                for item_data in SHOP_ITEMS:
+                    # 解包商品数据
+                    # 格式: (name, description, price, category, target, effect_id)
+                    name, description, price, category, target, effect_id = item_data
+
+                    # 从 BRAIN_GIRL_EATING_IMAGES 获取 cg_url
+                    cg_url = BRAIN_GIRL_EATING_IMAGES.get(name)
+
+                    # 创建新商品
+                    new_item = ShopItem(
+                        name=name,
+                        description=description,
+                        price=price,
+                        category=category,
+                        target=target,
+                        effect_id=effect_id,
+                        cg_url=cg_url,
+                        is_available=1,
+                    )
+
+                    session.add(new_item)
+                    success_count += 1
+
+                # 提交所有更改
+                await session.commit()
+                log.info(f"商店商品数据自动填充完成，共添加 {success_count} 个商品")
+
+            self._initialized = True
+
+        except Exception as e:
+            log.error(f"自动填充商店商品数据时出错: {e}", exc_info=True)
+            # 不抛出异常，允许商店继续运行（可能是数据库连接问题）
+
     async def prepare_shop_data(self, user_id: int) -> ShopData:
         """
         准备构建商店所需的所有数据。
@@ -43,6 +104,9 @@ class ShopService:
             一个 ShopData 对象，包含了构建UI所需的所有信息。
         """
         try:
+            # 0. 确保商品数据已初始化
+            await self._ensure_shop_items_initialized()
+
             # 1. 获取用户余额和商品列表
             balance = await coin_service.get_balance(user_id)
             items_rows = await coin_service.get_all_items()

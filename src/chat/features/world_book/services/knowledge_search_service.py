@@ -21,7 +21,7 @@ async def get_embedding_column() -> str:
         model = await chat_db_manager.get_global_setting("embedding_model")
         return "qwen_embedding" if model == "qwen" else "bge_embedding"
     except Exception:
-        return "bge_embedding"  # 默认使用 BGE
+        return "qwen_embedding"  # 默认使用 Qwen
 
 
 async def get_embedding_service():
@@ -32,7 +32,7 @@ async def get_embedding_service():
             return qwen_embedding_service
         return ollama_embedding_service
     except Exception:
-        return ollama_embedding_service  # 默认使用 BGE
+        return qwen_embedding_service  # 默认使用 Qwen
 
 
 class KnowledgeSearchService:

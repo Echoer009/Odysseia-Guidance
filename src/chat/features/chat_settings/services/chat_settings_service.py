@@ -310,7 +310,7 @@ class ChatSettingsService:
     async def get_current_embedding_model(self) -> str:
         """获取当前设置的 Embedding 模型 ID。"""
         model = await self.db_manager.get_global_setting("embedding_model")
-        return model if model else "bge"  # 默认使用 BGE-M3
+        return model if model else "qwen"  # 默认使用 Qwen3-Embedding
 
     async def set_embedding_model(self, model_id: str) -> None:
         """设置 Embedding 模型。"""
