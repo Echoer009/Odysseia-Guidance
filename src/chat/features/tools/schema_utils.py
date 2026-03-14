@@ -131,6 +131,10 @@ def _convert_type_schema(schema: dict) -> dict:
         result["type"] = "ARRAY"
         result["items"] = convert_to_gemini_schema(schema["items"])
 
+    # 处理 enum（Literal 类型会被转换为 enum）
+    if "enum" in schema:
+        result["enum"] = schema["enum"]
+
     return result
 
 
