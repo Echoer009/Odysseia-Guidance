@@ -1,31 +1,39 @@
 # -*- coding: utf-8 -*-
-
 """
-春节红包工具（简化版）
+春节红包工具 - 发送春节红包给用户
 """
 
 import random
 import logging
-from typing import Dict, Any
 from datetime import datetime
+from typing import Dict, Any
 
 import discord
 from discord import ui
+from pydantic import BaseModel, Field
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.prompt_utils import replace_emojis
 
-
 log = logging.getLogger(__name__)
+
+
+class RedEnvelopeParams(BaseModel):
+    """红包参数"""
+
+    blessing_text: str = Field(
+        ...,
+        description="个性化的新年祝福语内容。",
+    )
 
 
 class RedEnvelopeView(ui.View):
     """红包领取视图"""
 
     def __init__(self, user_id: int, blessing_text: str):
-        super().__init__(timeout=None)  # 永久有效，直到用户点击
+        super().__init__(timeout=None)
         self.user_id = user_id
         self.blessing_text = blessing_text
         self.claimed = False
@@ -38,21 +46,18 @@ class RedEnvelopeView(ui.View):
     async def claim_button(self, interaction: discord.Interaction, button: ui.Button):
         """用户点击领取红包"""
         try:
-            # 验证用户
             if interaction.user.id != self.user_id:
                 await interaction.response.send_message(
                     "这不是你的红包哦～", ephemeral=True
                 )
                 return
 
-            # 检查是否已领取
             if self.claimed:
                 await interaction.response.send_message(
                     "你已经领取过这个红包了！", ephemeral=True
                 )
                 return
 
-            # 检查今日是否已领取过（每日限制）
             user_id_int = int(self.user_id)
             last_date = await chat_db_manager.get_last_red_envelope_date(user_id_int)
             today = datetime.now().strftime("%Y-%m-%d")
@@ -62,23 +67,18 @@ class RedEnvelopeView(ui.View):
                 )
                 return
 
-            # 随机金额
             amount = random.randint(500, 1000)
 
-            # 发放金币
             await coin_service.add_coins(
                 user_id=user_id_int, amount=amount, reason="春节红包奖励"
             )
 
-            # 更新领取日期
             await chat_db_manager.set_last_red_envelope_date(user_id_int, today)
 
-            # 标记为已领取
             self.claimed = True
             button.disabled = True
             button.label = "✅ 已领取"
 
-            # 更新embed
             if interaction.message and interaction.message.embeds:
                 embed = interaction.message.embeds[0]
                 embed.title = "🧧 红包已开启！"
@@ -101,30 +101,20 @@ class RedEnvelopeView(ui.View):
 
 @tool_metadata(
     name="发送红包",
-    description="类脑娘发红包啦",
+    description="发送春节红包给用户，用户点击后随机获得500-1000类脑币",
     emoji="🧧",
     category="春节活动",
 )
 async def spring_festival_red_envelope(
-    blessing_text: str,
+    params: RedEnvelopeParams,
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    发送春节红包给当前用户。调用此工具时，必须传入blessing_text。
-    工具会向当前用户私信发送一个红包，用户点击"开启红包"按钮后随机获得500-1000类脑币和祝福。
-
-    [调用指南]
-    - **触发条件**: 仅当用户祝福"新年快乐"、"除夕快乐"、"新春快乐"时
-    - **每日限制**: 每个用户每天只能领取一次红包（由系统自动检查）
-    - **参数说明**:
-      - blessing_text: 生成的祝福语内容（必填，需要个性化）
-
-    Args:
-        blessing_text (str): AI生成的祝福语内容
-
-    Returns:
-        一个包含操作结果和状态的字典。
+    发送春节红包给当前用户。适用于用户祝福新年快乐时。
     """
+    # 从 Pydantic 模型中提取参数
+    blessing_text = params.blessing_text
+
     # 从kwargs获取当前用户ID
     user_id = kwargs.get("user_id")
     if not user_id:

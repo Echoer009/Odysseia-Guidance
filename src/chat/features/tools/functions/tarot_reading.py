@@ -1,7 +1,14 @@
-import logging
-from typing import Dict, Any
+# -*- coding: utf-8 -*-
+"""
+塔罗占卜工具 - 为用户执行塔罗牌占卜
+"""
+
 import io
+import logging
+from typing import Dict, Any, Literal
+
 import discord
+from pydantic import BaseModel, Field
 
 from src.chat.features.tarot.services import tarot_service
 from src.chat.utils.database import chat_db_manager
@@ -11,26 +18,37 @@ from src.chat.features.tools.tool_metadata import tool_metadata
 log = logging.getLogger(__name__)
 
 
+class TarotReadingParams(BaseModel):
+    """塔罗占卜参数"""
+
+    question: str = Field(
+        default="关于我最近的整体运势",
+        description="用户提出的具体问题。若没有提供，默认为整体运势。",
+    )
+    spread_type: Literal["three_card", "single_card"] = Field(
+        default="three_card",
+        description="牌阵类型: 'three_card'(三张牌) 或 'single_card'(单张牌)。",
+    )
+
+
 @tool_metadata(
     name="塔罗占卜",
-    description="抽张塔罗牌看看运势～可以问问题，也可以看看整体运势哦！",
+    description="抽张塔罗牌看看运势，可问问题或看整体运势",
     emoji="🃏",
     category="娱乐",
 )
 async def tarot_reading(
-    question: str = "关于我最近的整体运势", spread_type: str = "three_card", **kwargs
+    params: TarotReadingParams,
+    **kwargs,
 ) -> Dict[str, Any]:
     """
-    为用户执行一次塔罗牌占卜。
-    当用户请求占卜、算命或想看未来运势时调用此工具。工具会生成并自动发送一张包含牌阵的图片，然后返回牌面的信息供你解读。
-
-    Args:
-        question (str): 用户提出的具体问题。如果用户没有提供，则默认为“关于我最近的整体运势”。
-        spread_type (str): 使用的牌阵类型。默认为 'three_card'（三张牌）。也可以是 'single_card'（单张牌）。
-
-    Returns:
-        一个字典，其中包含抽到的牌的详细信息，供你进行解读。
+    为用户执行塔罗牌占卜。当用户请求占卜、算命或想看运势时调用。
+    工具会生成并发送牌阵图片，返回牌面信息供解读。
     """
+    # 从 Pydantic 模型中提取参数
+    question = params.question
+    spread_type = params.spread_type
+
     log.info(
         f"--- [工具执行]: tarot_reading, 参数: question='{question}', spread_type='{spread_type}' ---"
     )
@@ -42,7 +60,6 @@ async def tarot_reading(
             "error": "Cannot perform tarot reading without a valid channel to send the image to."
         }
 
-    # 检查是否在特定服务器的特定频道中使用
     if (
         TarotConfig.RESTRICTED_GUILD_ID
         and channel.guild
@@ -63,7 +80,6 @@ async def tarot_reading(
         if image_data and cards:
             log.info(f"成功生成塔罗牌图片，准备发送到频道 {channel.id}。")
 
-            # 将图片数据转换为 discord.File 并发送
             image_file = discord.File(
                 io.BytesIO(image_data), filename="tarot_reading.png"
             )
@@ -71,7 +87,6 @@ async def tarot_reading(
 
             log.info("塔罗牌图片发送成功。")
 
-            # 准备返回给 AI 的数据
             card_details = []
             for card in cards:
                 card_details.append(

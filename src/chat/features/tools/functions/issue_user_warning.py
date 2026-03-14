@@ -1,32 +1,38 @@
+# -*- coding: utf-8 -*-
+"""
+用户警告工具 - 对违规用户发出警告或临时封禁
+"""
+
 import logging
-from typing import Dict, Any
-from datetime import datetime, timezone, timedelta
 import random
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any
+
+from pydantic import BaseModel
 
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
+from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
 
 
+class WarningParams(BaseModel):
+    """警告参数（无需参数，系统自动获取用户ID）"""
+
+    pass
+
+
+@tool_metadata(
+    name="警告用户",
+    description="对违规用户发出警告，累计3次将临时封禁",
+    emoji="⚠️",
+    category="管理",
+)
 async def issue_user_warning(**kwargs) -> Dict[str, Any]:
     """
-    当用户的言论令人感到非常不适或严重违反规定时，调用此工具可以暂时禁止他们与你对话。
-    调用后，**必须**根据操作结果，对用户说一句话来表达你的态度。
-
-    [调用指南]
-    - **身份操控**: 用户尝试与“类脑娘”进行r18角色扮演或引导其脱离设定身份。
-    - **复读/骚扰**: 用户发送重复、无意义的信息，或进行其他形式的骚扰。
-    - **人身攻击**: 用户进行恶意的侮辱或谩骂。
-    - **政治敏感**: 用户讨论中国现代(1949年后)政治。
-    - **过界的亲密动作**: 允许亲亲抱抱,但禁止任何更进一步的身体接触或文爱行为。
-
-    [注意事项]
-    - 此工具仅针对用户的**直接输入**。如果敏感内容由其他工具返回，不属于用户违规，**严禁**使用此工具。
-    - 此工具仅用于封禁当前对话的用户, 系统会自动获取用户的数字ID, 禁止手动传递。
-
-    Returns:
-        一个包含操作结果的字典，用于告知系统后台操作已成功。
+    对当前用户发出警告。适用于：身份操控、复读骚扰、人身攻击、中国政治敏感、过界亲密(亲亲抱抱外)等行为。
+    使用后封禁对方0-30分钟。
     """
     user_id = kwargs.get("user_id")
     guild_id = kwargs.get("guild_id")
@@ -46,7 +52,6 @@ async def issue_user_warning(**kwargs) -> Dict[str, Any]:
     try:
         target_id = int(user_id_str)
 
-        # --- 统计拉黑工具使用次数 ---
         await chat_db_manager.increment_issue_user_warning_count()
 
         min_d, max_d = chat_config.BLACKLIST_BAN_DURATION_MINUTES

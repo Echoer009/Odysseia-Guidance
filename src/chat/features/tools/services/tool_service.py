@@ -1,7 +1,20 @@
+# -*- coding: utf-8 -*-
+"""
+工具服务模块
+
+负责管理和执行工具的核心服务。
+
+主要功能：
+1. 管理工具声明和函数映射
+2. 为不同 LLM 提供正确格式的工具列表
+3. 执行工具调用并返回结果
+"""
+
 from google.genai import types
 import discord
 import inspect
 from typing import Optional, Dict, Callable, Any, List
+from pydantic import BaseModel
 
 import logging
 
@@ -9,8 +22,58 @@ from src.chat.config.chat_config import HIDDEN_TOOLS
 from src.chat.features.tools.services.user_tool_settings_service import (
     user_tool_settings_service,
 )
+from src.chat.features.tools.tool_declaration import ToolDeclaration
+from src.chat.features.tools.llm_adapters import to_gemini_tools
 
 log = logging.getLogger(__name__)
+
+
+def _convert_dict_to_pydantic(
+    tool_args: Dict[str, Any], tool_function: Callable
+) -> Dict[str, Any]:
+    """
+    自动将工具参数中的字典转换为对应的 Pydantic 模型实例。
+
+    当工具函数的参数类型是 Pydantic 模型，但 LLM 传入的是字典时，
+    这个函数会自动进行转换。
+
+    Args:
+        tool_args: 从 LLM 收到的参数字典
+        tool_function: 要执行的工具函数
+
+    Returns:
+        转换后的参数字典，其中 Pydantic 类型的参数已被转换为模型实例
+    """
+    sig = inspect.signature(tool_function)
+
+    for param_name, param in sig.parameters.items():
+        if param_name in ("kwargs", "args") or param_name not in tool_args:
+            continue
+
+        # 获取参数的类型注解
+        param_annotation = param.annotation
+        if param_annotation is inspect.Parameter.empty:
+            continue
+
+        # 检查是否是 Pydantic 模型类型
+        if isinstance(param_annotation, type) and issubclass(
+            param_annotation, BaseModel
+        ):
+            arg_value = tool_args[param_name]
+
+            # 如果值是字典，转换为 Pydantic 模型
+            if isinstance(arg_value, dict) and not isinstance(
+                arg_value, param_annotation
+            ):
+                try:
+                    tool_args[param_name] = param_annotation(**arg_value)
+                    log.debug(f"自动转换: {param_name} -> {param_annotation.__name__}")
+                except Exception as e:
+                    log.warning(
+                        f"转换参数 '{param_name}' 到 {param_annotation.__name__} 失败: {e}"
+                    )
+
+    return tool_args
 
 
 class ToolService:
@@ -26,7 +89,7 @@ class ToolService:
         self,
         bot: Optional[discord.Client],
         tool_map: Dict[str, Callable],
-        tool_declarations: List[Callable],
+        tool_declarations: List[ToolDeclaration],
     ):
         """
         初始化 ToolService。
@@ -34,7 +97,7 @@ class ToolService:
         Args:
             bot: Discord 客户端实例，将注入到需要它的工具中。
             tool_map: 一个字典，将工具名称映射到其对应的异步函数实现。
-            tool_declarations: 从工具加载器获得的原始工具函数声明列表。
+            tool_declarations: 从工具加载器获得的通用工具声明列表。
         """
         self.bot = bot
         self.tool_map = tool_map
@@ -45,9 +108,9 @@ class ToolService:
 
     async def get_dynamic_tools_for_context(
         self, user_id_for_settings: Optional[str] = None
-    ) -> List[Callable]:
+    ) -> List[types.Tool]:
         """
-        根据提供的用户ID动态获取可用的工具列表。
+        根据提供的用户ID动态获取可用的工具列表（Gemini 格式）。
 
         - 无论用户是否禁用工具，都返回所有工具声明。
         - 工具执行时会检查是否被用户禁用，如果被禁用则返回错误提示。
@@ -56,17 +119,26 @@ class ToolService:
             user_id_for_settings: 用于查询工具设置的用户的ID。如果为 None，则返回默认工具。
 
         Returns:
-            所有工具函数列表（包括被用户禁用的工具）。
+            Gemini 格式的工具列表（List[types.Tool]）。
         """
         # 总是返回所有工具，让AI可以看到它们
         # 工具执行时会检查是否被禁用
         if not user_id_for_settings:
             log.info("未提供 user_id_for_settings，使用默认工具集。")
-            return self.tool_declarations
+            return to_gemini_tools(self.tool_declarations)
 
         log.info(
             f"为用户 {user_id_for_settings} 返回所有工具声明（共 {len(self.tool_declarations)} 个）"
         )
+        return to_gemini_tools(self.tool_declarations)
+
+    def get_tool_declarations(self) -> List[ToolDeclaration]:
+        """
+        获取原始工具声明列表。
+
+        Returns:
+            通用工具声明列表。
+        """
         return self.tool_declarations
 
     async def execute_tool_call(
@@ -206,6 +278,58 @@ class ToolService:
                     )
                 tool_args["user_id"] = user_id_str
 
+            # --- user_id 别名替换：将 'user' 或当前用户昵称替换为实际 ID ---
+            # 模型可以传入 'user' 或用户昵称表示当前对话用户，系统会自动替换为正确的数字 ID
+            if user_id is not None:
+                user_id_str = str(user_id)
+                provided_user_id = tool_args.get("user_id")
+
+                # 情况1：模型传入 'user'
+                if provided_user_id == "user":
+                    tool_args["user_id"] = user_id_str
+                    if log_detailed:
+                        log.info(
+                            f"已将 user_id='user' 替换为当前用户 ID: {user_id_str}"
+                        )
+
+                # 情况2：模型传入用户昵称/用户名
+                # 检查 provided_user_id 是否是当前用户的昵称或用户名
+                elif provided_user_id and not provided_user_id.isdigit():
+                    # 尝试获取用户对象以验证昵称
+                    member = None
+                    if channel and hasattr(channel, "guild") and channel.guild:
+                        member = channel.guild.get_member(user_id)
+
+                    if member:
+                        # 获取用户的各种可能名称
+                        user_names = [
+                            member.display_name,  # 服务器昵称
+                            member.name,  # Discord 用户名
+                            member.global_name,  # 全局显示名称
+                        ]
+                        # 添加不带 discriminator 的名字
+                        if member.discriminator and member.discriminator != "0":
+                            user_names.append(f"{member.name}#{member.discriminator}")
+
+                        # 清理 None 值并转小写比较
+                        user_names_lower = [name.lower() for name in user_names if name]
+                        provided_lower = provided_user_id.lower().strip()
+
+                        # 检查是否匹配（支持部分匹配，如 "Echonion_main" 匹配 "Echonion"）
+                        is_match = any(
+                            provided_lower == name
+                            or provided_lower in name
+                            or name in provided_lower
+                            for name in user_names_lower
+                        )
+
+                        if is_match:
+                            tool_args["user_id"] = user_id_str
+                            if log_detailed:
+                                log.info(
+                                    f"已将 user_id='{provided_user_id}' (匹配用户昵称) 替换为当前用户 ID: {user_id_str}"
+                                )
+
             # --- 安全加固：确保 'issue_user_warning' 只能对当前用户执行 ---
             if tool_name == "issue_user_warning" and user_id is not None:
                 user_id_str = str(user_id)
@@ -214,7 +338,11 @@ class ToolService:
                         f"检测到模型尝试为其他用户 ({tool_args.get('user_id')}) 调用警告工具。"
                         f"已强制重定向到当前用户 ({user_id_str})。"
                     )
-                tool_args["user_id"] = user_id_str
+                    tool_args["user_id"] = user_id_str
+
+            # 步骤 4.5: 自动将字典转换为 Pydantic 模型
+            # LLM 返回的是 JSON 字典，但工具函数期望 Pydantic 模型实例
+            tool_args = _convert_dict_to_pydantic(tool_args, tool_function)
 
             # 步骤 5: 执行工具函数
             result = await tool_function(**tool_args)

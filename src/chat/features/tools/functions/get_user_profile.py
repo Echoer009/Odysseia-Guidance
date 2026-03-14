@@ -1,14 +1,38 @@
-import discord
-import logging
-from typing import Dict, Any, List
-import httpx
-import base64
+# -*- coding: utf-8 -*-
+"""
+用户资料查询工具 - 查询用户的类脑币余额、头像、角色等信息
+"""
 
-# 假设 coin_service 的路径是正确的
+import base64
+import logging
+from typing import Dict, Any, List, Literal, Optional
+
+import httpx
+from pydantic import BaseModel, Field
+
+import discord
+
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.tools.tool_metadata import tool_metadata
 
 log = logging.getLogger(__name__)
+
+
+# 支持的查询字段类型
+QueryField = Literal["balance", "avatar", "roles"]
+
+
+class UserProfileQuery(BaseModel):
+    """用户资料查询参数"""
+
+    user_id: Optional[str] = Field(
+        None,
+        description="目标用户的标识。可以是: 1) Discord数字ID; 2) 'user'表示当前对话用户;系统会自动识别并替换为正确的ID。",
+    )
+    queries: List[QueryField] = Field(
+        ...,
+        description="需要查询的字段列表。可选值: 'balance', 'avatar', 'roles'。",
+    )
 
 
 @tool_metadata(
@@ -18,42 +42,37 @@ log = logging.getLogger(__name__)
     category="用户信息",
 )
 async def get_user_profile(
-    user_id: str,
-    queries: List[str],
-    log_detailed: bool = False,
+    params: UserProfileQuery,
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    查询用户的个人资料，可选择性地包括多个字段。
-    [调用指南]
-    - **自主决策**: 只要认为有必要就可以调用
-    - **按需查询**: 根据上下文，在 `queries` 列表中指定一个或多个需要查询的字段，以获取必要的信息。
-    - **查询当前对话用户**: 如果你要查询当然对话用户信息,系统会自动提供用户的数字ID，无需填写 `user_id`,调用工具即可。
-
-    Args:
-        user_id (str): 目标用户的 Discord 数字ID。**注意**: 如果是查询当前对话用户, 此参数将由系统自动填充, 模型无需处理。
-        queries (List[str]): 需要查询的字段列表。有效值: "balance", "avatar", "roles"。
-
-    Returns:
-        一个包含查询结果和状态的字典。
+    查询用户的个人资料。按需在 queries 中指定要查询的字段。
     """
-    # 从 kwargs 安全地获取由系统注入的 bot 和 guild 实例
     bot = kwargs.get("bot")
     guild = kwargs.get("guild")
 
     if not bot:
         return {"error": "Bot instance is not available."}
 
-    if log_detailed:
-        log.info(
-            f"--- [工具执行]: get_user_profile, user_id={user_id}, queries={queries} ---"
-        )
+    # 从 Pydantic 模型中提取参数
+    user_id = params.user_id
+    queries = params.queries
+
+    # 处理特殊值 'user' -> 使用当前用户ID
+    if user_id == "user":
+        user_id = kwargs.get("user_id")
+        if not user_id:
+            return {"error": "无法获取当前用户ID"}
+        log.info(f"将 'user' 替换为当前用户ID: {user_id}")
+
+    log.info(
+        f"--- [工具执行]: get_user_profile, user_id={user_id}, queries={queries} ---"
+    )
 
     if not user_id or not user_id.isdigit():
         return {"error": f"Invalid or missing user_id provided: {user_id}"}
 
     target_id = int(user_id)
-    # 使用集合处理 queries 以提高效率并自动去重
     query_set = set(queries)
 
     result = {
@@ -63,8 +82,6 @@ async def get_user_profile(
         "profile": {},
         "errors": [],
     }
-
-    # --- 查询分支 ---
 
     # 1. 查询头像 (Avatar)
     if "avatar" in query_set:
@@ -107,7 +124,6 @@ async def get_user_profile(
             try:
                 member = guild.get_member(target_id)
                 if member:
-                    # 过滤掉 @everyone 角色，并获取角色名称
                     role_names = [
                         role.name for role in member.roles if role.name != "@everyone"
                     ]

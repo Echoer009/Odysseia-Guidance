@@ -1,22 +1,18 @@
 # -*- coding: utf-8 -*-
+"""
+频道总结工具 - 获取并总结频道消息历史
+"""
 
-import logging
-from typing import Optional
-from pydantic import BaseModel, Field
-import discord
-from datetime import datetime
 import io
+import logging
 import os
 import re
+from datetime import datetime
+from typing import Optional
 
-# Pillow is used for image generation. Make sure it's installed.
-try:
-    from PIL import Image, ImageDraw, ImageFont
-except ImportError:
-    # This will prevent the bot from starting if Pillow is not installed, which is good.
-    raise ImportError(
-        "Pillow is not installed. Please install it with 'pip install Pillow'"
-    )
+import discord
+from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel, Field
 
 from src.chat.features.tools.tool_metadata import tool_metadata
 
@@ -24,14 +20,25 @@ log = logging.getLogger(__name__)
 
 
 class SummarizeChannelParams(BaseModel):
-    limit: int = Field(200, description="要获取的消息数量。")
-    start_date: Optional[str] = Field(None, description="开始日期 (格式: YYYY-MM-DD)。")
-    end_date: Optional[str] = Field(None, description="结束日期 (格式: YYYY-MM-DD)。")
+    """频道总结参数"""
+
+    limit: int = Field(
+        default=200,
+        description="要获取的消息数量，默认200条。",
+    )
+    start_date: Optional[str] = Field(
+        None,
+        description="开始日期 (格式: YYYY-MM-DD)",
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description="结束日期 (格式: YYYY-MM-DD)",
+    )
 
 
 @tool_metadata(
     name="总结",
-    description="总结一下最近的聊天内容～可以指定消息数量和时间范围哦！",
+    description="获取频道消息历史用于总结，可指定消息数量和时间范围",
     emoji="📝",
     category="总结",
 )
@@ -40,36 +47,14 @@ async def summarize_channel(
     **kwargs,
 ) -> str:
     """
-    1. 获取当前频道的最近消息并返回一个准备好用于总结的字符串。
-    2. **仅在用户明确表示想要“总结”、“概括”或回顾“最近的对话”时使用此工具。**
-    3. 用户可以指定消息数量、开始日期或结束日期。limit默认200条
-
-    [使用示例]
-    - 用户说: "总结一下最近的对话"
-      - 调用参数: `limit=200`
-    - 用户说: "总结一下从昨天开始的对话"
-      - 调用参数: `start_date="YYYY-MM-DD"`
-
-    [返回格式与要求]
-    - 函数返回一个包含消息历史的字符串，每条消息的格式为：`'作者(时间): 内容'`。
-    - 你在收到内容后，需要将其内容总结成一段通顺的文字。
-    - **重要：禁止使用任何 Markdown 格式，直接输出纯文本。**
+    获取当前频道的消息历史。仅在用户明确要求"总结"时使用。
+    返回的消息格式为"作者(时间): 内容"。
     """
     channel = kwargs.get("channel")
     if not channel or not isinstance(channel, discord.abc.Messageable):
         return "错误：无法在当前上下文中找到有效的频道。"
 
-    # 健壮性处理：如果传入的是字典，先用它创建 Pydantic 模型实例
-    if not isinstance(params, SummarizeChannelParams):
-        try:
-            # 清理从模型收到的参数键，以防出现 '\"key\"' 等错误格式
-            clean_dict = {k.strip().strip('"'): v for k, v in params.items()}
-            params = SummarizeChannelParams(**clean_dict)
-        except Exception as e:
-            log.error(f"从字典 {params} 创建 SummarizeChannelParams 时出错: {e}")
-            return f"错误：提供的参数格式不正确。详情: {e}"
-
-    # 为保护系统性能，设置一个硬性上限
+    # params 已经由 tool_service 自动转换为 SummarizeChannelParams
     limit = min(params.limit, 500)
 
     after = None
@@ -122,7 +107,6 @@ def text_to_summary_image(
     """
     将文本转换为一张自适应高度的长图，能正确处理换行和避让右上角的Logo。
     """
-    # --- 1. 配置 ---
     LOGO_PATH = "src/chat/assets/logo.png"
     FONT_PATH = "src/chat/assets/font.TTF"
     IMG_WIDTH = 1200
@@ -130,12 +114,11 @@ def text_to_summary_image(
     LINE_SPACING = 15
     TITLE_FONT_SIZE = 48
     BODY_FONT_SIZE = 32
-    BG_COLOR = (43, 45, 49, 255)  # 接近 Discord 的深色背景
-    TEXT_COLOR = (220, 221, 222, 255)  # 接近 Discord 的文字颜色
+    BG_COLOR = (43, 45, 49, 255)
+    TEXT_COLOR = (220, 221, 222, 255)
     LOGO_MAX_SIZE = (250, 250)
 
     try:
-        # --- 2. 资源加载和预处理 ---
         try:
             title_font = ImageFont.truetype(FONT_PATH, size=TITLE_FONT_SIZE)
             body_font = ImageFont.truetype(FONT_PATH, size=BODY_FONT_SIZE)
@@ -155,19 +138,16 @@ def text_to_summary_image(
         emoji_pattern = r"<a?:.+?:\d+>"
         clean_text = re.sub(emoji_pattern, "", text).strip()
 
-        # --- 3. 精确排版与高度计算 ---
         lines = []
         current_y = float(MARGIN)
 
-        # --- 排版标题 ---
         title_bbox = title_font.getbbox(title)
         title_height = title_bbox[3] - title_bbox[1]
         lines.append(
             {"text": title, "y": current_y, "font": title_font, "color": TEXT_COLOR}
         )
-        current_y += title_height + 30  # 标题和正文间距
+        current_y += title_height + 30
 
-        # --- 排版正文 (Character-by-character wrapping) ---
         body_bbox = body_font.getbbox("A")
         line_height = (body_bbox[3] - body_bbox[1]) + LINE_SPACING
 
@@ -177,7 +157,7 @@ def text_to_summary_image(
 
         paragraphs = clean_text.split("\n")
         for para in paragraphs:
-            if not para.strip():  # 处理空行
+            if not para.strip():
                 current_y += line_height
                 continue
 
@@ -215,10 +195,8 @@ def text_to_summary_image(
                 )
                 current_y += line_height
 
-        # 确保底部有足够的边距
         total_height = int(current_y - line_height + body_bbox[3] + MARGIN)
 
-        # --- 4. 图像绘制 ---
         image = Image.new("RGBA", (IMG_WIDTH, total_height), BG_COLOR)
         draw = ImageDraw.Draw(image)
 
@@ -235,7 +213,6 @@ def text_to_summary_image(
                 fill=line_info["color"],
             )
 
-        # --- 5. 返回图片数据 ---
         output_buffer = io.BytesIO()
         image.save(output_buffer, format="PNG")
         image_bytes = output_buffer.getvalue()

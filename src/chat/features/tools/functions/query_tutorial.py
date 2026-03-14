@@ -1,4 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+教程查询工具 - 查询酒馆、类脑和公益站的教程、指南和报错解决方案
+"""
+
 import logging
+
+from pydantic import BaseModel, Field
+
 from src.chat.features.tutorial_search.services.tutorial_search_service import (
     tutorial_search_service,
 )
@@ -8,39 +16,38 @@ from src.chat.features.tools.tool_metadata import tool_metadata
 log = logging.getLogger(__name__)
 
 
+class TutorialQuery(BaseModel):
+    """教程查询参数"""
+
+    query: str = Field(
+        ...,
+        description="用户的原始问题。适用于酒馆(SillyTavern)、类脑、公益站相关的教程、指南、报错解决方案查询。",
+    )
+
+
 @tool_metadata(
     name="教程查询",
-    description="查询酒馆、类脑和公益站的教程、指南和报错解决方案～",
+    description="查询酒馆、类脑和公益站的教程、指南和报错解决方案",
     emoji="📚",
     category="查询",
 )
-async def query_tutorial_knowledge_base(query: str, **kwargs) -> str:
+async def query_tutorial_knowledge_base(params: TutorialQuery, **kwargs) -> str:
     """
-    专用于查询 SillyTavern(酒馆)、类脑社区及公益站的**教程、指南与报错解决方案**。
-    如果知识库没有相关内容，**必须**明确回答“我不知道”，**禁止**自行回答。
-
-    触发关键词:
-    - **核心**: 酒馆, SillyTavern, 类脑, 公益站, 角色卡, 预设, 世界书, 宏
-    - **技术**: 安装, 更新, 备份, 部署, 报错, API, Gemini, Claude, DeepSeek, 代理, Docker, Git, 免费, 公益站
-    - **社区**: 规则, 频道, 答疑。
-
-    **注意**: 日常问题无需使用。
-    参数 `query` 应为用户的原始问题。
+    查询教程知识库。适用于酒馆、类脑、公益站相关的技术问题。
+    如无相关内容会返回"我不知道"。
     """
+    # 从 Pydantic 模型中提取参数
+    query = params.query
+
     log.info(f"工具 'query_tutorial_knowledge_base' 被调用，查询: '{query}'")
 
-    # 1. 从 kwargs 中提取 user_id 和 thread_id
     user_id = kwargs.get("user_id", "N/A")
     thread_id = kwargs.get("thread_id")
 
-    # 2. 调用搜索服务，获取原始的、结构化的教程文档列表
     docs = await tutorial_search_service.search(
         query, user_id=str(user_id), thread_id=thread_id
     )
 
-    # 3. 将原始文档列表和 thread_id 传递给 prompt_service 进行专业的上下文格式化
-    #    prompt_service 内部会处理 docs 为空的情况，并包裹上必要的指令。
     formatted_context = prompt_service.format_tutorial_context(docs, thread_id)
 
-    # 4. 返回由 prompt_service 精心构建的、带有明确来源标注和行为指令的最终上下文
     return formatted_context

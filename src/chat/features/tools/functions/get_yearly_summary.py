@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
+"""
+年度总结工具 - 回顾这一年在类脑社区的点点滴滴
+"""
 
 import logging
 import discord
 from typing import Dict, Any
 from datetime import datetime
 from collections import Counter
+
+from pydantic import BaseModel
 
 from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
@@ -16,27 +21,22 @@ from src.chat.features.tools.tool_metadata import tool_metadata
 log = logging.getLogger(__name__)
 
 
+class YearlySummaryParams(BaseModel):
+    """年度总结参数（无需参数）"""
+
+    pass
+
+
 @tool_metadata(
     name="年度总结",
-    description="回顾一下这一年在类脑社区的点点滴滴～",
+    description="回顾这一年在类脑社区的点点滴滴，生成个性化年度报告",
     emoji="🎉",
     category="总结",
 )
 async def get_yearly_summary(**kwargs) -> Dict[str, Any]:
     """
-    为当前用户生成并直接通过私信发送个性化的年度活动总结报告。
-    这是一个完全自动化的端到端服务。AI调用此工具后，无需进行任何额外操作，
-    只需将工具返回的状态消息直接告知用户即可。
-
-    [核心功能]
-    - **全自动处理**: 从数据分析到私信发送，工具独立完成所有步骤。
-    - **智能分层内容**: 根据用户与AI的交互深度，自动生成三种不同风格和内容的总结。
-    - **防止重复**: 每个用户每年只能生成一次报告。
-
-    [AI调用指南]
-    - 当用户请求年度总结时，直接调用此工具，无需提供任何参数。
-    - 系统会自动处理当前用户的身份识别。
-    - 将工具返回的 `message` 字段内容以类脑娘风格回复给用户。
+    为当前用户生成年度活动总结报告并通过私信发送。
+    无需任何参数，系统自动识别用户身份。
     """
     # 步骤 1: 验证并获取 user_id
     # 核心安全保障：user_id 必须从 kwargs 中由系统注入。
