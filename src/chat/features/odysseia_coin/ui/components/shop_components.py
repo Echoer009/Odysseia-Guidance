@@ -1078,6 +1078,7 @@ class ToolSettingsView(discord.ui.View):
         self.user: discord.User | discord.Member | None = None
         self.user_settings: Dict[str, Any] | None = None
         self.all_tools: Dict[str, Dict[str, Any]] = {}
+        self.protected_tools: List[str] = []
         self.confirmation_message: str | None = None
 
     async def initialize(self, user: discord.User | discord.Member):
@@ -1086,12 +1087,20 @@ class ToolSettingsView(discord.ui.View):
             str(user.id)
         )
         self.all_tools = get_all_tools_metadata()
+        # 获取系统保留的工具列表（用户无法禁用）
+        from src.chat.features.tools.services.global_tool_settings_service import (
+            global_tool_settings_service,
+        )
+
+        self.protected_tools = await global_tool_settings_service.get_protected_tools()
         self.add_components()
 
     def add_components(self):
         """根据当前状态向视图添加组件。"""
         self.clear_items()
-        self.add_item(ToolToggleSelect(self.all_tools, self.user_settings))
+        self.add_item(
+            ToolToggleSelect(self.all_tools, self.user_settings, self.protected_tools)
+        )
 
         back_button = discord.ui.Button(
             label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️"
@@ -1127,15 +1136,16 @@ class ToolToggleSelect(discord.ui.Select):
         self,
         all_tools: Dict[str, Dict[str, Any]],
         user_settings: Dict[str, Any] | None,
+        protected_tools: List[str] | None = None,
     ):
-        from src.chat.config.chat_config import HIDDEN_TOOLS
-
         options = []
         enabled_tools = user_settings.get("enabled_tools") if user_settings else None
+        # 使用传入的 protected_tools 参数（系统保留的工具，用户无法禁用）
+        protected = set(protected_tools or [])
 
         for tool_name, meta in all_tools.items():
-            # 过滤掉不允许用户控制的工具（HIDDEN_TOOLS）
-            if tool_name in HIDDEN_TOOLS:
+            # 过滤掉不允许用户控制的工具（系统保留工具）
+            if tool_name in protected:
                 continue
             # 如果 user_settings 为 None，则默认启用所有工具。
             # 如果数据库中的 enabled_tools 为 None，则默认启用所有工具。

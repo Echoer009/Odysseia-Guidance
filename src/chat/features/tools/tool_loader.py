@@ -7,6 +7,9 @@
 返回：
 - tool_declarations: List[ToolDeclaration] - 通用工具声明列表（包含 JSON Schema）
 - tool_map: Dict[str, Callable] - 函数名到函数的映射（用于执行）
+
+注意：工具的启用/禁用状态现在由 GlobalToolSettingsService 在运行时控制，
+不再在加载时过滤。所有工具都会被加载，在执行时检查禁用状态。
 """
 
 import os
@@ -15,7 +18,6 @@ import inspect
 import logging
 from typing import Dict, Callable, List, Tuple
 
-from src.chat.config.chat_config import DISABLED_TOOLS
 from src.chat.features.tools.tool_declaration import ToolDeclaration
 from src.chat.features.tools.tool_metadata import get_tool_metadata
 from src.chat.features.tools.schema_utils import extract_function_schema
@@ -47,16 +49,11 @@ def load_tools_from_directory(
     tool_map: Dict[str, Callable] = {}
 
     log.info(f"--- [工具加载器]: 开始从 '{directory}' 目录加载工具 ---")
-    log.info(f"--- [工具加载器]: 禁用的工具模块: {DISABLED_TOOLS} ---")
+    log.info(f"--- [工具加载器]: 注意 - 工具启用/禁用状态由运行时配置控制 ---")
 
     for filename in os.listdir(directory):
         if filename.endswith(".py") and not filename.startswith("__init__"):
             module_name = filename[:-3]
-
-            # 检查是否在黑名单中
-            if module_name in DISABLED_TOOLS:
-                log.info(f"跳过禁用的工具模块: {module_name}")
-                continue
 
             # 构建完整的模块路径
             directory_str = str(directory).replace("\\", "/").replace("/", ".")
@@ -141,10 +138,6 @@ def load_tools_from_directory_legacy(
     for filename in os.listdir(directory):
         if filename.endswith(".py") and not filename.startswith("__init__"):
             module_name = filename[:-3]
-
-            if module_name in DISABLED_TOOLS:
-                log.info(f"跳过禁用的工具模块: {module_name}")
-                continue
 
             module_path = f"{directory.replace('/', '.')}.{module_name}"
 

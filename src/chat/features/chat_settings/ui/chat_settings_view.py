@@ -171,6 +171,16 @@ class ChatSettingsView(View):
             )
         )
 
+        # 第 4 行：全局工具设置
+        self.add_item(
+            Button(
+                label="🔧 全局工具设置",
+                style=ButtonStyle.secondary,
+                custom_id="global_tools_settings",
+                row=4,
+            )
+        )
+
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
         await self._initialize()  # 重新获取所有数据，包括派系
@@ -195,6 +205,8 @@ class ChatSettingsView(View):
             await self.on_show_token_usage(interaction)
         elif custom_id == "embedding_settings":
             await self.on_embedding_settings(interaction)
+        elif custom_id == "global_tools_settings":
+            await self.on_global_tools_settings(interaction)
 
         return True
 
@@ -347,5 +359,25 @@ class ChatSettingsView(View):
         embed = embedding_view._create_embed()
         await interaction.edit_original_response(
             content=None, embed=embed, view=embedding_view
+        )
+        self.stop()
+
+    async def on_global_tools_settings(self, interaction: Interaction):
+        """切换到全局工具设置视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+        from src.chat.features.chat_settings.ui.global_tools_settings_view import (
+            GlobalToolsSettingsView,
+        )
+
+        tools_view = await GlobalToolsSettingsView.create(interaction, self.message)
+        embed = tools_view._create_embed()
+        await interaction.edit_original_response(
+            content=None, embed=embed, view=tools_view
         )
         self.stop()

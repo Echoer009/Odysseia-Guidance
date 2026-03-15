@@ -7,8 +7,6 @@
 import functools
 from typing import Callable, Optional, Dict, Any
 
-from src.chat.config.chat_config import DISABLED_TOOLS, HIDDEN_TOOLS
-
 # 全局工具元数据注册表
 TOOL_METADATA: Dict[str, Dict[str, Any]] = {}
 
@@ -53,20 +51,24 @@ def get_tool_metadata(tool_name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_all_tools_metadata() -> Dict[str, Dict[str, Any]]:
-    """获取所有工具的元数据（自动过滤掉禁用的和隐藏的工具）"""
-    return {
-        name: meta
-        for name, meta in TOOL_METADATA.items()
-        if name not in DISABLED_TOOLS and name not in HIDDEN_TOOLS
-    }
+    """
+    获取所有工具的元数据。
+
+    注意：此函数返回所有工具的元数据，不再过滤禁用/隐藏的工具。
+    工具的启用/禁用状态由 GlobalToolSettingsService 在运行时控制。
+    """
+    return TOOL_METADATA.copy()
 
 
 def get_tools_by_category(category: str) -> Dict[str, Dict[str, Any]]:
-    """按类别获取工具（自动过滤掉禁用的和隐藏的工具）"""
+    """
+    按类别获取工具。
+
+    注意：此函数返回指定类别的所有工具，不再过滤禁用/隐藏的工具。
+    工具的启用/禁用状态由 GlobalToolSettingsService 在运行时控制。
+    """
     return {
         name: meta
         for name, meta in TOOL_METADATA.items()
         if meta.get("category") == category
-        and name not in DISABLED_TOOLS
-        and name not in HIDDEN_TOOLS
     }

@@ -18,9 +18,11 @@ from pydantic import BaseModel
 
 import logging
 
-from src.chat.config.chat_config import HIDDEN_TOOLS
 from src.chat.features.tools.services.user_tool_settings_service import (
     user_tool_settings_service,
+)
+from src.chat.features.tools.services.global_tool_settings_service import (
+    global_tool_settings_service,
 )
 from src.chat.features.tools.tool_declaration import ToolDeclaration
 from src.chat.features.tools.llm_adapters import to_gemini_tools
@@ -112,8 +114,9 @@ class ToolService:
         """
         根据提供的用户ID动态获取可用的工具列表（Gemini 格式）。
 
-        - 无论用户是否禁用工具，都返回所有工具声明。
-        - 工具执行时会检查是否被用户禁用，如果被禁用则返回错误提示。
+        过滤逻辑：
+        1. 全局禁用的工具不会返回给 AI（节省 token，AI 完全看不到）
+        2. 用户禁用的工具仍会返回给 AI（但执行时会被拒绝，用于教育用户）
 
         Args:
             user_id_for_settings: 用于查询工具设置的用户的ID。如果为 None，则返回默认工具。
@@ -121,16 +124,27 @@ class ToolService:
         Returns:
             Gemini 格式的工具列表（List[types.Tool]）。
         """
-        # 总是返回所有工具，让AI可以看到它们
-        # 工具执行时会检查是否被禁用
+        # 获取全局禁用的工具列表
+        disabled_tools = await global_tool_settings_service.get_disabled_tools()
+
+        # 过滤掉被全局禁用的工具
+        filtered_declarations = [
+            decl for decl in self.tool_declarations if decl.name not in disabled_tools
+        ]
+
+        if disabled_tools:
+            log.info(
+                f"全局禁用的工具: {disabled_tools}，过滤后剩余 {len(filtered_declarations)} 个工具"
+            )
+
         if not user_id_for_settings:
             log.info("未提供 user_id_for_settings，使用默认工具集。")
-            return to_gemini_tools(self.tool_declarations)
+            return to_gemini_tools(filtered_declarations)
 
         log.info(
-            f"为用户 {user_id_for_settings} 返回所有工具声明（共 {len(self.tool_declarations)} 个）"
+            f"为用户 {user_id_for_settings} 返回工具声明（共 {len(filtered_declarations)} 个）"
         )
-        return to_gemini_tools(self.tool_declarations)
+        return to_gemini_tools(filtered_declarations)
 
     def get_tool_declarations(self) -> List[ToolDeclaration]:
         """
@@ -183,10 +197,27 @@ class ToolService:
             )
 
         # --- 检查工具是否被禁用 ---
+        # 1. 首先检查全局禁用状态
+        try:
+            if await global_tool_settings_service.is_tool_disabled(tool_name):
+                log.info(f"工具 '{tool_name}' 已被全局禁用，拒绝执行。")
+                return types.Part.from_function_response(
+                    name=tool_name,
+                    response={"error": f"工具 '{tool_name}' 已被管理员全局禁用。"},
+                )
+        except Exception as e:
+            log.error(f"检查全局工具设置时出错: {e}", exc_info=True)
+
+        # 2. 检查用户级别的工具设置
         if user_id_for_settings:
             try:
-                # HIDDEN_TOOLS 中的工具是系统必须保留的，不应该让用户控制
-                if tool_name not in HIDDEN_TOOLS:
+                # 获取系统保留工具列表，保留工具用户无法禁用
+                protected_tools = (
+                    await global_tool_settings_service.get_protected_tools()
+                )
+
+                # 系统保留工具不检查用户设置
+                if tool_name not in protected_tools:
                     user_settings = (
                         await user_tool_settings_service.get_user_tool_settings(
                             user_id_for_settings
