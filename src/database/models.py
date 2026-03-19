@@ -550,3 +550,101 @@ class ForumThread(Base):
 
     def __repr__(self):
         return f"<ForumThread(id={self.id}, thread_id={self.thread_id}, thread_name='{self.thread_name}')>"
+
+
+# --- 对话记忆块模型 (ParadeDB) ---
+
+
+# 对话记忆使用的 schema
+CONVERSATION_SCHEMA = "conversation"
+
+
+class ConversationBlock(Base):
+    """
+    代表用户与类脑娘的一段对话块。
+    每 block_size 条对话存储为一个块，支持向量检索实现"永久记忆"。
+    使用混合搜索（向量+BM25）来检索相关历史对话。
+    """
+
+    __tablename__ = "conversation_blocks"
+    __table_args__ = (
+        # HNSW 向量索引用于向量相似度搜索
+        Index(
+            "idx_conv_bge_embedding_hnsw",
+            "bge_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"bge_embedding": "halfvec_cosine_ops"},
+        ),
+        Index(
+            "idx_conv_qwen_embedding_hnsw",
+            "qwen_embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"qwen_embedding": "halfvec_cosine_ops"},
+        ),
+        # 用户ID索引用于过滤
+        Index("idx_conv_discord_id", "discord_id"),
+        # 开始时间索引用于排序
+        Index("idx_conv_start_time", "start_time"),
+        {"schema": CONVERSATION_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # 用户标识
+    discord_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="用户的Discord ID"
+    )
+
+    # 对话块内容
+    conversation_text: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="对话块的原始文本内容"
+    )
+
+    # 时间范围（用于显示"X天前的对话"）
+    start_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, comment="对话块中第一条消息的时间"
+    )
+    end_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime, nullable=False, comment="对话块中最后一条消息的时间"
+    )
+
+    # 消息数量
+    message_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="对话块中的消息数量"
+    )
+
+    # 是否已被印象总结（用于方案E：每2个新块触发一次印象总结）
+    summarized: Mapped[bool] = mapped_column(
+        Integer,  # SQLite兼容：用 0/1 表示布尔值
+        nullable=False,
+        default=0,
+        comment="是否已被印象总结（0=未总结，1=已总结）",
+    )
+
+    # 向量嵌入
+    bge_embedding: Mapped[list[float] | None] = mapped_column(
+        HALFVEC(EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="BGE-M3 模型的对话内容向量嵌入（用于语义搜索）",
+    )
+    qwen_embedding: Mapped[list[float] | None] = mapped_column(
+        HALFVEC(QWEN_EMBEDDING_DIMENSION),
+        nullable=True,
+        comment="Qwen3-Embedding-0.6B 模型的对话内容向量嵌入（用于语义搜索）",
+    )
+
+    # 数据库管理时间戳
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), comment="数据库记录创建时间"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="数据库记录更新时间",
+    )
+
+    def __repr__(self):
+        return f"<ConversationBlock(id={self.id}, discord_id='{self.discord_id}', start_time={self.start_time})>"

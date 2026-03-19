@@ -5,7 +5,7 @@
 from __future__ import annotations
 import discord
 import logging
-from typing import List, Dict, Any, TypeVar, cast, TYPE_CHECKING
+from typing import List, Dict, Any, TypeVar, cast, TYPE_CHECKING, Optional
 
 
 from src.chat.services.event_service import event_service
@@ -545,6 +545,12 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
         )
 
         final_message = message
+
+        # 检查是否需要显示对话块管理面板
+        if success and message == "show_conversation_blocks_panel":
+            await self._show_conversation_blocks_panel(interaction, item, new_balance)
+            return
+
         if success and embed_data:
             embed = discord.Embed(
                 title=embed_data["title"],
@@ -568,6 +574,46 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
                 and item.get("effect_id") == ENABLE_THREAD_REPLIES_EFFECT_ID
             ):
                 await self.handle_thread_settings_modal(interaction)
+
+    async def _show_conversation_blocks_panel(
+        self,
+        interaction: discord.Interaction,
+        item: Dict[str, Any],
+        new_balance: Optional[int],
+    ):
+        """显示对话块管理面板"""
+        from src.chat.features.personal_memory.ui.user_conversation_blocks_view import (
+            UserConversationBlocksView,
+        )
+
+        # 创建初始 Embed
+        embed = discord.Embed(
+            title="💬 对话记忆管理",
+            description="正在加载你的对话记忆...",
+            color=discord.Color.purple(),
+        )
+
+        # 发送初始消息并获取该消息对象
+        # followup.send 返回 WebhookMessage，可以直接用于后续编辑
+        message = await interaction.followup.send(
+            embed=embed, ephemeral=True, wait=True
+        )
+
+        # 创建视图
+        view = UserConversationBlocksView(
+            user_id=interaction.user.id,
+            message=message,
+        )
+        await view.initialize()
+
+        # 更新视图
+        embed = await view._build_embed()
+        await message.edit(embed=embed, view=view)
+
+        # 更新商店余额显示
+        if new_balance is not None:
+            self.view.balance = new_balance
+            await self.view._update_shop_embed(interaction)
 
     async def handle_thread_settings_modal(self, interaction: discord.Interaction):
         try:

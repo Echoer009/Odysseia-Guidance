@@ -15,7 +15,11 @@ from src.chat.features.world_book.services.incremental_rag_service import (
     incremental_rag_service,
 )
 from src.chat.utils.database import DB_PATH as CHAT_DB_PATH, get_database_url
-from src.database.models import CommunityMemberProfile, GeneralKnowledgeDocument
+from src.database.models import (
+    CommunityMemberProfile,
+    GeneralKnowledgeDocument,
+    ConversationBlock,
+)
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +27,7 @@ log = logging.getLogger(__name__)
 TABLE_TO_MODEL_MAP = {
     "community.member_profiles": CommunityMemberProfile,
     "general_knowledge.knowledge_documents": GeneralKnowledgeDocument,
+    "conversation.conversation_blocks": ConversationBlock,
 }
 
 

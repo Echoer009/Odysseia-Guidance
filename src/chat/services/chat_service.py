@@ -15,6 +15,9 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.personal_memory.services.conversation_memory_search_service import (
+    conversation_memory_search_service,
+)
 from src.chat.config import chat_config
 from src.chat.config.chat_config import DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
@@ -163,6 +166,54 @@ class ChatService:
                 conversation_history=channel_context,
             )
 
+            # --- 新增：对话记忆 RAG 检索 ---
+            # 先检查是否需要创建对话块（在检索前创建，确保最新对话可被检索）
+            if user_profile_data:
+                await personal_memory_service.check_and_create_block_before_reply(
+                    user_id=author.id
+                )
+
+            # 获取最新对话块的 ID，用于在 RAG 检索时排除
+            # 这样可以避免检索到与当前对话历史（最新的10条）重复的内容
+            from src.chat.features.personal_memory.services.conversation_block_service import (
+                conversation_block_service,
+            )
+
+            latest_block_id = await conversation_block_service.get_latest_block_id(
+                str(author.id)
+            )
+            exclude_block_ids = [latest_block_id] if latest_block_id else None
+
+            # 检索与当前对话相关的历史对话块（排除最新的对话块）
+            conversation_memory_blocks = (
+                await conversation_memory_search_service.search(
+                    discord_id=str(author.id),
+                    query=rag_query,
+                    exclude_block_ids=exclude_block_ids,
+                )
+            )
+            conversation_memory_text = None
+            if conversation_memory_blocks:
+                conversation_memory_text = (
+                    conversation_memory_search_service.format_blocks_for_context(
+                        conversation_memory_blocks
+                    )
+                )
+                log.info(f"检索到 {len(conversation_memory_blocks)} 个相关对话记忆块")
+
+            # --- 第三层记忆：获取最新对话块内容 ---
+            # 这是用户最近的对话历史，作为三层记忆的第三层注入到 prompt 末尾
+            latest_block_content = (
+                await conversation_block_service.get_latest_block_content(
+                    str(author.id)
+                )
+            )
+            if latest_block_content:
+                log.info(
+                    f"获取最新对话块: id={latest_block_content['id']}, "
+                    f"time={latest_block_content['time_description']}"
+                )
+
             # --- 新增：集中获取所有上下文数据 ---
             affection_status = await affection_service.get_affection_status(author.id)
 
@@ -218,6 +269,8 @@ class ChatService:
                 location_name=location_name,
                 model_name=current_model,  # 传递模型名称
                 user_id_for_settings=user_id_for_settings,  # 传递用于工具设置的用户ID
+                conversation_memory=conversation_memory_text,  # 第二层：对话记忆 RAG 内容
+                latest_block=latest_block_content,  # 第三层：最新对话块
             )
 
             if not ai_response:

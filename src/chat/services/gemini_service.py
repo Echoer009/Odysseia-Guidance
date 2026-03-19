@@ -526,6 +526,8 @@ class GeminiService:
         location_name: str = "未知位置",
         model_name: Optional[str] = None,
         user_id_for_settings: Optional[str] = None,
+        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
+        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
     ) -> str:
         """
         AI 回复生成的分发器。
@@ -567,6 +569,8 @@ class GeminiService:
                             location_name=location_name,
                             model_name=model_name,
                             user_id_for_settings=user_id_for_settings,
+                            conversation_memory=conversation_memory,
+                            latest_block=latest_block,
                         )
                     except Exception as e:
                         last_exception = e
@@ -610,6 +614,8 @@ class GeminiService:
                     location_name=location_name,
                     model_name=fallback_model_name,  # 关键：使用固定的回退模型
                     user_id_for_settings=user_id_for_settings,
+                    conversation_memory=conversation_memory,
+                    latest_block=latest_block,
                 )
             else:
                 # 关闭fallback：重试自定义端点5次，失败后返回固定文本
@@ -637,6 +643,8 @@ class GeminiService:
                             location_name=location_name,
                             model_name=model_name,
                             user_id_for_settings=user_id_for_settings,
+                            conversation_memory=conversation_memory,
+                            latest_block=latest_block,
                         )
                     except Exception as e:
                         last_exception = e
@@ -681,6 +689,8 @@ class GeminiService:
             location_name=location_name,
             model_name=model_name,
             user_id_for_settings=user_id_for_settings,
+            conversation_memory=conversation_memory,
+            latest_block=latest_block,
         )
 
     async def _generate_with_custom_endpoint(
@@ -701,6 +711,8 @@ class GeminiService:
         location_name: str = "未知位置",
         model_name: Optional[str] = None,
         user_id_for_settings: Optional[str] = None,
+        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
+        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
     ) -> str:
         """
         [新增] 使用自定义端点 (例如公益站) 生成 AI 回复。
@@ -736,9 +748,6 @@ class GeminiService:
             total_images = len(images)
             max_images = app_config.IMAGE_PROCESSING_CONFIG.get(
                 "MAX_IMAGES_PER_MESSAGE", 9
-            )
-            sequential_processing = app_config.IMAGE_PROCESSING_CONFIG.get(
-                "SEQUENTIAL_PROCESSING", True
             )
 
             log.info(f"检测到 {total_images} 张图片，将为自定义端点进行净化处理。")
@@ -781,6 +790,8 @@ class GeminiService:
             or self.default_model_name,  # 传递用于调用 API 的真实模型名称
             client=client,
             user_id_for_settings=user_id_for_settings,
+            conversation_memory=conversation_memory,
+            latest_block=latest_block,
         )
 
     @_api_key_handler
@@ -803,6 +814,8 @@ class GeminiService:
         model_name: Optional[str] = None,
         client: Any = None,
         user_id_for_settings: Optional[str] = None,
+        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
+        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
     ) -> str:
         """
         [重构] 使用官方 API 密钥池生成 AI 回复。
@@ -831,6 +844,8 @@ class GeminiService:
             api_model_name=model_name,
             client=client,
             user_id_for_settings=user_id_for_settings,
+            conversation_memory=conversation_memory,
+            latest_block=latest_block,
         )
 
     async def _execute_generation_cycle(
@@ -853,6 +868,8 @@ class GeminiService:
         api_model_name: Optional[str],
         client: Any,
         user_id_for_settings: Optional[str] = None,
+        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
+        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
     ) -> str:
         """
         [新增] 核心的 AI 生成周期，包含上下文构建、工具调用循环和响应处理。
@@ -878,6 +895,8 @@ class GeminiService:
             location_name=location_name,
             model_name=prompt_model_name,
             channel=channel,  # 传递 channel 对象
+            conversation_memory=conversation_memory,  # 第二层：对话记忆 RAG 内容
+            latest_block=latest_block,  # 第三层：最新对话块
         )
 
         # 3. 准备 API 调用参数 (重构)

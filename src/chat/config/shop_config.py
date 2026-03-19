@@ -19,6 +19,7 @@ from src.chat.features.odysseia_coin.service.coin_service import (
     SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
     CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
     VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID,
+    MANAGE_CONVERSATION_BLOCKS_EFFECT_ID,
 )
 
 # SHOP_ITEMS列表仅用于数据迁移，实际商品数据存储在PostgreSQL的shop.shop_items表中
@@ -66,11 +67,11 @@ SHOP_ITEMS = [
     ),
     (
         "黑衣人的记忆消除器",
-        "“看这里。”咔嚓一声，一道闪光之后，类脑娘会忘记所有关于你的个人记忆。别担心，这玩意不防墨镜，但也许能防止你社会性死亡。",
+        "'看这里。'咔嚓一声，一道闪光之后，你可以选择性地删除你与类脑娘的对话记忆。这玩意不防墨镜，但也许能防止你社会性死亡。",
         200,
         "物品-给自己",
         "self",
-        CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID,
+        MANAGE_CONVERSATION_BLOCKS_EFFECT_ID,
     ),
     (
         "午后闲谈",

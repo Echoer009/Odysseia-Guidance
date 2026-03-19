@@ -129,6 +129,8 @@ class PromptService:
         user_profile_data: Optional[Dict[str, Any]] = None,
         model_name: Optional[str] = None,
         channel: Optional[Any] = None,  # 新增 channel 参数
+        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
+        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
     ) -> List[Dict[str, Any]]:
         """
         构建用于AI聊天的分层对话历史。
@@ -236,13 +238,42 @@ class PromptService:
             )
             final_conversation.append({"role": "model", "parts": ["我想起来了。"]})
 
-        # 注入个人记忆
+        # --- 三层记忆注入（合并到一个 part 中）---
+        # 第一层：类脑的印象（personal_summary）
+        # 第二层：RAG 检索的相关对话块（conversation_memory）
+        # 第三层：最新的对话块（latest_block）
+        memory_parts = []
+
+        # 第一层：个人印象
         if personal_summary:
-            personal_summary_content = f"这是关于 {user_name} ,你对ta的一些记忆：\n<personal_memory>\n{personal_summary}\n</personal_memory>"
-            final_conversation.append(
-                {"role": "user", "parts": [personal_summary_content]}
+            memory_parts.append(
+                f"<personal_memory>\n这是关于 {user_name} ,你对ta的印象：\n{personal_summary}\n</personal_memory>"
             )
-            final_conversation.append({"role": "model", "parts": ["记住啦"]})
+
+        # 第二层：RAG 对话记忆
+        if conversation_memory:
+            memory_parts.append(
+                f"<conversation_memory>\n以下是你与 {user_name} 之前的一些对话片段：\n{conversation_memory}\n</conversation_memory>"
+            )
+
+        # 第三层：最新对话块
+        if latest_block:
+            time_desc = latest_block.get("time_description", "最近")
+            conversation_text = latest_block.get("conversation_text", "")
+            memory_parts.append(
+                f"<latest_conversation>\n以下是你与 {user_name} 在 {time_desc} 的对话记录：\n{conversation_text}\n</latest_conversation>"
+            )
+
+        # 合并三层记忆到一个 part 中
+        if memory_parts:
+            combined_memory_content = "\n\n".join(memory_parts)
+            final_conversation.append(
+                {"role": "user", "parts": [combined_memory_content]}
+            )
+            final_conversation.append({"role": "model", "parts": ["嗯，我记得这些。"]})
+            log.debug(
+                f"已注入三层记忆: 印象={bool(personal_summary)}, RAG={bool(conversation_memory)}, 最新块={bool(latest_block)}"
+            )
 
         # --- 新增：注入好感度和用户档案 ---
         affection_prompt = (

@@ -23,6 +23,7 @@ ENABLE_THREAD_REPLIES_EFFECT_ID = "enable_thread_replies"
 SELL_BODY_EVENT_SUBMISSION_EFFECT_ID = "submit_sell_body_event"
 CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID = "clear_personal_memory"
 VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID = "view_personal_memory"
+MANAGE_CONVERSATION_BLOCKS_EFFECT_ID = "manage_conversation_blocks"
 
 
 def _select_random_cg_url(cg_url) -> Optional[str]:
@@ -370,7 +371,7 @@ class CoinService:
         elif item_target == "self" and item_effect:
             # --- 给自己用且有立即效果的物品 ---
             if item_effect == CLEAR_PERSONAL_MEMORY_ITEM_EFFECT_ID:
-                # 清除用户的个人记忆
+                # 清除用户的个人记忆（旧版：直接清除所有）
                 from src.chat.features.personal_memory.services.personal_memory_service import (
                     personal_memory_service,
                 )
@@ -379,6 +380,17 @@ class CoinService:
                 return (
                     True,
                     f"一道耀眼的闪光后，类脑娘关于 **{item['name']}** 的记忆...呃，不对，是类脑娘关于你的记忆被清除了。你们可以重新开始了。",
+                    new_balance,
+                    False,
+                    None,
+                    _select_random_cg_url(item.get("cg_url")),
+                )
+            elif item_effect == MANAGE_CONVERSATION_BLOCKS_EFFECT_ID:
+                # 新版：打开对话块管理面板，让用户选择性删除
+                # 返回特殊标记，让调用方知道需要打开管理面板
+                return (
+                    True,
+                    "show_conversation_blocks_panel",  # 特殊标记
                     new_balance,
                     False,
                     None,

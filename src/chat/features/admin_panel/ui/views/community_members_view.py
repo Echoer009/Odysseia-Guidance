@@ -12,6 +12,7 @@ from src.chat.features.admin_panel.services.profile_formatter import (
 )
 
 from .base_view import BaseTableView
+from .conversation_blocks_view import UserConversationBlocksView
 from ..modals.edit_modals import EditCommunityMemberModal, EditMemoryModal
 from ..modals.search_modals import SearchUserModal, SearchCommunityMemberModal
 from src.chat.features.personal_memory.services.personal_memory_service import (
@@ -74,6 +75,12 @@ class CommunityMembersView(BaseTableView):
         self.view_memory_button.callback = self.view_memory
         self.add_item(self.view_memory_button)
 
+        self.view_conversation_blocks_button = discord.ui.Button(
+            label="对话块管理", emoji="💬", style=discord.ButtonStyle.primary, row=1
+        )
+        self.view_conversation_blocks_button.callback = self.view_conversation_blocks
+        self.add_item(self.view_conversation_blocks_button)
+
         # Row 2
         self.reset_memory_button = discord.ui.Button(
             label="重置记忆与历史", emoji="🔄", style=discord.ButtonStyle.danger, row=2
@@ -129,6 +136,46 @@ class CommunityMembersView(BaseTableView):
             )
         except Exception as e:
             log.error(f"打开记忆编辑模态框时出错: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"处理请求时发生错误: {e}", ephemeral=True
+            )
+
+    async def view_conversation_blocks(self, interaction: discord.Interaction):
+        """打开该用户的对话块管理视图"""
+        if not self.current_item_id:
+            return
+
+        current_item = self._get_item_by_id(self.current_item_id)
+        if not current_item or "discord_id" not in current_item.keys():
+            await interaction.response.send_message(
+                "无法获取该成员的 Discord ID。", ephemeral=True
+            )
+            return
+
+        discord_id = current_item["discord_id"]
+        if not discord_id:
+            await interaction.response.send_message(
+                "该成员未记录 Discord ID，无法查询对话块。", ephemeral=True
+            )
+            return
+
+        try:
+            user_id = str(discord_id)
+            member_name = (
+                self._get_entry_title(dict(current_item)) or f"ID: {discord_id}"
+            ).replace("社区成员档案 - ", "")
+
+            # 创建用户级别的对话块管理视图
+            view = UserConversationBlocksView(
+                self.author_id, self.message, self, user_id, member_name
+            )
+            await view.initialize()
+            await interaction.response.edit_message(
+                embed=await view._build_embed(), view=view
+            )
+
+        except Exception as e:
+            log.error(f"打开对话块管理视图时出错: {e}", exc_info=True)
             await interaction.response.send_message(
                 f"处理请求时发生错误: {e}", ephemeral=True
             )
