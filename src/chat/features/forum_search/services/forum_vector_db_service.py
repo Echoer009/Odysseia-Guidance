@@ -453,7 +453,7 @@ class ForumVectorDBService:
 
                 if conditions:
                     sql_query = text(
-                        sql_query.text + " WHERE " + " AND ".join(conditions)
+                        sql_query.text + " AND " + " AND ".join(conditions)
                     )
 
                 # 添加排序和限制
