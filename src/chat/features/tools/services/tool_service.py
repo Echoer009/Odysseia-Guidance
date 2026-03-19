@@ -49,7 +49,7 @@ def _convert_dict_to_pydantic(
     sig = inspect.signature(tool_function)
 
     for param_name, param in sig.parameters.items():
-        if param_name in ("kwargs", "args") or param_name not in tool_args:
+        if param_name in ("kwargs", "args"):
             continue
 
         # 获取参数的类型注解
@@ -61,18 +61,35 @@ def _convert_dict_to_pydantic(
         if isinstance(param_annotation, type) and issubclass(
             param_annotation, BaseModel
         ):
-            arg_value = tool_args[param_name]
+            # 情况1: 参数已存在于 tool_args 中
+            if param_name in tool_args:
+                arg_value = tool_args[param_name]
 
-            # 如果值是字典，转换为 Pydantic 模型
-            if isinstance(arg_value, dict) and not isinstance(
-                arg_value, param_annotation
-            ):
+                # 如果值是字典，转换为 Pydantic 模型
+                if isinstance(arg_value, dict) and not isinstance(
+                    arg_value, param_annotation
+                ):
+                    try:
+                        tool_args[param_name] = param_annotation(**arg_value)
+                        log.debug(
+                            f"自动转换: {param_name} -> {param_annotation.__name__}"
+                        )
+                    except Exception as e:
+                        log.warning(
+                            f"转换参数 '{param_name}' 到 {param_annotation.__name__} 失败: {e}"
+                        )
+            # 情况2: 参数不存在于 tool_args 中，但函数签名要求该参数
+            # 如果 Pydantic 模型的所有字段都有默认值，则创建默认实例
+            elif param.default is inspect.Parameter.empty:
+                # 参数没有默认值，需要创建 Pydantic 模型实例
                 try:
-                    tool_args[param_name] = param_annotation(**arg_value)
-                    log.debug(f"自动转换: {param_name} -> {param_annotation.__name__}")
+                    tool_args[param_name] = param_annotation()
+                    log.debug(
+                        f"自动创建默认实例: {param_name} -> {param_annotation.__name__}()"
+                    )
                 except Exception as e:
                     log.warning(
-                        f"转换参数 '{param_name}' 到 {param_annotation.__name__} 失败: {e}"
+                        f"创建参数 '{param_name}' 的默认 {param_annotation.__name__} 实例失败: {e}"
                     )
 
     return tool_args
