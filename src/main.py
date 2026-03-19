@@ -299,11 +299,6 @@ class GuidanceBot(commands.Bot):
                 if file.name.startswith("__"):
                     continue
 
-                # --- 临时禁用抽鬼牌 ---
-                if file.name == "ghost_card_cog.py":
-                    log.warning(f"已跳过加载有问题的模块: {file.name}")
-                    continue
-
                 # --- 临时禁用图像生成 ---
                 if file.name == "image_generation_cog.py":
                     log.warning(f"已根据指令临时跳过加载: {file.name}")
