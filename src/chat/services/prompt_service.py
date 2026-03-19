@@ -288,6 +288,7 @@ class PromptService:
             source_data = {}
             source_metadata = user_profile_data.get("source_metadata")
             if isinstance(source_metadata, dict):
+                # 首先尝试从 content_json 获取数据（旧格式）
                 content_json_str = source_metadata.get("content_json")
                 if isinstance(content_json_str, str):
                     try:
@@ -296,6 +297,11 @@ class PromptService:
                         log.warning(
                             f"解析用户档案 'content_json' 失败: {content_json_str}"
                         )
+                # 直接从 source_metadata 获取字段（新格式）
+                # source_metadata 可能直接包含 personality, background, preferences 等字段
+                for key in ["name", "personality", "background", "preferences"]:
+                    if key in source_metadata and source_metadata[key]:
+                        source_data[key] = source_metadata[key]
 
             # 顶层数据覆盖JSON数据，确保最终一致性
             source_data.update(user_profile_data)
