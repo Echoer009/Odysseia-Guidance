@@ -31,6 +31,12 @@ class WorldBookService:
 
     def is_ready(self) -> bool:
         """检查服务是否已准备好（所有依赖项都可用）。"""
+        # 本地向量模式不需要 gemini_service
+        from src.chat.services.embedding_factory import is_vector_enabled
+
+        if chat_config.VECTOR_MODE == "local":
+            return is_vector_enabled()
+        # API 向量模式需要 gemini_service
         return self.gemini_service.is_available()
 
     async def find_entries(

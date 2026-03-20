@@ -129,13 +129,15 @@ configure_required() {
     echo "────────────────────────────────────────"
 
     DISCORD_TOKEN=$(ask_question "Discord 机器人令牌是什么呢？" "" "true")
+}
 
+# 配置 Gemini API 密钥（仅在 API 向量模式时调用）
+configure_gemini_api_keys() {
     echo ""
     say_hello "接下来是 Google Gemini API 密钥～"
-    say_wait "用于RAG检索功能（世界书、论坛搜索等）"
+    say_wait "用于 API 向量模式的 RAG 检索功能"
     say_wait "可以输入多个密钥哦，每个占一行，输入空行结束"
     say_hello "获取地址: https://makersuite.google.com/app/apikey"
-    say_warning "如果留空，RAG检索功能将被禁用，但AI对话仍可使用"
 
     GOOGLE_API_KEYS=""
     key_count=0
@@ -147,8 +149,7 @@ configure_required() {
         if [ -z "$key" ]; then
             if [ $key_count -eq 0 ]; then
                 say_warning "跳过 Gemini API 密钥配置～"
-                say_warning "RAG检索功能将被禁用"
-                SKIP_RAG=true
+                say_warning "API 向量模式将无法使用，建议重新选择其他模式"
             fi
             break
         fi
@@ -191,23 +192,22 @@ configure_vector_mode() {
         read -r reply < /dev/tty
         echo ""
         case "$reply" in
-            1|"")
-                if [ "$reply" = "1" ]; then
-                    VECTOR_MODE="none"
-                    say_warning "已选择：无向量直接聊天模式"
-                else
-                    VECTOR_MODE="local"
-                    say_success "已选择：本地向量模式（默认）"
-                fi
+            1)
+                VECTOR_MODE="none"
+                say_success "已选择：无向量直接聊天模式"
+                say_warning "RAG 检索功能将被禁用"
+                break
+                ;;
+            "")
+                VECTOR_MODE="local"
+                say_success "已选择：本地向量模式（默认）"
                 break
                 ;;
             2)
                 VECTOR_MODE="api"
                 say_success "已选择：API 向量模式"
-                if [ -z "$GOOGLE_API_KEYS" ]; then
-                    say_warning "API 向量模式需要 Gemini API 密钥！"
-                    say_wait "请确保在上一步配置了 Gemini API 密钥"
-                fi
+                # 只有选择 API 向量模式时才询问 Gemini API 密钥
+                configure_gemini_api_keys
                 break
                 ;;
             3)
@@ -470,8 +470,9 @@ start_service() {
     fi
 
     # 启动服务
+    # 注意：--profile 必须放在 up 之前
     say_wait "让类脑娘住进来..."
-    local compose_cmd="docker compose up -d $compose_profile"
+    local compose_cmd="docker compose $compose_profile up -d"
     if eval "$compose_cmd"; then
         say_success "类脑娘已经住进来了～"
     else
