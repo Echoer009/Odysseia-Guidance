@@ -370,3 +370,10 @@ class BaseTableView(discord.ui.View):
     async def _build_detail_embed(self) -> discord.Embed:
         # 子类将实现此方法以构建其特定的详情 embed
         raise NotImplementedError
+
+    async def _build_embed(self) -> discord.Embed:
+        """构建当前视图模式的 Embed"""
+        if self.view_mode == "list":
+            return await self._build_list_embed()
+        else:
+            return await self._build_detail_embed()

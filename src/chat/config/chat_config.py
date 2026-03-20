@@ -5,10 +5,19 @@
 """
 
 import os
+from typing import Literal
 from src.config import _parse_ids
 
 # --- Chat 功能总开关 ---
 CHAT_ENABLED = os.getenv("CHAT_ENABLED", "False").lower() == "true"
+
+# --- 向量模式配置 ---
+# 支持三种模式:
+# - "none": 无向量，直接聊天（不使用 RAG 检索功能）
+# - "api": API 向量，使用 Gemini Embedding API
+# - "local": 本地向量，使用 Ollama 本地模型（默认）
+VectorMode = Literal["none", "api", "local"]
+VECTOR_MODE: VectorMode = os.getenv("VECTOR_MODE", "local").lower()  # type: ignore
 
 # --- 交互禁用配置 ---
 # 在这些频道ID中，所有交互（包括 @mention 和 /命令）都将被完全禁用。

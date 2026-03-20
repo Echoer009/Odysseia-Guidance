@@ -16,37 +16,17 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy import text
 
 from src.database.database import AsyncSessionLocal
-from src.chat.services.ollama_embedding_service import (
-    ollama_embedding_service,
-    qwen_embedding_service,
+from src.chat.services.embedding_factory import (
+    get_embedding_service,
+    get_embedding_column,
+    is_vector_enabled,
 )
 from src.chat.config import chat_config
-from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.conversation_block_service import (
     format_time_description,
 )
 
 log = logging.getLogger(__name__)
-
-
-async def get_embedding_column() -> str:
-    """根据数据库配置返回当前使用的 embedding 列名"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        return "qwen_embedding" if model == "qwen" else "bge_embedding"
-    except Exception:
-        return "qwen_embedding"  # 默认使用 Qwen
-
-
-async def get_embedding_service():
-    """根据数据库配置返回当前使用的 embedding 服务实例"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        if model == "qwen":
-            return qwen_embedding_service
-        return ollama_embedding_service
-    except Exception:
-        return qwen_embedding_service  # 默认使用 Qwen
 
 
 class ConversationMemorySearchService:
@@ -231,6 +211,11 @@ class ConversationMemorySearchService:
         # 检查是否启用对话记忆
         if not self.config.get("enabled", True):
             log.debug("对话记忆功能已禁用")
+            return []
+
+        # 检查是否启用向量模式
+        if not is_vector_enabled():
+            log.debug("向量模式已禁用，跳过对话记忆搜索")
             return []
 
         try:

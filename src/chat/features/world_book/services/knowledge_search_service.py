@@ -5,34 +5,14 @@ from typing import Any, List, Dict
 
 from sqlalchemy import text
 from src.database.database import AsyncSessionLocal
-from src.chat.services.ollama_embedding_service import (
-    ollama_embedding_service,
-    qwen_embedding_service,
+from src.chat.services.embedding_factory import (
+    get_embedding_service,
+    get_embedding_column,
+    is_vector_enabled,
 )
 from src.chat.config import chat_config
-from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
-
-
-async def get_embedding_column() -> str:
-    """根据数据库配置返回当前使用的 embedding 列名"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        return "qwen_embedding" if model == "qwen" else "bge_embedding"
-    except Exception:
-        return "qwen_embedding"  # 默认使用 Qwen
-
-
-async def get_embedding_service():
-    """根据数据库配置返回当前使用的 embedding 服务实例"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        if model == "qwen":
-            return qwen_embedding_service
-        return ollama_embedding_service
-    except Exception:
-        return qwen_embedding_service  # 默认使用 Qwen
 
 
 class KnowledgeSearchService:
@@ -168,6 +148,11 @@ class KnowledgeSearchService:
         3. (暂定)直接返回 chunks 内容，因为我们的场景下，chunk 可能就是全部。
         """
         log.info(f"收到知识库混合搜索请求: '{query}'")
+
+        # 检查是否启用了向量功能
+        if not is_vector_enabled():
+            log.info("[知识库搜索] 向量功能未启用，跳过搜索")
+            return []
 
         try:
             # 根据配置选择对应的 embedding 服务

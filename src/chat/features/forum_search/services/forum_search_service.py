@@ -113,13 +113,14 @@ class ForumSearchService:
         qwen_embedding: Optional[List[float]] = None
 
         for i, name in enumerate(task_names):
-            if isinstance(results[i], Exception):
-                log.error(f"生成 {name} embedding 失败: {results[i]}")
-            elif isinstance(results[i], list):
+            result = results[i]
+            if isinstance(result, Exception):
+                log.error(f"生成 {name} embedding 失败: {result}")
+            elif isinstance(result, list):
                 if name == "bge":
-                    bge_embedding = list(results[i])  # type: ignore
+                    bge_embedding = list(result)
                 elif name == "qwen":
-                    qwen_embedding = list(results[i])  # type: ignore
+                    qwen_embedding = list(result)
 
         return bge_embedding, qwen_embedding
 
@@ -381,23 +382,29 @@ class ForumSearchService:
             if query and query.strip():
                 if use_hybrid:
                     # --- 混合搜索逻辑（向量 + BM25）---
+                    # 检查向量模式是否启用
+                    from src.chat.services.embedding_factory import (
+                        is_vector_enabled,
+                        get_embedding_service,
+                    )
+
+                    if not is_vector_enabled():
+                        log.info("向量模式已禁用，跳过混合搜索，回退到 BM25 搜索。")
+                        # 回退到 BM25 搜索
+                        search_results = await self.vector_db_service.search_bm25(
+                            query=query,
+                            n_results=n_results,
+                            where_filter=where_filter,
+                        )
+                        return search_results
+
                     if not self.is_ready():
                         log.info("RAG功能未启用：未配置API密钥，跳过混合搜索。")
                         return []
                     log.info(f"[FORUM_SEARCH] 执行混合搜索，查询: '{query}'")
-                    # 根据配置选择对应的 embedding 服务
-                    from src.chat.utils.database import chat_db_manager
 
-                    try:
-                        model = await chat_db_manager.get_global_setting(
-                            "embedding_model"
-                        )
-                        if model == "qwen":
-                            embedding_service = self._get_qwen_embedding_service()
-                        else:
-                            embedding_service = self._get_ollama_embedding_service()
-                    except Exception:
-                        embedding_service = self._get_ollama_embedding_service()
+                    # 使用统一的 embedding 服务工厂
+                    embedding_service = await get_embedding_service()
 
                     query_embedding = await embedding_service.generate_embedding(
                         text=query, task_type="retrieval_query"

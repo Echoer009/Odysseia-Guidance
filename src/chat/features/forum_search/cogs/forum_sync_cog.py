@@ -203,8 +203,12 @@ class ForumSyncCog(commands.Cog):
                         valid_threads,
                         key=lambda t: t.created_at or datetime.datetime.utcnow(),
                     )
-                    # 类型忽略：我们已经确保 created_at 不是 None
-                    new_bookmark_ts = new_oldest_thread.created_at.isoformat()  # type: ignore
+                    # new_oldest_thread.created_at 可能是 None，需要处理
+                    new_bookmark_ts = (
+                        new_oldest_thread.created_at.isoformat()
+                        if new_oldest_thread.created_at
+                        else datetime.datetime.utcnow().isoformat()
+                    )
                 else:
                     # 如果所有线程的 created_at 都是 None，使用当前时间
                     new_bookmark_ts = datetime.datetime.utcnow().isoformat()

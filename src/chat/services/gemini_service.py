@@ -1680,11 +1680,10 @@ class GeminiService:
         """记录 API 调用的 Token 使用情况到数据库。"""
         try:
             # 分别计算输入和输出的 Token
-            # 使用 type: ignore 来抑制 Pylance 无法推断 client.aio.models 的错误
-            input_token_response = await client.aio.models.count_tokens(  # type: ignore
+            input_token_response = await client.aio.models.count_tokens(
                 model=model_name, contents=input_contents
             )
-            output_token_response = await client.aio.models.count_tokens(  # type: ignore
+            output_token_response = await client.aio.models.count_tokens(
                 model=model_name, contents=[output_text]
             )
 

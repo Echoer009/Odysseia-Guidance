@@ -5,7 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.database import AsyncSessionLocal
 from src.database.models import TutorialDocument, KnowledgeChunk
-from src.chat.services.ollama_embedding_service import ollama_embedding_service
+from src.chat.services.embedding_factory import get_embedding_service, is_vector_enabled
 from sqlalchemy.future import select
 
 log = logging.getLogger(__name__)
@@ -46,8 +46,14 @@ class TutorialRAGService:
                     log.warning(f"文档 {document_id} 的内容为空。")
                     return
 
-                # 3. 为完整内容生成一个嵌入
-                embedding = await ollama_embedding_service.generate_embedding(
+                # 3. 检查向量模式是否启用
+                if not is_vector_enabled():
+                    log.debug(f"向量模式已禁用，跳过文档 {document_id} 的嵌入生成")
+                    return
+
+                # 4. 为完整内容生成一个嵌入
+                embedding_service = await get_embedding_service()
+                embedding = await embedding_service.generate_embedding(
                     text=str(content), task_type="retrieval_document"
                 )
 

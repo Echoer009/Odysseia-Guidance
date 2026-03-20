@@ -14,31 +14,10 @@ import os
 from src.chat.features.tutorial_search.services.thread_settings_service import (
     thread_settings_service,
 )
-from src.chat.utils.database import chat_db_manager
-from src.chat.services.ollama_embedding_service import (
-    ollama_embedding_service,
-    qwen_embedding_service,
+from src.chat.services.embedding_factory import (
+    get_embedding_service,
+    get_embedding_column,
 )
-
-
-async def get_embedding_column() -> str:
-    """根据数据库配置返回当前使用的 embedding 列名"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        return "qwen_embedding" if model == "qwen" else "bge_embedding"
-    except Exception:
-        return "qwen_embedding"  # 默认使用 Qwen
-
-
-async def get_embedding_service():
-    """根据数据库配置返回当前使用的 embedding 服务实例"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        if model == "qwen":
-            return qwen_embedding_service
-        return ollama_embedding_service
-    except Exception:
-        return qwen_embedding_service  # 默认使用 Qwen
 
 
 # --- RAG 追踪日志系统 ---

@@ -370,8 +370,14 @@ class UserConversationBlocksView(discord.ui.View):
         async def confirm_callback(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
+                if self.current_item_id is None:
+                    await interaction.followup.send(
+                        "❌ 无法删除：未选择对话块。",
+                        ephemeral=True,
+                    )
+                    return
                 deleted = await conversation_block_service.delete_block_by_id(
-                    int(self.current_item_id)  # type: ignore[arg-type]
+                    int(self.current_item_id)
                 )
                 if deleted:
                     log.info(
@@ -556,8 +562,8 @@ class UserConversationBlocksView(discord.ui.View):
 
         # 禁用所有组件
         for item in self.children:
-            if hasattr(item, "disabled"):
-                item.disabled = True  # type: ignore[union-attr]
+            if isinstance(item, discord.ui.Button | discord.ui.Select):
+                item.disabled = True
 
         embed = discord.Embed(
             title="✅ 操作完成",
@@ -572,8 +578,8 @@ class UserConversationBlocksView(discord.ui.View):
         try:
             # 禁用所有组件
             for item in self.children:
-                if hasattr(item, "disabled"):
-                    item.disabled = True  # type: ignore[union-attr]
+                if isinstance(item, discord.ui.Button | discord.ui.Select):
+                    item.disabled = True
 
             embed = discord.Embed(
                 title="⏰ 操作超时",

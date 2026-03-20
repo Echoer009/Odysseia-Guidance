@@ -17,25 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.database import AsyncSessionLocal
 from src.database.models import ConversationBlock
-from src.chat.services.ollama_embedding_service import (
-    ollama_embedding_service,
-    qwen_embedding_service,
+from src.chat.services.embedding_factory import (
+    get_embedding_service,
+    is_vector_enabled,
 )
 from src.chat.config import chat_config
-from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
-
-
-async def get_embedding_service():
-    """根据数据库配置返回当前使用的 embedding 服务实例"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        if model == "qwen":
-            return qwen_embedding_service
-        return ollama_embedding_service
-    except Exception:
-        return qwen_embedding_service  # 默认使用 Qwen
 
 
 def format_time_description(start_time: datetime, end_time: datetime) -> str:
@@ -238,8 +226,9 @@ class ConversationBlockService:
         # 创建数据库记录
         async def _create_block(sess: AsyncSession) -> Optional[int]:
             # 确定使用哪个嵌入列
-            model = await chat_db_manager.get_global_setting("embedding_model")
-            embedding_col = "qwen_embedding" if model == "qwen" else "bge_embedding"
+            from src.chat.services.embedding_factory import get_embedding_column
+
+            embedding_col = await get_embedding_column()
 
             block = ConversationBlock(
                 discord_id=discord_id,

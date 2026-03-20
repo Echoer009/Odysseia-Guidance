@@ -6,18 +6,17 @@ from sqlalchemy import select, text
 
 from src.database.database import AsyncSessionLocal
 from src.database.models import ForumThread
-from src.chat.utils.database import chat_db_manager
+from src.chat.services.embedding_factory import (
+    get_embedding_column as factory_get_embedding_column,
+    is_vector_enabled,
+)
 
 log = logging.getLogger(__name__)
 
 
 async def get_embedding_column() -> str:
-    """根据数据库配置返回当前使用的 embedding 列名"""
-    try:
-        model = await chat_db_manager.get_global_setting("embedding_model")
-        return "qwen_embedding" if model == "qwen" else "bge_embedding"
-    except Exception:
-        return "qwen_embedding"  # 默认使用 Qwen
+    """根据配置返回当前使用的 embedding 列名"""
+    return await factory_get_embedding_column()
 
 
 class ForumVectorDBService:

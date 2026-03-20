@@ -240,16 +240,19 @@ class MessageProcessor:
 
                         for snapshot in ref_msg.message_snapshots:
                             # 根据 discord.py 文档，MessageSnapshot 是一个对象，必须使用属性访问。
-                            # 我们使用 hasattr() 来安全地检查属性是否存在。
-                            if hasattr(snapshot, "author") and snapshot.author:  # type: ignore
+                            # 我们使用 getattr() 来安全地访问属性，因为 Pylance 无法识别 hasattr 类型缩小。
+                            snapshot_author = getattr(snapshot, "author", None)
+                            if snapshot_author is not None:
                                 # snapshot.author 是一个 User/Member 对象，它有 display_name 属性
-                                original_author_name = snapshot.author.display_name  # type: ignore
+                                original_author_name = snapshot_author.display_name
 
-                            if hasattr(snapshot, "content") and snapshot.content:
-                                snapshot_content_parts.append(snapshot.content)
+                            snapshot_content = getattr(snapshot, "content", None)
+                            if snapshot_content is not None:
+                                snapshot_content_parts.append(snapshot_content)
 
-                            if hasattr(snapshot, "embeds") and snapshot.embeds:
-                                for embed in snapshot.embeds:
+                            snapshot_embeds = getattr(snapshot, "embeds", None)
+                            if snapshot_embeds:
+                                for embed in snapshot_embeds:
                                     # embed 是一个 Embed 对象
                                     if embed.title:
                                         snapshot_content_parts.append(
@@ -264,14 +267,14 @@ class MessageProcessor:
                                             f"{field.name}: {field.value}"
                                         )
 
-                            if (
-                                hasattr(snapshot, "attachments")
-                                and snapshot.attachments
-                            ):
+                            snapshot_attachments = getattr(
+                                snapshot, "attachments", None
+                            )
+                            if snapshot_attachments:
                                 # snapshot.attachments 是 Attachment 对象的列表
                                 image_data_list.extend(
                                     await self._extract_images_from_attachments(
-                                        snapshot.attachments
+                                        snapshot_attachments
                                     )
                                 )
 
@@ -455,7 +458,7 @@ class MessageProcessor:
             mention_str_1 = f"<@{user.id}>"
             mention_str_2 = f"<@!{user.id}>"
             if bot_user and user.id == bot_user.id:
-                replacement = f"@{bot_user.display_name}"  # type: ignore
+                replacement = f"@{bot_user.display_name}"
                 content = content.replace(mention_str_1, replacement).replace(
                     mention_str_2, replacement
                 )

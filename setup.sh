@@ -172,6 +172,73 @@ configure_gemini_endpoint() {
     CUSTOM_GEMINI_API_KEY=$(ask_question "自定义端点的 API 密钥（如需要）" "" "false")
 }
 
+# 配置向量模式
+configure_vector_mode() {
+    echo ""
+    say_wait "接下来选择向量模式～"
+    echo "────────────────────────────────────────"
+    say_hello "向量模式决定了 RAG 检索功能的工作方式"
+    echo ""
+    echo -e "  ${CYAN}1) 无向量直接聊天${NC} - 不使用 RAG 检索，类脑娘直接对话哦"
+    echo -e "  ${CYAN}2) API 向量${NC}       - 使用 Gemini Embedding API（需要 API 密钥）"
+    echo -e "  ${CYAN}3) 本地向量${NC}       - 使用 Ollama 本地模型（推荐，隐私安全）"
+    echo ""
+    say_warning "注意：本地向量模式需要更多内存（约1GB）"
+    
+    local reply=""
+    while true; do
+        printf "请选择向量模式 [1/2/3] (默认: 3): "
+        read -r reply < /dev/tty
+        echo ""
+        case "$reply" in
+            1|"")
+                if [ "$reply" = "1" ]; then
+                    VECTOR_MODE="none"
+                    say_warning "已选择：无向量直接聊天模式"
+                else
+                    VECTOR_MODE="local"
+                    say_success "已选择：本地向量模式（默认）"
+                fi
+                break
+                ;;
+            2)
+                VECTOR_MODE="api"
+                say_success "已选择：API 向量模式"
+                if [ -z "$GOOGLE_API_KEYS" ]; then
+                    say_warning "API 向量模式需要 Gemini API 密钥！"
+                    say_wait "请确保在上一步配置了 Gemini API 密钥"
+                fi
+                break
+                ;;
+            3)
+                VECTOR_MODE="local"
+                say_success "已选择：本地向量模式"
+                break
+                ;;
+            *)
+                say_oops "无效的选择，请输入 1、2 或 3"
+                ;;
+        esac
+    done
+    
+    # 如果选择本地向量，询问是否要自定义模型
+    if [ "$VECTOR_MODE" = "local" ]; then
+        echo ""
+        say_hello "本地向量模型选择"
+        say_wait "默认使用 qwen3-embedding:0.6b 模型（轻量高效）"
+        local custom_model=""
+        printf "是否使用自定义模型？(y/N): "
+        read -r custom_model < /dev/tty
+        echo ""
+        if [[ "$custom_model" =~ ^[Yy]$ ]]; then
+            OLLAMA_MODEL=$(ask_question "Ollama 模型名称" "qwen3-embedding:0.6b" "false")
+        else
+            OLLAMA_MODEL="qwen3-embedding:0.6b"
+        fi
+        say_success "将使用模型: $OLLAMA_MODEL"
+    fi
+}
+
 # 配置数据库
 configure_database() {
     echo ""
@@ -260,6 +327,15 @@ GUILD_ID="$GUILD_ID"
 # 权限控制
 DEVELOPER_USER_IDS="$DEVELOPER_USER_IDS"
 ADMIN_ROLE_IDS="$ADMIN_ROLE_IDS"
+
+# 向量模式配置
+# none: 无向量直接聊天（不使用 RAG 检索）
+# api: API 向量（使用 Gemini Embedding API）
+# local: 本地向量（使用 Ollama 本地模型）
+VECTOR_MODE=$VECTOR_MODE
+
+# Ollama 本地向量模型配置（仅在 VECTOR_MODE=local 时有效）
+OLLAMA_MODEL=$OLLAMA_MODEL
 
 # Gemini AI 配置
 # 自定义端点（用于AI对话）
@@ -362,6 +438,27 @@ start_service() {
     say_wait "清理一下旧环境..."
     docker compose down 2>/dev/null || true
 
+    # 根据向量模式选择启动配置
+    local compose_profile=""
+    case "$VECTOR_MODE" in
+        "local")
+            say_wait "向量模式：本地向量（将启动 Ollama 服务）"
+            compose_profile="--profile ollama"
+            ;;
+        "api")
+            say_wait "向量模式：API 向量（不需要 Ollama 服务）"
+            compose_profile=""
+            ;;
+        "none")
+            say_wait "向量模式：无向量直接聊天（不需要 Ollama 服务）"
+            compose_profile=""
+            ;;
+        *)
+            say_warning "未知的向量模式 '$VECTOR_MODE'，使用默认配置（本地向量）"
+            compose_profile="--profile ollama"
+            ;;
+    esac
+
     # 构建镜像
     say_wait "正在准备类脑娘的房间（构建镜像）..."
     say_hello "这可能需要几分钟，耐心等待哦～"
@@ -374,7 +471,8 @@ start_service() {
 
     # 启动服务
     say_wait "让类脑娘住进来..."
-    if docker compose up -d; then
+    local compose_cmd="docker compose up -d $compose_profile"
+    if eval "$compose_cmd"; then
         say_success "类脑娘已经住进来了～"
     else
         say_oops "搬家过程出问题了..."
@@ -423,9 +521,14 @@ main() {
         exit 0
     fi
 
+    # 初始化默认值
+    VECTOR_MODE="local"
+    OLLAMA_MODEL="qwen3-embedding:0.6b"
+
     # 配置各项
     configure_required
     configure_gemini_endpoint
+    configure_vector_mode
     configure_database
     configure_discord
     configure_features
@@ -443,7 +546,12 @@ main() {
         say_hello "想找类脑娘的时候，运行这些命令就好："
         echo ""
         echo -e "${CYAN}  docker compose build${NC}"
-        echo -e "${CYAN}  docker compose up -d${NC}"
+        # 根据向量模式显示不同的启动命令
+        if [ "$VECTOR_MODE" = "local" ]; then
+            echo -e "${CYAN}  docker compose --profile ollama up -d${NC}"
+        else
+            echo -e "${CYAN}  docker compose up -d${NC}"
+        fi
         echo -e "${CYAN}  docker compose exec bot_app alembic upgrade head${NC}"
         echo ""
     fi

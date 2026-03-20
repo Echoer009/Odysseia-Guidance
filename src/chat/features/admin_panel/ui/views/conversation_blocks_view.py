@@ -31,7 +31,7 @@ class UserConversationBlocksView(discord.ui.View):
         self,
         author_id: int,
         message: discord.Message,
-        parent_view: discord.ui.View,
+        parent_view: BaseTableView,
         user_id: str,
         user_name: str,
     ):
@@ -522,15 +522,9 @@ class UserConversationBlocksView(discord.ui.View):
     async def go_back(self, interaction: discord.Interaction):
         """返回用户详情视图"""
         await interaction.response.defer()
-        # 恢复父视图 - 使用类型检查忽略
-        if hasattr(self.parent_view, "_initialize_components"):
-            # pylint: disable=protected-access
-            self.parent_view._initialize_components()  # type: ignore
-        if hasattr(self.parent_view, "_build_embed"):
-            # pylint: disable=protected-access
-            embed = await self.parent_view._build_embed()  # type: ignore
-        else:
-            embed = discord.Embed(title="返回", description="返回用户详情")
+        # 恢复父视图
+        self.parent_view._initialize_components()
+        embed = await self.parent_view._build_embed()
         await self.message.edit(embed=embed, view=self.parent_view)
 
 
