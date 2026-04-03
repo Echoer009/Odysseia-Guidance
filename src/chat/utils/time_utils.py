@@ -15,7 +15,7 @@ def get_start_of_today_utc(tz: timezone = BEIJING_TZ) -> datetime:
     now_local = now_utc.astimezone(tz)
     start_of_day_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     start_of_day_utc = start_of_day_local.astimezone(timezone.utc)
-    return start_of_day_utc
+    return start_of_day_utc.replace(tzinfo=None)
 
 
 def format_time_delta(td: timedelta) -> str:

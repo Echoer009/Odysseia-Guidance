@@ -76,17 +76,14 @@ class ChatService:
             if isinstance(message.channel, discord.Thread) and message.channel.owner_id:
                 # 修正逻辑：只有当帖主明确设置了个人CD时，才算拥有"通行许可"
                 owner_id = message.channel.owner_id
-                query = "SELECT thread_cooldown_seconds, thread_cooldown_duration, thread_cooldown_limit FROM user_coins WHERE user_id = ?"
-                owner_config_row = await chat_db_manager._execute(
-                    chat_db_manager._db_transaction, query, (owner_id,), fetch="one"
-                )
+                owner_config = await coin_service.get_thread_cooldown_settings(owner_id)
 
-                if owner_config_row:
-                    has_personal_cd = owner_config_row[
+                if owner_config:
+                    has_personal_cd = owner_config[
                         "thread_cooldown_seconds"
                     ] is not None or (
-                        owner_config_row["thread_cooldown_duration"] is not None
-                        and owner_config_row["thread_cooldown_limit"] is not None
+                        owner_config["thread_cooldown_duration"] is not None
+                        and owner_config["thread_cooldown_limit"] is not None
                     )
                     if has_personal_cd:
                         pass_is_granted = True

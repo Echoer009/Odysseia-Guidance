@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.tools.tool_metadata import tool_metadata
-from src.chat.utils.database import chat_db_manager
 from src.chat.utils.prompt_utils import replace_emojis
 
 log = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ class RedEnvelopeView(ui.View):
                 return
 
             user_id_int = int(self.user_id)
-            last_date = await chat_db_manager.get_last_red_envelope_date(user_id_int)
+            last_date = await coin_service.get_last_red_envelope_date(user_id_int)
             today = datetime.now().strftime("%Y-%m-%d")
             if last_date == today:
                 await interaction.response.send_message(
@@ -73,7 +72,7 @@ class RedEnvelopeView(ui.View):
                 user_id=user_id_int, amount=amount, reason="春节红包奖励"
             )
 
-            await chat_db_manager.set_last_red_envelope_date(user_id_int, today)
+            await coin_service.set_last_red_envelope_date(user_id_int, today)
 
             self.claimed = True
             button.disabled = True
@@ -142,7 +141,7 @@ async def spring_festival_red_envelope(
 
     # 检查今日是否已领取（提前检查，避免发送DM后无法领取）
     try:
-        last_date = await chat_db_manager.get_last_red_envelope_date(target_id)
+        last_date = await coin_service.get_last_red_envelope_date(target_id)
         today = datetime.now().strftime("%Y-%m-%d")
         if last_date == today:
             result["is_daily_limit"] = True

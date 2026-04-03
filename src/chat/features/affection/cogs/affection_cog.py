@@ -5,7 +5,6 @@ from datetime import datetime, time, timezone, timedelta
 import logging
 
 from src.chat.features.affection.service.affection_service import affection_service
-from src.chat.utils.database import chat_db_manager
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class AffectionCog(commands.Cog):
 
         # 每日任务现在是全局的，不再需要遍历服务器
         try:
-            await chat_db_manager.reset_daily_affection_gain(today_str)
+            await self.affection_service.reset_daily_affection_gain(today_str)
             log.info("已重置所有用户的每日好感度上限。")
             await self.affection_service.apply_daily_fluctuation()
             log.info("已应用全局每日好感度浮动。")

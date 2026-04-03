@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timedelta, timezone
 from src.chat.utils.database import chat_db_manager
 from src.chat.services.event_service import event_service
+from src.chat.features.odysseia_coin.service.coin_service import coin_service
 
 if TYPE_CHECKING:
     from src.chat.services.ai.config.models import ModelConfig
@@ -160,33 +161,29 @@ class ChatSettingsService:
         # 3. 如果是帖子，获取并应用帖子主人的个人设置 (最高优先级)
         if isinstance(channel, discord.Thread) and channel.owner_id:
             owner_id = channel.owner_id
-            query = "SELECT thread_cooldown_seconds, thread_cooldown_duration, thread_cooldown_limit FROM user_coins WHERE user_id = ?"
-            owner_config_row = await self.db_manager._execute(
-                self.db_manager._db_transaction, query, (owner_id,), fetch="one"
-            )
+            owner_config = await coin_service.get_thread_cooldown_settings(owner_id)
 
-            if owner_config_row:
-                # 个人设置不包含 is_chat_enabled，只覆盖CD
+            if owner_config:
                 has_personal_fixed_cd = (
-                    owner_config_row["thread_cooldown_seconds"] is not None
+                    owner_config["thread_cooldown_seconds"] is not None
                 )
                 has_personal_freq_cd = (
-                    owner_config_row["thread_cooldown_duration"] is not None
-                    and owner_config_row["thread_cooldown_limit"] is not None
+                    owner_config["thread_cooldown_duration"] is not None
+                    and owner_config["thread_cooldown_limit"] is not None
                 )
 
                 if has_personal_fixed_cd:
-                    effective_config["cooldown_seconds"] = owner_config_row[
+                    effective_config["cooldown_seconds"] = owner_config[
                         "thread_cooldown_seconds"
                     ]
                     effective_config["cooldown_duration"] = None
                     effective_config["cooldown_limit"] = None
                 elif has_personal_freq_cd:
                     effective_config["cooldown_seconds"] = 0
-                    effective_config["cooldown_duration"] = owner_config_row[
+                    effective_config["cooldown_duration"] = owner_config[
                         "thread_cooldown_duration"
                     ]
-                    effective_config["cooldown_limit"] = owner_config_row[
+                    effective_config["cooldown_limit"] = owner_config[
                         "thread_cooldown_limit"
                     ]
 

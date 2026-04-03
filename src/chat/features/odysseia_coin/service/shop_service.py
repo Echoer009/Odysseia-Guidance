@@ -113,12 +113,7 @@ class ShopService:
             items = [dict(item) for item in items_rows]
 
             # 2. 处理特定商品的业务逻辑（例如，个人记忆功能）
-            user_profile = await chat_db_manager.get_user_profile(user_id)
-            has_personal_memory = (
-                getattr(user_profile, "has_personal_memory", False)
-                if user_profile
-                else False
-            )
+            has_personal_memory = await coin_service._has_personal_memory(user_id)
             if has_personal_memory:
                 for item in items:
                     if item.get("name") == "个人记忆功能":

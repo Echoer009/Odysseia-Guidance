@@ -1,25 +1,22 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import json
 import discord
 from typing import Optional
-import sqlite3
-import json
-import os
+from sqlalchemy.future import select
+from datetime import datetime, timezone, timedelta
 
-from src import config
 from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.config.thread_prompts import get_random_praise_prompt
-from src.chat.config.prompts import (
-    PROMPT_CONFIG,
-)  # <--- 修正：从新的位置导入 PROMPT_CONFIG
-from datetime import datetime, timezone, timedelta
+from src.chat.config.prompts import PROMPT_CONFIG
 from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_persona
-from src.chat.utils.database import chat_db_manager
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.world_book.services.world_book_service import world_book_service
 from src.chat.config import chat_config
+from src.database.database import AsyncSessionLocal
+from src.database.models import CommunityMemberProfile
 
 log = logging.getLogger(__name__)
 
@@ -27,53 +24,64 @@ log = logging.getLogger(__name__)
 class ThreadCommentorService:
     """处理新帖子评价功能的服务"""
 
-    def __init__(self):
-        self.world_book_db_path = os.path.join(config.DATA_DIR, "world_book.sqlite3")
-
     async def _get_user_memory(self, user_id: int) -> str:
         """
-        从世界书和主数据库中获取用户的个人记忆。
+        从世界书和 ParadeDB 中获取用户的个人记忆。
         """
         memory_parts = []
 
-        # 1. 从世界书数据库获取用户档案
+        # 1. 从世界书获取用户档案
         try:
-            with sqlite3.connect(self.world_book_db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT content_json FROM community_members WHERE discord_number_id = ?",
-                    (str(user_id),),
-                )
-                row = cursor.fetchone()
-                if row and row["content_json"]:
-                    profile = json.loads(row["content_json"])
-                    profile_text = (
-                        f"用户的公开档案：\n"
-                        f"- 昵称: {profile.get('name', '未知')}\n"
-                        f"- 性格: {profile.get('personality', '未知')}\n"
-                        f"- 背景: {profile.get('background', '未知')}\n"
-                        f"- 偏好: {profile.get('preferences', '未知')}"
-                    )
-                    memory_parts.append(profile_text)
-        except Exception as e:
-            log.error(f"从世界书数据库为用户 {user_id} 获取档案时出错: {e}")
+            profile_data = await world_book_service.get_profile_by_discord_id(user_id)
+            if profile_data:
+                source_data = {}
+                source_metadata = profile_data.get("source_metadata")
+                if isinstance(source_metadata, dict):
+                    content_json_str = source_metadata.get("content_json")
+                    if isinstance(content_json_str, str):
+                        try:
+                            source_data.update(json.loads(content_json_str))
+                        except json.JSONDecodeError:
+                            pass
+                    for key in ["name", "personality", "background", "preferences"]:
+                        if key in source_metadata and source_metadata[key]:
+                            source_data[key] = source_metadata[key]
+                source_data.update(profile_data)
 
-        # 2. 从主数据库获取对话摘要
-        try:
-            user_profile = await chat_db_manager.get_user_profile(user_id)
-            if user_profile and user_profile["personal_summary"]:
-                summary_text = (
-                    f"我与该用户的过往对话摘要：\n{user_profile['personal_summary']}"
-                )
-                memory_parts.append(summary_text)
+                profile_map = {
+                    "昵称": source_data.get("title") or source_data.get("name"),
+                    "性格": source_data.get("personality"),
+                    "背景": source_data.get("background"),
+                    "偏好": source_data.get("preferences"),
+                }
+                profile_details = [
+                    f"- {k}: {v}" for k, v in profile_map.items() if v and v != "未提供"
+                ]
+                if profile_details:
+                    memory_parts.append(
+                        "用户的公开档案：\n" + "\n".join(profile_details)
+                    )
         except Exception as e:
-            log.error(f"从主数据库为用户 {user_id} 获取摘要时出错: {e}")
+            log.error(f"从世界书为用户 {user_id} 获取档案时出错: {e}")
+
+        # 2. 从 ParadeDB 获取个人记忆摘要
+        try:
+            async with AsyncSessionLocal() as session:
+                stmt = select(CommunityMemberProfile.personal_summary).where(
+                    CommunityMemberProfile.discord_id == str(user_id)
+                )
+                result = await session.execute(stmt)
+                summary = result.scalars().first()
+                if summary:
+                    summary_text = f"我与该用户的过往对话摘要：\n{summary}"
+                    memory_parts.append(summary_text)
+        except Exception as e:
+            log.error(f"从 ParadeDB 为用户 {user_id} 获取摘要时出错: {e}")
 
         if not memory_parts:
             return "关于这位用户，我暂时还没有任何记忆。"
 
-        return "\n\n---\n\n".join(memory_parts)
+        return "\n\n---\n".join(memory_parts)
 
     async def praise_new_thread(
         self, thread: discord.Thread, user_id: int, user_nickname: str

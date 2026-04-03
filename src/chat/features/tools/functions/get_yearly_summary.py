@@ -17,6 +17,14 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
 )
 from src import config as app_config
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.database.database import AsyncSessionLocal
+from src.database.models import (
+    CoinTransaction,
+    InteractionLog,
+    UserAffection,
+    CommunityMemberProfile,
+)
+from sqlalchemy import select, func, and_
 
 log = logging.getLogger(__name__)
 
@@ -275,22 +283,27 @@ async def _get_user_summary_data(user_id: int, year: int) -> Dict[str, Any] | No
     end_date = f"{year}-12-31 23:59:59"
 
     try:
-        # 奥德赛币收支
-        trans_query = "SELECT amount, reason FROM coin_transactions WHERE user_id = ? AND timestamp BETWEEN ? AND ?"
-        transactions = await chat_db_manager._execute(
-            chat_db_manager._db_transaction,
-            trans_query,
-            (user_id, start_date, end_date),
-            fetch="all",
-        )
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        uid = str(user_id)
+
+        async with AsyncSessionLocal() as session:
+            trans_result = await session.execute(
+                select(CoinTransaction.amount, CoinTransaction.reason).where(
+                    CoinTransaction.user_id == uid,
+                    CoinTransaction.timestamp >= start_dt,
+                    CoinTransaction.timestamp <= end_dt,
+                )
+            )
+            transactions = trans_result.all()
         purchase_reasons = []
         for trans in transactions:
-            if trans["amount"] < 0:
-                summary_data["total_coins_spent"] += abs(trans["amount"])
-                if "购买商品" in trans["reason"]:
-                    purchase_reasons.append(trans["reason"])
+            if trans.amount < 0:
+                summary_data["total_coins_spent"] += abs(trans.amount)
+                if "购买商品" in trans.reason:
+                    purchase_reasons.append(trans.reason)
             else:
-                summary_data["total_coins_earned"] += trans["amount"]
+                summary_data["total_coins_earned"] += trans.amount
         if purchase_reasons:
             most_common = Counter(purchase_reasons).most_common(1)
             if most_common:
@@ -298,45 +311,56 @@ async def _get_user_summary_data(user_id: int, year: int) -> Dict[str, Any] | No
                     "购买商品: ", ""
                 )
 
-        # 投喂与忏悔次数
-        feed_query = "SELECT COUNT(*) as count FROM feeding_log WHERE user_id = ? AND timestamp BETWEEN ? AND ?"
-        feed_result = await chat_db_manager._execute(
-            chat_db_manager._db_transaction,
-            feed_query,
-            (user_id, start_date, end_date),
-            fetch="one",
-        )
-        if feed_result:
-            summary_data["feeding_count"] = feed_result["count"]
+        async with AsyncSessionLocal() as session:
+            feed_result = await session.execute(
+                select(func.count())
+                .select_from(InteractionLog)
+                .where(
+                    InteractionLog.user_id == uid,
+                    InteractionLog.interaction_type == "feeding",
+                    InteractionLog.timestamp >= start_dt,
+                    InteractionLog.timestamp <= end_dt,
+                )
+            )
+            feed_count = feed_result.scalar() or 0
+        summary_data["feeding_count"] = feed_count
 
-        confess_query = "SELECT COUNT(*) as count FROM confession_log WHERE user_id = ? AND timestamp BETWEEN ? AND ?"
-        confess_result = await chat_db_manager._execute(
-            chat_db_manager._db_transaction,
-            confess_query,
-            (user_id, start_date, end_date),
-            fetch="one",
-        )
-        if confess_result:
-            summary_data["confession_count"] = confess_result["count"]
+        async with AsyncSessionLocal() as session:
+            confess_result = await session.execute(
+                select(func.count())
+                .select_from(InteractionLog)
+                .where(
+                    InteractionLog.user_id == uid,
+                    InteractionLog.interaction_type == "confession",
+                    InteractionLog.timestamp >= start_dt,
+                    InteractionLog.timestamp <= end_dt,
+                )
+            )
+            confess_count = confess_result.scalar() or 0
+        summary_data["confession_count"] = confess_count
 
-        # 当前好感度
-        affection_query = "SELECT affection_points FROM ai_affection WHERE user_id = ?"
-        affection_result = await chat_db_manager._execute(
-            chat_db_manager._db_transaction, affection_query, (user_id,), fetch="one"
-        )
-        if affection_result:
-            summary_data["affection_level"] = affection_result["affection_points"]
+        async with AsyncSessionLocal() as session:
+            affection_result = await session.execute(
+                select(UserAffection.affection_points).where(
+                    UserAffection.user_id == uid
+                )
+            )
+            affection_points = affection_result.scalar_one_or_none()
+        if affection_points is not None:
+            summary_data["affection_level"] = affection_points
 
-        # 检查并获取 Tier 1 的额外数据
-        user_profile = await chat_db_manager.get_user_profile(user_id)
-        if user_profile and user_profile["has_personal_memory"]:
+        async with AsyncSessionLocal() as session:
+            profile_result = await session.execute(
+                select(CommunityMemberProfile.personal_summary).where(
+                    CommunityMemberProfile.discord_id == uid
+                )
+            )
+            personal_summary = profile_result.scalars().first()
+        if personal_summary and personal_summary.strip():
             summary_data["has_personal_profile"] = True
             summary_data[
                 "memory_summary"
             ] = await personal_memory_service.get_memory_summary(user_id)
-            # 修复：直接通过列名访问，并检查键是否存在
-            if "persona" in user_profile.keys() and user_profile["persona"]:
-                summary_data["persona"] = user_profile["persona"]
 
     except Exception as e:
         log.error(f"为用户 {user_id} 查询年度总结数据时发生错误: {e}", exc_info=True)

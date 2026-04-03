@@ -227,7 +227,15 @@ class LoanView(discord.ui.View):
 
     async def borrow_callback(self, interaction: discord.Interaction):
         modal = LoanModal(self)
-        await interaction.response.send_modal(modal)
+        try:
+            await interaction.response.send_modal(modal)
+        except (discord.HTTPException, discord.ClientException):
+            try:
+                await interaction.followup.send(
+                    "连接异常，请稍后再试。", ephemeral=True
+                )
+            except discord.HTTPException:
+                pass
 
     async def repay_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -617,25 +625,21 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
 
     async def handle_thread_settings_modal(self, interaction: discord.Interaction):
         try:
-            user_settings_query = "SELECT thread_cooldown_seconds, thread_cooldown_duration, thread_cooldown_limit FROM user_coins WHERE user_id = ?"
-            user_settings_row = await chat_db_manager._execute(
-                chat_db_manager._db_transaction,
-                user_settings_query,
-                (interaction.user.id,),
-                fetch="one",
+            user_settings = await coin_service.get_thread_cooldown_settings(
+                interaction.user.id
             )
             current_config = {}
-            if user_settings_row:
+            if user_settings:
                 current_config = {
-                    "cooldown_seconds": user_settings_row["thread_cooldown_seconds"],
-                    "cooldown_duration": user_settings_row["thread_cooldown_duration"],
-                    "cooldown_limit": user_settings_row["thread_cooldown_limit"],
+                    "cooldown_seconds": user_settings["thread_cooldown_seconds"],
+                    "cooldown_duration": user_settings["thread_cooldown_duration"],
+                    "cooldown_limit": user_settings["thread_cooldown_limit"],
                 }
 
             async def modal_callback(
                 modal_interaction: discord.Interaction, settings: Dict[str, Any]
             ):
-                await chat_db_manager.update_user_thread_cooldown_settings(
+                await coin_service.update_thread_cooldown_settings(
                     interaction.user.id, settings
                 )
                 await modal_interaction.response.send_message(

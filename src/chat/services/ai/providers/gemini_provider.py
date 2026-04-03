@@ -251,11 +251,9 @@ class GeminiProvider(BaseProvider):
             # 转换消息格式
             contents = self._convert_messages_to_contents(messages)
 
-            # 调用 API
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=gen_config,
+            # 调用 API（流式）- 避免 Cloudflare 100 秒超时导致 524 错误
+            response = await self._stream_generate(
+                client, model_name, contents, gen_config
             )
 
             # 处理响应
@@ -374,26 +372,29 @@ class GeminiProvider(BaseProvider):
             for iteration in range(max_iterations):
                 log.info(f"工具调用循环: 第 {iteration + 1}/{max_iterations} 次")
 
-                # 调用 API
-                response = await client.aio.models.generate_content(
-                    model=model_name,
-                    contents=conversation_history,
-                    config=gen_config,
+                # 调用 API（流式）- 避免 Cloudflare 100 秒超时导致 524 错误
+                response = await self._stream_generate(
+                    client, model_name, conversation_history, gen_config
                 )
 
                 # 检查思考链
-                if response.candidates and response.candidates[0].content.parts:
-                    log.debug(
-                        f"检查 {len(response.candidates[0].content.parts)} 个 parts for thinking"
-                    )
-                    for idx, part in enumerate(response.candidates[0].content.parts):
+                _first_content = (
+                    response.candidates[0].content
+                    if response.candidates and response.candidates[0].content
+                    else None
+                )
+                if _first_content and _first_content.parts:
+                    log.debug(f"检查 {len(_first_content.parts)} 个 parts for thinking")
+                    for idx, part in enumerate(_first_content.parts):
                         # 检查是否是思考部分
                         is_thought = hasattr(part, "thought") and bool(part.thought)
 
                         # 如果是思考部分，提取文本
                         if is_thought:
                             thinking_content = part.text
-                            log.info(f"模型思考过程: {thinking_content[:200]}...")
+                            log.info(
+                                f"模型思考过程: {thinking_content[:200] if thinking_content else 'N/A'}..."
+                            )
                         else:
                             log.debug(
                                 f"Part {idx}: 不是思考部分, text={part.text[:50] if hasattr(part, 'text') and part.text else 'N/A'}..."
@@ -506,6 +507,101 @@ class GeminiProvider(BaseProvider):
         except NoAvailableKeyError:
             log.warning("没有可用的 API 密钥用于生成嵌入")
             return None
+
+    async def _stream_generate(
+        self,
+        client: Any,
+        model_name: str,
+        contents: List[genai_types.Content],
+        gen_config: genai_types.GenerateContentConfig,
+    ) -> Any:
+        """
+        流式调用 Gemini API 并内部拼接完整响应
+
+        使用 generate_content_stream 替代 generate_content，
+        让 HTTP 200 头先建立，避免 Cloudflare 等 CDN 的 100 秒连接超时（524 错误）。
+        流式 chunk 内部拼接完成后，返回与 generate_content 相同结构的完整响应对象。
+
+        Args:
+            client: Gemini 异步客户端
+            model_name: 模型名称
+            contents: 对话内容
+            gen_config: 生成配置
+
+        Returns:
+            GenerateContentResponse: 拼接后的完整响应（结构与非流式一致）
+        """
+        log.info(f"[流式] 开始流式调用 model={model_name}")
+
+        chunks_received = 0
+        accumulated_text_parts: List[genai_types.Part] = []
+        accumulated_function_calls: List[Any] = []
+        final_candidate: Optional[genai_types.Candidate] = None
+        final_usage_metadata: Optional[Any] = None
+
+        stream = await client.aio.models.generate_content_stream(
+            model=model_name,
+            contents=contents,
+            config=gen_config,
+        )
+
+        async for chunk in stream:
+            chunks_received += 1
+            if chunks_received == 1:
+                log.info("[流式] 已收到第一个 chunk，连接建立成功")
+
+            if not chunk.candidates:
+                continue
+
+            candidate = chunk.candidates[0]
+            final_candidate = candidate
+
+            if candidate.content:
+                for part in candidate.content.parts or []:
+                    is_thought = hasattr(part, "thought") and part.thought
+                    if is_thought:
+                        continue
+                    if hasattr(part, "text") and part.text:
+                        accumulated_text_parts.append(part)
+                    if hasattr(part, "function_call") and part.function_call:
+                        accumulated_function_calls.append(part.function_call)
+
+            if chunk.usage_metadata:
+                final_usage_metadata = chunk.usage_metadata
+
+            if hasattr(chunk, "function_calls") and chunk.function_calls:
+                accumulated_function_calls = list(chunk.function_calls)
+
+        log.info(f"[流式] 流结束，共收到 {chunks_received} 个 chunk")
+
+        merged_parts = accumulated_text_parts[:]
+        for fc in accumulated_function_calls:
+            merged_parts.append(genai_types.Part(function_call=fc))
+
+        merged_content = (
+            genai_types.Content(parts=merged_parts, role="model")
+            if merged_parts
+            else None
+        )
+
+        if final_candidate:
+            final_candidate.content = merged_content
+
+        merged_candidates = [final_candidate] if final_candidate else []
+
+        class _MergedResponse:
+            def __init__(self, candidates, usage_metadata, function_calls):
+                self.candidates = candidates
+                self.usage_metadata = usage_metadata
+                self._function_calls = function_calls
+
+            @property
+            def function_calls(self):
+                return self._function_calls
+
+        return _MergedResponse(
+            merged_candidates, final_usage_metadata, accumulated_function_calls
+        )
 
     def _build_generation_config(
         self, config: GenerationConfig

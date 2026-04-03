@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.chat.services.warning_service import record_warning_and_check_blacklist
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ async def issue_user_warning(**kwargs) -> Dict[str, Any]:
         ban_duration = random.randint(min_d, max_d)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)
 
-        result = await chat_db_manager.record_warning_and_check_blacklist(
+        result = await record_warning_and_check_blacklist(
             target_id, guild_id, expires_at
         )
         was_blacklisted = result["was_blacklisted"]

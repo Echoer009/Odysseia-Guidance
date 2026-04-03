@@ -717,14 +717,15 @@ class PromptService:
 
         if current_user_parts:
             # --- 精确清理：在注入前，替换 current_user_parts 中文本部分的 @提及 ---
-            from src.chat.services.context_service import context_service
+            from src.chat.services.context_service_test import get_context_service
 
+            _ctx_svc = get_context_service()
             guild = channel.guild if channel and hasattr(channel, "guild") else None
             cleaned_user_parts = []
             for part in current_user_parts:
                 if isinstance(part, str):
                     cleaned_user_parts.append(
-                        context_service.clean_message_content(part, guild)
+                        _ctx_svc.clean_message_content(part, guild)
                     )
                 else:
                     cleaned_user_parts.append(part)
@@ -1154,14 +1155,15 @@ class PromptService:
                 log.error(f"Pillow 无法打开附件图片。错误: {e}。")
 
         if current_user_parts:
-            from src.chat.services.context_service import context_service
+            from src.chat.services.context_service_test import get_context_service
 
+            _ctx_svc = get_context_service()
             guild = channel.guild if channel and hasattr(channel, "guild") else None
             cleaned_user_parts = []
             for part in current_user_parts:
                 if isinstance(part, str):
                     cleaned_user_parts.append(
-                        context_service.clean_message_content(part, guild)
+                        _ctx_svc.clean_message_content(part, guild)
                     )
                 else:
                     cleaned_user_parts.append(part)

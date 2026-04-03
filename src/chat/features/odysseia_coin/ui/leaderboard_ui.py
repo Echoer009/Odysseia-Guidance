@@ -4,6 +4,9 @@ from typing import List, Dict, Any, TYPE_CHECKING, TypeVar, cast
 from discord.ext import commands
 
 from src.chat.utils.database import chat_db_manager
+from src.database.database import AsyncSessionLocal
+from src.database.models import UserCoins
+from sqlalchemy import select, desc
 
 if TYPE_CHECKING:
     from .shop_ui import SimpleShopView
@@ -66,34 +69,32 @@ class LeaderboardView(discord.ui.View):
 
     async def get_coin_leaderboard(self, limit: int = 20) -> List[Dict[str, Any]]:
         """获取类脑币排行榜数据"""
-        query = """
-            SELECT user_id, balance 
-            FROM user_coins 
-            WHERE balance > 0 
-            ORDER BY balance DESC 
-            LIMIT ?
-        """
-        results = await chat_db_manager._execute(
-            chat_db_manager._db_transaction, query, (limit,), fetch="all"
-        )
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(UserCoins)
+                .where(UserCoins.balance > 0)
+                .order_by(desc(UserCoins.balance))
+                .limit(limit)
+            )
+            rows = result.scalars().all()
 
         leaderboard = []
         rank = 1
-        for row in results:
+        for row in rows:
             try:
-                user = self.bot.get_user(row["user_id"])
+                user = self.bot.get_user(int(row.user_id))
                 if user:
                     leaderboard.append(
                         {
                             "rank": rank,
-                            "user_id": row["user_id"],
+                            "user_id": row.user_id,
                             "username": user.display_name,
-                            "value": row["balance"],
+                            "value": row.balance,
                         }
                     )
                     rank += 1
             except Exception as e:
-                log.warning(f"获取用户 {row['user_id']} 信息失败: {e}")
+                log.warning(f"获取用户 {row.user_id} 信息失败: {e}")
                 continue
 
         return leaderboard

@@ -25,6 +25,7 @@ GENERAL_KNOWLEDGE_SCHEMA = "general_knowledge"
 COMMUNITY_SCHEMA = "community"
 SHOP_SCHEMA = "shop"
 USER_SCHEMA = "user"
+ECONOMY_SCHEMA = "economy"
 FORUM_SCHEMA = "forum"
 
 Base = declarative_base()
@@ -678,3 +679,152 @@ class ConversationBlock(Base):
 
     def __repr__(self):
         return f"<ConversationBlock(id={self.id}, discord_id='{self.discord_id}', start_time={self.start_time})>"
+
+
+# --- Economy 模型 (ParadeDB) ---
+
+
+class UserCoins(Base):
+    __tablename__ = "user_coins"
+    __table_args__ = (
+        Index("ix_coins_user_id", "user_id", unique=True),
+        {"schema": ECONOMY_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    last_daily_message_date: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
+    last_red_envelope_date: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
+    coffee_effect_expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    has_withered_sunflower: Mapped[bool | None] = mapped_column(
+        Integer, default=None, nullable=True
+    )
+    blocks_thread_replies: Mapped[bool] = mapped_column(Integer, default=0)
+    thread_cooldown_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    thread_cooldown_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    thread_cooldown_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<UserCoins(user_id='{self.user_id}', balance={self.balance})>"
+
+
+class CoinTransaction(Base):
+    __tablename__ = "coin_transactions"
+    __table_args__ = (
+        Index("ix_tx_user_id", "user_id"),
+        Index("ix_tx_timestamp", "timestamp"),
+        {"schema": ECONOMY_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<CoinTransaction(user_id='{self.user_id}', amount={self.amount})>"
+
+
+class CoinLoan(Base):
+    __tablename__ = "coin_loans"
+    __table_args__ = (
+        Index("ix_loans_user", "user_id"),
+        {"schema": ECONOMY_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    paid_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<CoinLoan(user_id='{self.user_id}', amount={self.amount}, status='{self.status}')>"
+
+
+class InteractionLog(Base):
+    __tablename__ = "interaction_logs"
+    __table_args__ = (
+        Index("ix_interact_user_type", "user_id", "interaction_type"),
+        {"schema": ECONOMY_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    interaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<InteractionLog(user_id='{self.user_id}', type='{self.interaction_type}')>"
+
+
+# --- User 扩展模型 (ParadeDB) ---
+
+
+class UserAffection(Base):
+    __tablename__ = "user_affection"
+    __table_args__ = (
+        Index("ix_affection_user_id", "user_id", unique=True),
+        {"schema": USER_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    affection_points: Mapped[int] = mapped_column(Integer, default=0)
+    daily_affection_gain: Mapped[int] = mapped_column(Integer, default=0)
+    last_update_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_interaction_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_gift_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return (
+            f"<UserAffection(user_id='{self.user_id}', points={self.affection_points})>"
+        )
+
+
+class UserWarningRecord(Base):
+    __tablename__ = "user_warnings"
+    __table_args__ = (
+        Index("ix_warnings_user_guild", "user_id", "guild_id", unique=True),
+        {"schema": USER_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    guild_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    warning_count: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return (
+            f"<UserWarningRecord(user_id='{self.user_id}', guild_id='{self.guild_id}')>"
+        )
