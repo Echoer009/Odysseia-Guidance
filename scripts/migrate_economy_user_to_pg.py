@@ -88,10 +88,12 @@ async def _load_existing(session, model, *unique_cols) -> set:
     return {tuple(row) for row in result}
 
 
-async def _bulk_insert(session, model, rows: list[dict], batch_size=5000):
+async def _bulk_insert(session, model, rows: list[dict], batch_size=3000):
+    col_count = len(rows[0]) if rows else 1
+    safe_batch = max(1, min(batch_size, 32000 // col_count))
     total = 0
-    for i in range(0, len(rows), batch_size):
-        batch = rows[i : i + batch_size]
+    for i in range(0, len(rows), safe_batch):
+        batch = rows[i : i + safe_batch]
         stmt = pg_insert(model.__table__).values(batch).on_conflict_do_nothing()
         result: CursorResult = await session.execute(stmt)
         total += result.rowcount
