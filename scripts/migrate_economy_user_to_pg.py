@@ -24,7 +24,9 @@ load_dotenv()
 
 from sqlalchemy import select, text, func  # noqa: E402
 from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: E402
-from src.database.database import AsyncSessionLocal  # noqa: E402
+from src.database.database import AsyncSessionLocal, engine  # noqa: E402
+
+engine.echo = False
 from src.database.models import (  # noqa: E402
     UserAffection,
     UserWarningRecord,
