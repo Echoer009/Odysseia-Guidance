@@ -352,7 +352,9 @@ class ConversationBlockService:
             return await _delete_all(session)
         else:
             async with AsyncSessionLocal() as sess:
-                return await _delete_all(sess)
+                result = await _delete_all(sess)
+                await sess.commit()
+                return result
 
     async def get_latest_block_id(self, discord_id: str) -> Optional[int]:
         """

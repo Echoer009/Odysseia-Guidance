@@ -112,7 +112,8 @@ class FeedingCog(commands.Cog):
             import re
 
             pattern = re.compile(
-                r"(.*?)<affection:([+-]?\d+);coins:([+-]?\d+)>", re.DOTALL
+                r"(.*?)`?\s*<affection:\s*([+-]?\d+)\s*;\s*coins:\s*([+-]?\d+)\s*>\s*`?",
+                re.DOTALL | re.IGNORECASE,
             )
             match = pattern.search(response_text)
 
