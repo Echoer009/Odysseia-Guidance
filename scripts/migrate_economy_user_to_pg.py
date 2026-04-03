@@ -3,27 +3,29 @@
 
 """
 将 SQLite 中的类脑币经济系统和用户相关表迁移到 ParadeDB。
-按迁移计划文档的顺序执行：ai_affection → user_warnings → user_coins →
-coin_transactions → coin_loans → feeding_log → confession_log
+优化版本：预加载已有 ID 到 set，批量插入，关闭引擎日志。
 """
 
 import asyncio
 import sys
 import os
-import argparse
+import logging
 import aiosqlite
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dotenv import load_dotenv
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-from sqlalchemy import select, func, text
-from src.database.database import AsyncSessionLocal, engine as async_engine
-from src.database.models import (
+from sqlalchemy import select, text, func  # noqa: E402
+from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: E402
+from src.database.database import AsyncSessionLocal  # noqa: E402
+from src.database.models import (  # noqa: E402
     UserAffection,
     UserWarningRecord,
     UserCoins,
@@ -31,6 +33,7 @@ from src.database.models import (
     CoinLoan,
     InteractionLog,
 )
+from sqlalchemy.engine import CursorResult  # noqa: E402
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -75,7 +78,26 @@ def get_sqlite_path():
     return None
 
 
-async def migrate_user_affection(db, batch_size=100):
+async def _load_existing(session, model, *unique_cols) -> set:
+    cols = [getattr(model, c) for c in unique_cols]
+    result = await session.execute(select(*cols))
+    if len(unique_cols) == 1:
+        return {row[0] for row in result}
+    return {tuple(row) for row in result}
+
+
+async def _bulk_insert(session, model, rows: list[dict], batch_size=5000):
+    total = 0
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        stmt = pg_insert(model.__table__).values(batch).on_conflict_do_nothing()
+        result: CursorResult = await session.execute(stmt)
+        total += result.rowcount
+        await session.commit()
+    return total
+
+
+async def migrate_user_affection(db):
     r = StepResult("ai_affection", "user.user_affection")
     migration_results.append(r)
     print(f"[1/{TOTAL_STEPS}] user_affection ...", end=" ", flush=True)
@@ -84,10 +106,11 @@ async def migrate_user_affection(db, batch_size=100):
         async with AsyncSessionLocal() as session:
             cursor = await db.execute("SELECT COUNT(*) FROM ai_affection")
             r.source_count = (await cursor.fetchone())[0]
-
             if r.source_count == 0:
                 print("跳过(无数据)")
                 return
+
+            existing = await _load_existing(session, UserAffection, "user_id")
 
             cursor = await db.execute(
                 "SELECT user_id, affection_points, daily_affection_gain, "
@@ -95,30 +118,25 @@ async def migrate_user_affection(db, batch_size=100):
             )
             rows = await cursor.fetchall()
 
+            to_insert = []
             for row in rows:
                 uid, points, daily_gain, last_update, last_interact, last_gift = row
-                exists = await session.execute(
-                    select(UserAffection).where(UserAffection.user_id == str(uid))
-                )
-                if exists.scalar_one_or_none():
+                uid_str = str(uid)
+                if uid_str in existing:
                     r.skipped_existing += 1
                     continue
-
-                affection = UserAffection(
-                    user_id=str(uid),
-                    affection_points=points or 0,
-                    daily_affection_gain=daily_gain or 0,
-                    last_update_date=last_update,
-                    last_interaction_date=last_interact,
-                    last_gift_date=last_gift,
+                to_insert.append(
+                    {
+                        "user_id": uid_str,
+                        "affection_points": points or 0,
+                        "daily_affection_gain": daily_gain or 0,
+                        "last_update_date": last_update,
+                        "last_interaction_date": last_interact,
+                        "last_gift_date": last_gift,
+                    }
                 )
-                session.add(affection)
-                r.migrated += 1
 
-                if r.migrated % batch_size == 0:
-                    await session.commit()
-
-            await session.commit()
+            r.migrated = await _bulk_insert(session, UserAffection, to_insert)
             print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
@@ -126,7 +144,7 @@ async def migrate_user_affection(db, batch_size=100):
         print(f"失败({e})")
 
 
-async def migrate_user_warnings(db, batch_size=100):
+async def migrate_user_warnings(db):
     r = StepResult("user_warnings", "user.user_warnings")
     migration_results.append(r)
     print(f"[2/{TOTAL_STEPS}] user_warnings ...", end=" ", flush=True)
@@ -135,37 +153,35 @@ async def migrate_user_warnings(db, batch_size=100):
         async with AsyncSessionLocal() as session:
             cursor = await db.execute("SELECT COUNT(*) FROM user_warnings")
             r.source_count = (await cursor.fetchone())[0]
-
             if r.source_count == 0:
                 print("跳过(无数据)")
                 return
+
+            existing = await _load_existing(
+                session, UserWarningRecord, "user_id", "guild_id"
+            )
 
             cursor = await db.execute(
                 "SELECT user_id, guild_id, warning_count FROM user_warnings"
             )
             rows = await cursor.fetchall()
 
+            to_insert = []
             for row in rows:
                 uid, gid, count = row
-                exists = await session.execute(
-                    select(UserWarningRecord).where(
-                        UserWarningRecord.user_id == str(uid),
-                        UserWarningRecord.guild_id == str(gid),
-                    )
-                )
-                if exists.scalar_one_or_none():
+                key = (str(uid), str(gid))
+                if key in existing:
                     r.skipped_existing += 1
                     continue
-
-                warning = UserWarningRecord(
-                    user_id=str(uid),
-                    guild_id=str(gid),
-                    warning_count=count or 0,
+                to_insert.append(
+                    {
+                        "user_id": key[0],
+                        "guild_id": key[1],
+                        "warning_count": count or 0,
+                    }
                 )
-                session.add(warning)
-                r.migrated += 1
 
-            await session.commit()
+            r.migrated = await _bulk_insert(session, UserWarningRecord, to_insert)
             print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
@@ -173,7 +189,7 @@ async def migrate_user_warnings(db, batch_size=100):
         print(f"失败({e})")
 
 
-async def migrate_user_coins(db, batch_size=100):
+async def migrate_user_coins(db):
     r = StepResult("user_coins", "economy.user_coins")
     migration_results.append(r)
     print(f"[3/{TOTAL_STEPS}] user_coins ...", end=" ", flush=True)
@@ -182,10 +198,11 @@ async def migrate_user_coins(db, batch_size=100):
         async with AsyncSessionLocal() as session:
             cursor = await db.execute("SELECT COUNT(*) FROM user_coins")
             r.source_count = (await cursor.fetchone())[0]
-
             if r.source_count == 0:
                 print("跳过(无数据)")
                 return
+
+            existing = await _load_existing(session, UserCoins, "user_id")
 
             cursor = await db.execute(
                 "SELECT user_id, balance, last_daily_message_date, last_red_envelope_date, "
@@ -195,6 +212,7 @@ async def migrate_user_coins(db, batch_size=100):
             )
             rows = await cursor.fetchall()
 
+            to_insert = []
             for row in rows:
                 (
                     uid,
@@ -208,35 +226,26 @@ async def migrate_user_coins(db, batch_size=100):
                     cd_duration,
                     cd_limit,
                 ) = row
-
-                exists = await session.execute(
-                    select(UserCoins).where(UserCoins.user_id == str(uid))
-                )
-                if exists.scalar_one_or_none():
+                uid_str = str(uid)
+                if uid_str in existing:
                     r.skipped_existing += 1
                     continue
-
-                coffee_dt = to_naive_utc(coffee_expires)
-
-                coins = UserCoins(
-                    user_id=str(uid),
-                    balance=balance or 0,
-                    last_daily_message_date=last_daily,
-                    last_red_envelope_date=last_red,
-                    coffee_effect_expires_at=coffee_dt,
-                    has_withered_sunflower=withered,
-                    blocks_thread_replies=blocks or 0,
-                    thread_cooldown_seconds=cd_seconds,
-                    thread_cooldown_duration=cd_duration,
-                    thread_cooldown_limit=cd_limit,
+                to_insert.append(
+                    {
+                        "user_id": uid_str,
+                        "balance": balance or 0,
+                        "last_daily_message_date": last_daily,
+                        "last_red_envelope_date": last_red,
+                        "coffee_effect_expires_at": to_naive_utc(coffee_expires),
+                        "has_withered_sunflower": withered,
+                        "blocks_thread_replies": blocks or 0,
+                        "thread_cooldown_seconds": cd_seconds,
+                        "thread_cooldown_duration": cd_duration,
+                        "thread_cooldown_limit": cd_limit,
+                    }
                 )
-                session.add(coins)
-                r.migrated += 1
 
-                if r.migrated % batch_size == 0:
-                    await session.commit()
-
-            await session.commit()
+            r.migrated = await _bulk_insert(session, UserCoins, to_insert)
             print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
@@ -255,7 +264,7 @@ async def ensure_column_types():
     print("[准备] coin_transactions.amount → BIGINT")
 
 
-async def migrate_coin_transactions(db, batch_size=5000):
+async def migrate_coin_transactions(db):
     r = StepResult("coin_transactions", "economy.coin_transactions")
     migration_results.append(r)
     print(f"[4/{TOTAL_STEPS}] coin_transactions ...", end=" ", flush=True)
@@ -263,51 +272,76 @@ async def migrate_coin_transactions(db, batch_size=5000):
     try:
         await ensure_column_types()
 
+        cursor = await db.execute("SELECT COUNT(*) FROM coin_transactions")
+        r.source_count = (await cursor.fetchone())[0]
+        if r.source_count == 0:
+            print("跳过(无数据)")
+            return
+
         async with AsyncSessionLocal() as session:
-            cursor = await db.execute("SELECT COUNT(*) FROM coin_transactions")
-            r.source_count = (await cursor.fetchone())[0]
-
-            if r.source_count == 0:
-                print("跳过(无数据)")
+            pg_count = await session.execute(
+                select(func.count()).select_from(CoinTransaction)
+            )
+            already_in_pg = pg_count.scalar() or 0
+            if already_in_pg >= r.source_count:
+                r.skipped_existing = already_in_pg
+                print(f"跳过(已存在 {already_in_pg} 条)")
                 return
-
             offset = 0
 
-            while True:
-                cursor = await db.execute(
-                    "SELECT user_id, amount, reason, timestamp FROM coin_transactions "
-                    f"LIMIT {batch_size} OFFSET {offset}"
+        batch_size = 1000
+
+        while True:
+            cursor = await db.execute(
+                "SELECT user_id, amount, reason, timestamp FROM coin_transactions "
+                f"LIMIT {batch_size} OFFSET {offset}"
+            )
+            rows = await cursor.fetchall()
+            if not rows:
+                break
+
+            batch = []
+            for uid, amount, reason, ts in rows:
+                try:
+                    batch.append(
+                        {
+                            "user_id": str(uid),
+                            "amount": int(amount),
+                            "reason": reason or "",
+                            "timestamp": to_naive_utc(ts) or datetime.utcnow(),
+                        }
+                    )
+                except Exception:
+                    r.failed += 1
+
+            async with AsyncSessionLocal() as session:
+                stmt = (
+                    pg_insert(CoinTransaction.__table__)
+                    .values(batch)
+                    .on_conflict_do_nothing()
                 )
-                rows = await cursor.fetchall()
-                if not rows:
-                    break
-
-                for row in rows:
-                    uid, amount, reason, ts = row
-                    try:
-                        ts_dt = to_naive_utc(ts) or datetime.utcnow()
-                        tx = CoinTransaction(
-                            user_id=str(uid),
-                            amount=int(amount),
-                            reason=reason or "",
-                            timestamp=ts_dt,
-                        )
-                        session.add(tx)
-                        r.migrated += 1
-                    except Exception:
-                        r.failed += 1
-
+                await session.execute(stmt)
                 await session.commit()
-                offset += batch_size
+            r.migrated += len(batch) - (len(rows) - len(batch))
+            offset += batch_size
 
-            print(f"完成({r.migrated}/{r.source_count})")
+            pct = min(offset, r.source_count) / r.source_count * 100
+            print(
+                f"\r[4/{TOTAL_STEPS}] coin_transactions ... {pct:.0f}% ({min(offset, r.source_count)}/{r.source_count})",
+                end="",
+                flush=True,
+            )
+
+        print(
+            f"\r[4/{TOTAL_STEPS}] coin_transactions ... 完成({r.migrated}/{r.source_count})"
+        )
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
         r.error_msg = str(e)
         print(f"失败({e})")
 
 
-async def migrate_coin_loans(db, batch_size=100):
+async def migrate_coin_loans(db):
     r = StepResult("coin_loans", "economy.coin_loans")
     migration_results.append(r)
     print(f"[5/{TOTAL_STEPS}] coin_loans ...", end=" ", flush=True)
@@ -316,7 +350,6 @@ async def migrate_coin_loans(db, batch_size=100):
         async with AsyncSessionLocal() as session:
             cursor = await db.execute("SELECT COUNT(*) FROM coin_loans")
             r.source_count = (await cursor.fetchone())[0]
-
             if r.source_count == 0:
                 print("跳过(无数据)")
                 return
@@ -326,23 +359,19 @@ async def migrate_coin_loans(db, batch_size=100):
             )
             rows = await cursor.fetchall()
 
-            for row in rows:
-                uid, amount, status, created, paid = row
-
-                created_dt = to_naive_utc(created) or datetime.utcnow()
-                paid_dt = to_naive_utc(paid)
-
-                loan = CoinLoan(
-                    user_id=str(uid),
-                    amount=amount,
-                    status=status or "active",
-                    created_at=created_dt,
-                    paid_at=paid_dt,
+            to_insert = []
+            for uid, amount, status, created, paid in rows:
+                to_insert.append(
+                    {
+                        "user_id": str(uid),
+                        "amount": amount,
+                        "status": status or "active",
+                        "created_at": to_naive_utc(created) or datetime.utcnow(),
+                        "paid_at": to_naive_utc(paid),
+                    }
                 )
-                session.add(loan)
-                r.migrated += 1
 
-            await session.commit()
+            r.migrated = await _bulk_insert(session, CoinLoan, to_insert)
             print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
@@ -350,102 +379,114 @@ async def migrate_coin_loans(db, batch_size=100):
         print(f"失败({e})")
 
 
-async def migrate_feeding_logs(db, batch_size=5000):
+async def migrate_feeding_logs(db):
     r = StepResult("feeding_log", "economy.interaction_logs[feeding]")
     migration_results.append(r)
     print(f"[6/{TOTAL_STEPS}] feeding_logs ...", end=" ", flush=True)
 
     try:
+        try:
+            cursor = await db.execute("SELECT COUNT(*) FROM feeding_log")
+            r.source_count = (await cursor.fetchone())[0]
+        except Exception:
+            r.skipped_no_table = True
+            print("跳过(表不存在)")
+            return
+
+        if r.source_count == 0:
+            print("跳过(无数据)")
+            return
+
+        batch_size = 10000
+        offset = 0
+
         async with AsyncSessionLocal() as session:
-            try:
-                cursor = await db.execute("SELECT COUNT(*) FROM feeding_log")
-                r.source_count = (await cursor.fetchone())[0]
-            except Exception:
-                r.skipped_no_table = True
-                print("跳过(表不存在)")
-                return
-
-            if r.source_count == 0:
-                print("跳过(无数据)")
-                return
-
-            offset = 0
-
             while True:
                 cursor = await db.execute(
-                    "SELECT user_id, timestamp FROM feeding_log "
-                    f"LIMIT {batch_size} OFFSET {offset}"
+                    f"SELECT user_id, timestamp FROM feeding_log LIMIT {batch_size} OFFSET {offset}"
                 )
                 rows = await cursor.fetchall()
                 if not rows:
                     break
 
-                for row in rows:
-                    uid, ts = row
-                    ts_dt = to_naive_utc(ts) or datetime.utcnow()
-                    log_entry = InteractionLog(
-                        user_id=str(uid),
-                        interaction_type="feeding",
-                        timestamp=ts_dt,
+                batch = []
+                for uid, ts in rows:
+                    batch.append(
+                        {
+                            "user_id": str(uid),
+                            "interaction_type": "feeding",
+                            "timestamp": to_naive_utc(ts) or datetime.utcnow(),
+                        }
                     )
-                    session.add(log_entry)
-                    r.migrated += 1
 
+                stmt = (
+                    pg_insert(InteractionLog.__table__)
+                    .values(batch)
+                    .on_conflict_do_nothing()
+                )
+                await session.execute(stmt)
+                r.migrated += len(batch)
                 await session.commit()
                 offset += batch_size
 
-            print(f"完成({r.migrated}/{r.source_count})")
+        print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
         r.error_msg = str(e)
         print(f"失败({e})")
 
 
-async def migrate_confession_logs(db, batch_size=5000):
+async def migrate_confession_logs(db):
     r = StepResult("confession_log", "economy.interaction_logs[confession]")
     migration_results.append(r)
     print(f"[7/{TOTAL_STEPS}] confession_logs ...", end=" ", flush=True)
 
     try:
+        try:
+            cursor = await db.execute("SELECT COUNT(*) FROM confession_log")
+            r.source_count = (await cursor.fetchone())[0]
+        except Exception:
+            r.skipped_no_table = True
+            print("跳过(表不存在)")
+            return
+
+        if r.source_count == 0:
+            print("跳过(无数据)")
+            return
+
+        batch_size = 10000
+        offset = 0
+
         async with AsyncSessionLocal() as session:
-            try:
-                cursor = await db.execute("SELECT COUNT(*) FROM confession_log")
-                r.source_count = (await cursor.fetchone())[0]
-            except Exception:
-                r.skipped_no_table = True
-                print("跳过(表不存在)")
-                return
-
-            if r.source_count == 0:
-                print("跳过(无数据)")
-                return
-
-            offset = 0
-
             while True:
                 cursor = await db.execute(
-                    "SELECT user_id, timestamp FROM confession_log "
-                    f"LIMIT {batch_size} OFFSET {offset}"
+                    f"SELECT user_id, timestamp FROM confession_log LIMIT {batch_size} OFFSET {offset}"
                 )
                 rows = await cursor.fetchall()
                 if not rows:
                     break
 
-                for row in rows:
-                    uid, ts = row
-                    ts_dt = to_naive_utc(ts) or datetime.utcnow()
-                    log_entry = InteractionLog(
-                        user_id=str(uid),
-                        interaction_type="confession",
-                        timestamp=ts_dt,
+                batch = []
+                for uid, ts in rows:
+                    batch.append(
+                        {
+                            "user_id": str(uid),
+                            "interaction_type": "confession",
+                            "timestamp": to_naive_utc(ts) or datetime.utcnow(),
+                        }
                     )
-                    session.add(log_entry)
-                    r.migrated += 1
 
+                stmt = (
+                    pg_insert(InteractionLog.__table__)
+                    .values(batch)
+                    .on_conflict_do_nothing()
+                )
+                await session.execute(stmt)
+                r.migrated += len(batch)
                 await session.commit()
                 offset += batch_size
 
-            print(f"完成({r.migrated}/{r.source_count})")
+        print(f"完成({r.migrated}/{r.source_count})")
     except Exception as e:
         r.failed = r.source_count - r.migrated - r.skipped_existing
         r.error_msg = str(e)
@@ -507,6 +548,8 @@ def print_report():
 
 
 async def main():
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="迁移 economy + user 数据从 SQLite 到 ParadeDB"
     )
@@ -524,7 +567,7 @@ async def main():
         sys.exit(1)
 
     print(f"SQLite: {sqlite_path}")
-    print(f"开始迁移...\n")
+    print("开始迁移...\n")
 
     if args.verify_only:
         migration_results.clear()
