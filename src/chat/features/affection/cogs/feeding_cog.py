@@ -11,7 +11,11 @@ from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.event_service import event_service
-from src.chat.config.chat_config import FEEDING_CONFIG, PROMPT_CONFIG
+from src.chat.config.chat_config import (
+    FEEDING_CONFIG,
+    PROMPT_CONFIG,
+    GEMINI_FEEDING_GEN_CONFIG,
+)
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.config import DEVELOPER_USER_IDS
@@ -90,7 +94,12 @@ class FeedingCog(commands.Cog):
                 }
             ]
 
-            config = GenerationConfig(temperature=1.0, max_output_tokens=1024)
+            config = GenerationConfig(
+                temperature=GEMINI_FEEDING_GEN_CONFIG.get("temperature", 1.0),
+                max_output_tokens=GEMINI_FEEDING_GEN_CONFIG.get(
+                    "max_output_tokens", 8192
+                ),
+            )
 
             # 获取用户配置的 AI 模型
             model_id = await chat_settings_service.get_current_ai_model()

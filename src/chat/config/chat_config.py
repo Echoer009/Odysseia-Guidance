@@ -247,6 +247,16 @@ GEMINI_CONFESSION_GEN_CONFIG = {
     "max_output_tokens": 3000,
 }
 
+GEMINI_FEEDING_GEN_CONFIG = {
+    "temperature": 1.0,
+    "max_output_tokens": 8192,
+}
+
+GEMINI_THREAD_COMMENTOR_GEN_CONFIG = {
+    "temperature": 1.0,
+    "max_output_tokens": 8192,
+}
+
 COOLDOWN_RATES = {
     "default": 2,  # 每分钟请求次数
     "coffee": 5,  # 每分钟请求次数

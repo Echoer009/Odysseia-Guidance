@@ -14,6 +14,7 @@ from src.chat.config.prompts import PROMPT_CONFIG
 from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_persona
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.world_book.services.world_book_service import world_book_service
+from src.chat.config.chat_config import GEMINI_THREAD_COMMENTOR_GEN_CONFIG
 from src.chat.config import chat_config
 from src.database.database import AsyncSessionLocal
 from src.database.models import CommunityMemberProfile
@@ -264,7 +265,12 @@ class ThreadCommentorService:
             )
 
             # 7. 调用 AIService 生成评价
-            config = GenerationConfig(temperature=1.0, max_output_tokens=1024)
+            config = GenerationConfig(
+                temperature=GEMINI_THREAD_COMMENTOR_GEN_CONFIG.get("temperature", 1.0),
+                max_output_tokens=GEMINI_THREAD_COMMENTOR_GEN_CONFIG.get(
+                    "max_output_tokens", 8192
+                ),
+            )
             result = await ai_service.generate(
                 messages=conversation_history, config=config
             )
