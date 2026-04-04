@@ -7,7 +7,6 @@ from discord.ext import commands
 import re
 from collections import OrderedDict
 from src.chat.config import chat_config
-from src.chat.services.regex_service import regex_service
 
 log = logging.getLogger(__name__)
 
@@ -232,7 +231,6 @@ class ContextServiceTest:
 
             content = re.sub(r"<@!?(\d+)>", replace_mention, content)
         content = re.sub(r"<a?:\w+:\d+>", "", content)
-        content = regex_service.clean_user_input(content)
         return content.strip()
 
 
