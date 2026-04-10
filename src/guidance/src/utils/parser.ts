@@ -33,5 +33,5 @@ export function parseChannelData(rawData: ChannelInfo[]): TourSlide[] {
 }
 
 export function buildChannelUrl(guildId: string, channelId: string): string {
-  return `discord://discord.com/channels/${guildId}/${channelId}`
+  return `https://discord.com/channels/${guildId}/${channelId}`
 }

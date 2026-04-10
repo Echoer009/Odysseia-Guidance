@@ -33,7 +33,7 @@ export function useSceneFeedback(
   const kickoutShown = ref(false)
   const kickoutOverlayRef = ref<HTMLElement | null>(null)
 
-  function showReactionDialogue(text: string, expression: Expression, shakeInt: number, shakeDur: number) {
+  function showReactionDialogue(text: string, expression: Expression, shakeInt: number, _shakeDur: number) {
     const hasDialogueBox = currentScene.value === 'welcome' || currentScene.value === 'selection' || currentScene.value === 'tour' || currentScene.value === 'finish'
 
     if (!savedDialogueState) {
@@ -70,7 +70,7 @@ export function useSceneFeedback(
       const sceneEl = document.querySelector('.scene') as HTMLElement
       if (sceneEl) {
         const px = shakeInt * 2
-        const tl = gsap.timeline({ onComplete: () => gsap.set(sceneEl, { x: 0, y: 0 }) })
+        const tl = gsap.timeline({ onComplete: () => { gsap.set(sceneEl, { x: 0, y: 0 }); return null } })
         for (let i = 0; i < 4; i++) {
           tl.to(sceneEl, {
             x: (Math.random() - 0.5) * px,

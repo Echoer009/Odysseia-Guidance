@@ -57,6 +57,35 @@ function skipToEnd() {
   emit('complete')
 }
 
+let feedbackRestoreTimer: ReturnType<typeof setTimeout> | null = null
+let savedOriginalText = ''
+
+function showFeedback(text: string) {
+  savedOriginalText = displayText.value
+  if (typewriterInterval) {
+    clearInterval(typewriterInterval)
+    typewriterInterval = null
+  }
+  displayText.value = text
+  isTyping.value = false
+}
+
+function restoreFeedback() {
+  if (feedbackRestoreTimer) {
+    clearTimeout(feedbackRestoreTimer)
+    feedbackRestoreTimer = null
+  }
+  displayText.value = savedOriginalText
+  isTyping.value = false
+}
+
+function abortFeedbackRestore() {
+  if (feedbackRestoreTimer) {
+    clearTimeout(feedbackRestoreTimer)
+    feedbackRestoreTimer = null
+  }
+}
+
 function handleClick() {
   if (isTyping.value) {
     skipToEnd()
@@ -99,7 +128,7 @@ onUnmounted(() => {
   }
 })
 
-defineExpose({ animateIn, startTypewriter, skipToEnd })
+defineExpose({ animateIn, startTypewriter, skipToEnd, showFeedback, restoreFeedback, abortFeedbackRestore })
 </script>
 
 <template>

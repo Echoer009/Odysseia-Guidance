@@ -42,7 +42,7 @@ export interface DialogueEntry {
   image?: string
 }
 
-export type Expression = string
+export type Expression = 'normal' | 'happy' | 'wave' | 'shy' | 'thinking' | 'surprised' | 'sad' | 'excited' | 'wink' | 'proud' | 'annoyed' | 'angry' | 'furious'
 export type SceneName = 'loading' | 'welcome' | 'selection' | 'tour' | 'finish'
 
 export interface GuidanceState {

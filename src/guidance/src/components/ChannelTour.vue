@@ -157,10 +157,7 @@ function hideSwipeHint() {
 
 function getExpression(channelName: string): Expression {
   const mapped = channelExpressionMap[channelName]
-  if (mapped === 'happy') return 'happy'
-  if (mapped === 'shy') return 'shy'
-  if (mapped === 'thinking') return 'thinking'
-  if (mapped === 'wave') return 'wave'
+  if (mapped) return mapped as Expression
   return 'normal'
 }
 

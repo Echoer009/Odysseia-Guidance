@@ -10,6 +10,13 @@ const props = defineProps<{
   position?: 'right' | 'center' | 'right-small'
   customSrc?: string
   skipEntrance?: boolean
+  interactive?: boolean
+}>()
+
+const emit = defineEmits<{
+  poke: []
+  dragStart: []
+  dragEnd: []
 }>()
 
 const spriteRef = ref<HTMLElement | null>(null)
@@ -89,6 +96,49 @@ function updateImage() {
   }
 }
 
+let isDragging = false
+let dragStartPos = { x: 0, y: 0 }
+const DRAG_THRESHOLD = 10
+
+function onPointerDown(e: PointerEvent) {
+  if (!props.interactive) return
+  isDragging = false
+  dragStartPos = { x: e.clientX, y: e.clientY }
+  emit('dragStart')
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (!props.interactive || !isDragging) return
+  const el = spriteRef.value
+  if (!el) return
+  gsap.to(el, {
+    x: (e.clientX - dragStartPos.x) * 0.5,
+    y: (e.clientY - dragStartPos.y) * 0.5,
+    duration: 0.1,
+    ease: 'power1.out',
+    overwrite: true,
+  })
+}
+
+function onPointerUp(e: PointerEvent) {
+  if (!props.interactive) return
+  const el = spriteRef.value
+  if (el) {
+    gsap.to(el, { x: 0, y: 0, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
+  }
+  emit('dragEnd')
+  const dx = e.clientX - dragStartPos.x
+  const dy = e.clientY - dragStartPos.y
+  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+    isDragging = true
+  }
+  if (!isDragging) {
+    emit('poke')
+  }
+  isDragging = false
+}
+
 watch(() => props.expression, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     animateExpressionChange()
@@ -122,8 +172,11 @@ defineExpose({ animateEntrance })
   <div
     ref="spriteRef"
     class="character-sprite"
-    :class="[position || 'right']"
+    :class="[position || 'right', { interactive }]"
     :style="{ transform: `scale(${scale || 1})` }"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
   >
     <div ref="innerRef" class="sprite-inner">
       <div v-if="!imgSrc" class="sprite-placeholder" :style="{ borderColor }">
@@ -147,6 +200,12 @@ defineExpose({ animateEntrance })
   z-index: 10;
   pointer-events: none;
   will-change: transform;
+}
+
+.character-sprite.interactive {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
 }
 
 .character-sprite.right {

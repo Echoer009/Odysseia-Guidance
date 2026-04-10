@@ -6,6 +6,7 @@ import { welcomeDialogues, selectionHint, tourStartDialogue } from './data/dialo
 import { buildTourQueue } from './data/channelData'
 import { buildChannelUrl } from './utils/parser'
 import { cloudAssets, backgroundAssets, expressions } from './data/assetsConfig'
+import { useSceneFeedback } from './composables/useSceneFeedback'
 import CharacterSprite from './components/CharacterSprite.vue'
 import DialogueBox from './components/DialogueBox.vue'
 import CardSelect from './components/CardSelect.vue'
@@ -42,6 +43,28 @@ const finishExpression = computed<Expression>(() => 'happy')
 
 const skyBgLoaded = ref(false)
 const finishBgLoaded = ref(false)
+
+function getDialogueRef() {
+  if (currentScene.value === 'welcome') return welcomeDialogueRef.value
+  if (currentScene.value === 'selection') return selectionDialogueRef.value
+  return null
+}
+
+const {
+  isShowingFeedback,
+  reactionBubbleText,
+  reactionBubbleVisible,
+  kickoutLine,
+  kickoutShown,
+  kickoutOverlayRef,
+  handleInteraction,
+} = useSceneFeedback(
+  currentScene,
+  currentExpression,
+  currentImage,
+  currentDialogue,
+  getDialogueRef,
+)
 
 function tryLoadBg(url: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -251,7 +274,16 @@ function onDialogueComplete() {
   dialogueComplete.value = true
 }
 
+function onPoke() {
+  handleInteraction('poke')
+}
+
+function onDragStart() {
+  handleInteraction('drag')
+}
+
 function onWelcomeSceneClick() {
+  if (isShowingFeedback.value) return
   if (!dialogueComplete.value) {
     welcomeDialogueRef.value?.skipToEnd()
   } else {
@@ -447,7 +479,7 @@ onMounted(main)
         />
       </div>
 
-      <CharacterSprite :expression="currentExpression" :custom-src="currentImage" position="right" :scale="1" />
+      <CharacterSprite :expression="currentExpression" :custom-src="currentImage" position="right" :scale="1" interactive @poke="onPoke" @drag-start="onDragStart" />
 
       <DialogueBox
         ref="welcomeDialogueRef"
@@ -483,7 +515,7 @@ onMounted(main)
         />
       </div>
 
-      <CharacterSprite :expression="currentExpression" :custom-src="currentImage" position="right" :scale="1" skip-entrance />
+      <CharacterSprite :expression="currentExpression" :custom-src="currentImage" position="right" :scale="1" skip-entrance interactive @poke="onPoke" @drag-start="onDragStart" />
 
       <DialogueBox
         ref="selectionDialogueRef"
@@ -510,7 +542,7 @@ onMounted(main)
     >
       <div ref="petalContainer" class="petal-container"></div>
 
-      <CharacterSprite :expression="finishExpression" position="right" :scale="1" />
+      <CharacterSprite :expression="finishExpression" position="right" :scale="1" interactive @poke="onPoke" @drag-start="onDragStart" />
 
       <div class="finish-content">
         <div class="finish-header">
@@ -534,6 +566,23 @@ onMounted(main)
             <span class="finish-channel-arrow">→</span>
           </a>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="reactionBubbleVisible"
+      class="reaction-bubble"
+    >
+      {{ reactionBubbleText }}
+    </div>
+
+    <div
+      v-if="kickoutShown"
+      ref="kickoutOverlayRef"
+      class="kickout-overlay"
+    >
+      <div class="kickout-content">
+        <p class="kickout-text">{{ kickoutLine }}</p>
       </div>
     </div>
   </div>
@@ -758,6 +807,75 @@ onMounted(main)
 
   .finish-channel-name {
     font-size: 14px;
+  }
+}
+
+.reaction-bubble {
+  position: absolute;
+  bottom: 260px;
+  right: 80px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  padding: 12px 20px;
+  font-size: 15px;
+  color: var(--text-primary);
+  z-index: 30;
+  box-shadow: var(--shadow-float);
+  animation: bubble-in 0.3s ease-out;
+  pointer-events: none;
+  max-width: 280px;
+  text-align: center;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.kickout-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kickout-content {
+  text-align: center;
+}
+
+.kickout-text {
+  font-size: 28px;
+  font-weight: 900;
+  color: #FF6B6B;
+  line-height: 1.4;
+  max-width: 500px;
+  padding: 0 24px;
+  text-shadow: 0 2px 12px rgba(255, 107, 107, 0.3);
+}
+
+@media (max-width: 768px) {
+  .reaction-bubble {
+    bottom: 200px;
+    right: 40px;
+    font-size: 13px;
+    max-width: 200px;
+  }
+
+  .kickout-text {
+    font-size: 20px;
   }
 }
 </style>
