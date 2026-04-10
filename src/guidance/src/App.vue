@@ -28,6 +28,8 @@ const finishChannels = ref<{ name: string; url: string }[]>([])
 const petalContainer = ref<HTMLElement | null>(null)
 const awakeOverlayRef = ref<HTMLElement | null>(null)
 const welcomeDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
+const cardSelectRef = ref<InstanceType<typeof CardSelect> | null>(null)
+const selectionDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 
 const GUILD_ID = '1234431460159160360'
 
@@ -264,6 +266,14 @@ function onTagComment(_tagName: string, comment: string, expression: string) {
   dialogueComplete.value = false
 }
 
+function onSelectionDialogueAdvance() {
+  if (!dialogueComplete.value) {
+    selectionDialogueRef.value?.skipToEnd()
+  } else {
+    onTagConfirm(Array.from((cardSelectRef.value as any)?.selectedTags?.value ?? ['默认']))
+  }
+}
+
 function onTagConfirm(tags: string[]) {
   selectedTags.value = tags
   channelsQueue.value = buildTourQueue(tags)
@@ -476,13 +486,16 @@ onMounted(main)
       <CharacterSprite :expression="currentExpression" :custom-src="currentImage" position="right" :scale="1" skip-entrance />
 
       <DialogueBox
+        ref="selectionDialogueRef"
         :text="currentDialogue"
         :expression="currentExpression"
-        :clickable="false"
+        :clickable="true"
         speaker="类脑娘"
+        @advance="onSelectionDialogueAdvance"
+        @complete="onDialogueComplete"
       />
 
-      <CardSelect :fly-origin="charOrigin" @confirm="onTagConfirm" @tag-comment="onTagComment" />
+      <CardSelect ref="cardSelectRef" :fly-origin="charOrigin" @tag-comment="onTagComment" />
     </div>
 
     <div v-else-if="currentScene === 'tour'" class="scene">

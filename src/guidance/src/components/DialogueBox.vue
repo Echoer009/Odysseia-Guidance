@@ -140,8 +140,8 @@ defineExpose({ animateIn, startTypewriter, skipToEnd })
   box-shadow: var(--shadow-normal);
   overflow: visible;
   z-index: 20;
-  min-height: 140px;
-  max-height: 240px;
+  min-height: 110px;
+  max-height: 190px;
 }
 
 .dialogue-box.clickable {

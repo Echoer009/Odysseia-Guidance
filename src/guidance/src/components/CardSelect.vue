@@ -9,13 +9,11 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  confirm: [tags: string[]]
   tagComment: [tagName: string, comment: string, expression: string]
 }>()
 
 const selectedTags = ref<Set<string>>(new Set(['默认']))
 const cardsRef = ref<HTMLElement | null>(null)
-const confirmBtnRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const tags = tagsConfig.filter(t => !t.isDefault)
 const flippingCards = ref<Set<string>>(new Set())
@@ -311,9 +309,7 @@ function isSelected(tag: TagConfig): boolean {
   return selectedTags.value.has(tag.name)
 }
 
-function handleConfirm() {
-  emit('confirm', Array.from(selectedTags.value))
-}
+defineExpose({ selectedTags })
 
 function animateCardsIn() {
   if (!cardsRef.value) return
@@ -374,17 +370,6 @@ function animateCardsIn() {
       },
     })
   }
-}
-
-function startButtonGlow() {
-  if (!confirmBtnRef.value) return
-  gsap.to(confirmBtnRef.value, {
-    boxShadow: '0 0 0 3px rgba(206, 66, 43, 0.35), 0 4px 16px rgba(206, 66, 43, 0.15)',
-    duration: 1.2,
-    yoyo: true,
-    repeat: -1,
-    ease: 'sine.inOut',
-  })
 }
 
 function handleCardMouseEnter(event: MouseEvent) {
@@ -458,7 +443,6 @@ onMounted(() => {
   window.addEventListener('resize', resizeCanvas)
   setTimeout(() => {
     animateCardsIn()
-    startButtonGlow()
   }, 100)
 })
 
@@ -474,11 +458,6 @@ onUnmounted(() => {
 
 <template>
   <div class="card-select-scene">
-    <div class="card-select-header">
-      <h2 class="card-select-title">选择你感兴趣的方向</h2>
-      <p class="card-select-subtitle">点击卡片选择，可多选</p>
-    </div>
-
     <div ref="cardsRef" class="card-grid">
       <div
         v-for="(tag, index) in tags"
@@ -520,17 +499,6 @@ onUnmounted(() => {
     </div>
 
     <canvas ref="canvasRef" class="particle-canvas"></canvas>
-
-    <div class="card-select-footer">
-      <button
-        ref="confirmBtnRef"
-        class="confirm-btn"
-        :disabled="selectedTags.size === 0"
-        @click="handleConfirm"
-      >
-        确认选择 ({{ selectedTags.size }})
-      </button>
-    </div>
   </div>
 </template>
 
@@ -540,44 +508,25 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   height: 100%;
-  padding: 16px 40px;
+  padding: 10px 30px 0;
   overflow: hidden;
   position: relative;
-}
-
-.card-select-header {
-  margin-bottom: 12px;
-  z-index: 5;
-  text-align: center;
-}
-
-.card-select-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
-}
-
-.card-select-subtitle {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 .card-grid {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px 8px;
-  max-width: 780px;
+  gap: 8px 6px;
+  max-width: 740px;
   width: 100%;
   z-index: 5;
   perspective: 1000px;
 }
 
 .tag-card {
-  width: 140px;
-  height: 220px;
+  width: 115px;
+  height: 180px;
   cursor: pointer;
   will-change: transform;
   transform-style: preserve-3d;
@@ -634,8 +583,8 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 8px;
-  gap: 4px;
+  padding: 8px 6px;
+  gap: 2px;
   position: relative;
 }
 
@@ -647,7 +596,7 @@ onUnmounted(() => {
 }
 
 .card-symbol {
-  font-size: 40px;
+  font-size: 28px;
   font-weight: 900;
   color: var(--text-primary);
   letter-spacing: 1px;
@@ -661,7 +610,7 @@ onUnmounted(() => {
 }
 
 .card-name {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 900;
   color: var(--text-primary);
   letter-spacing: -0.3px;
@@ -670,7 +619,7 @@ onUnmounted(() => {
 }
 
 .card-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
   line-height: 1.4;
   text-align: center;
@@ -751,58 +700,37 @@ onUnmounted(() => {
   z-index: 50;
 }
 
-.card-select-footer {
-  margin-top: 12px;
-  z-index: 5;
-}
-
-.confirm-btn {
-  padding: 10px 36px;
-  font-size: 14px;
-  font-weight: 700;
-  color: white;
-  background: #CE422B;
-  border-radius: var(--radius-button);
-  box-shadow: var(--shadow-normal);
-  transition: all 0.15s ease;
-  letter-spacing: 0.3px;
-}
-
-.confirm-btn:hover:not(:disabled) {
-  background: #B7410E;
-}
-
 @media (max-width: 1024px) {
   .card-grid {
-    max-width: 600px;
+    max-width: 500px;
   }
 }
 
 @media (max-width: 768px) {
   .card-grid {
-    gap: 8px 6px;
+    gap: 6px 4px;
   }
 
   .tag-card {
-    width: 110px;
-    height: 175px;
+    width: 85px;
+    height: 140px;
   }
 
   .card-symbol {
-    font-size: 30px;
+    font-size: 22px;
   }
 
   .card-name {
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .card-desc {
-    font-size: 10px;
+    font-size: 9px;
     -webkit-line-clamp: 2;
   }
 
   .card-select-scene {
-    padding: 16px;
+    padding: 10px 16px 0;
   }
 }
 </style>
