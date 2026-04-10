@@ -6,6 +6,7 @@ import { channelExpressionMap } from '../data/dialogues'
 import { getChannelBgPath, getChannelCharPath, getExpressionPath } from '../data/assetsConfig'
 import ProgressBar from './ProgressBar.vue'
 import CharacterSprite from './CharacterSprite.vue'
+import DialogueBox from './DialogueBox.vue'
 
 interface DescToken {
   type: 'text' | 'bold' | 'accent' | 'newline' | 'paragraph'
@@ -67,10 +68,14 @@ function renderTokens(tokens: DescToken[], revealed: number): string {
 
 const props = defineProps<{
   slides: TourSlide[]
+  feedbackExpression?: Expression
+  isShowingFeedback?: boolean
 }>()
 
 const emit = defineEmits<{
   finish: []
+  poke: []
+  dragStart: []
 }>()
 
 const currentIndex = ref(0)
@@ -89,7 +94,20 @@ const channelBgLoaded = ref(false)
 const channelCharUrl = ref('')
 const swipeHintOpacity = ref(1)
 const revealedChars = ref(0)
+const tourDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 let typewriterInterval: ReturnType<typeof setInterval> | null = null
+
+const displayExpression = computed<Expression>(() => {
+  if (props.isShowingFeedback && props.feedbackExpression) {
+    return props.feedbackExpression
+  }
+  return currentExpression.value
+})
+
+const displayCustomSrc = computed(() => {
+  if (props.isShowingFeedback) return undefined
+  return channelCharUrl.value || undefined
+})
 
 const currentTokens = computed(() => parseDescription(currentSlide.value?.description || ''))
 const totalChars = computed(() => tokenCharCount(currentTokens.value))
@@ -389,6 +407,8 @@ watch(currentExpression, (expr) => {
     channelCharUrl.value = getExpressionPath(expr)
   }
 })
+
+defineExpose({ dialogueBoxRef: tourDialogueRef })
 </script>
 
 <template>
@@ -402,10 +422,13 @@ watch(currentExpression, (expr) => {
 
     <CharacterSprite
       v-if="currentSlide"
-      :expression="currentExpression"
-      :custom-src="channelCharUrl"
-      position="right-small"
-      :scale="0.6"
+      :expression="displayExpression"
+      :custom-src="displayCustomSrc"
+      position="right"
+      :scale="1"
+      interactive
+      @poke="emit('poke')"
+      @drag-start="emit('dragStart')"
     />
 
     <ProgressBar :current="currentIndex + 1" :total="slides.length" />
@@ -420,6 +443,14 @@ watch(currentExpression, (expr) => {
       <span ref="footerRef" class="tour-footer">{{ currentSlide.footer }}</span>
     </div>
 
+    <DialogueBox
+      v-if="isShowingFeedback"
+      ref="tourDialogueRef"
+      text=""
+      :expression="feedbackExpression || 'normal'"
+      class="tour-feedback-dialogue"
+    />
+
     <div class="tour-bottom">
       <span class="swipe-hint" :style="{ opacity: swipeHintOpacity }">
         ← 左右滑动切换 · 到最后一张继续滑动完成 →
@@ -433,7 +464,7 @@ watch(currentExpression, (expr) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 60px 60px 40px;
+  padding: 30px 60px 40px;
   position: relative;
   overflow: hidden;
 }
@@ -461,16 +492,17 @@ watch(currentExpression, (expr) => {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding-top: 12%;
+  padding-top: 20px;
   max-width: 680px;
   padding-left: 20px;
+  min-height: 0;
 }
 
 .tour-header {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .tour-hash {
@@ -499,7 +531,7 @@ watch(currentExpression, (expr) => {
   height: 3px;
   background: var(--accent-gold);
   transform-origin: left center;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   border-radius: 2px;
   will-change: transform;
 }
@@ -509,6 +541,9 @@ watch(currentExpression, (expr) => {
   line-height: 1.8;
   color: var(--text-primary);
   max-width: 560px;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
   will-change: transform, opacity;
   backface-visibility: hidden;
 }
@@ -543,7 +578,8 @@ watch(currentExpression, (expr) => {
   font-size: 12px;
   color: var(--text-muted);
   letter-spacing: 0.5px;
-  margin-top: 24px;
+  margin-top: 12px;
+  flex-shrink: 0;
   will-change: transform, opacity;
   backface-visibility: hidden;
 }
@@ -561,6 +597,10 @@ watch(currentExpression, (expr) => {
   color: var(--text-muted);
   letter-spacing: 0.5px;
   transition: opacity 0.3s;
+}
+
+.tour-feedback-dialogue {
+  pointer-events: none;
 }
 
 @media (max-width: 768px) {

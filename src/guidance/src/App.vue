@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import gsap from 'gsap'
 import type { SceneName, Expression, TourSlide } from './types'
 import { welcomeDialogues, selectionHint, tourStartDialogue } from './data/dialogues'
@@ -32,6 +32,8 @@ const awakeOverlayRef = ref<HTMLElement | null>(null)
 const welcomeDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 const cardSelectRef = ref<InstanceType<typeof CardSelect> | null>(null)
 const selectionDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
+const channelTourRef = ref<InstanceType<typeof ChannelTour> | null>(null)
+const finishDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 
 const GUILD_ID = '1234431460159160360'
 
@@ -40,14 +42,14 @@ const isEmbedded = queryParams.get('frame_id') != null
 
 let accessToken: string | null = null
 
-const finishExpression = computed<Expression>(() => 'happy')
-
 const skyBgLoaded = ref(false)
 const finishBgLoaded = ref(false)
 
 function getDialogueRef() {
   if (currentScene.value === 'welcome') return welcomeDialogueRef.value
   if (currentScene.value === 'selection') return selectionDialogueRef.value
+  if (currentScene.value === 'tour') return channelTourRef.value?.dialogueBoxRef ?? null
+  if (currentScene.value === 'finish') return finishDialogueRef.value
   return null
 }
 
@@ -330,8 +332,12 @@ function onTourFinish() {
     url: buildChannelUrl(GUILD_ID, s.channelId),
   }))
 
-  transitionTo('finish')
   currentExpression.value = 'happy'
+  currentDialogue.value = ''
+  currentImage.value = undefined
+  dialogueComplete.value = true
+
+  transitionTo('finish')
 
   setTimeout(() => {
     createPetals()
@@ -540,7 +546,7 @@ onMounted(main)
     </div>
 
     <div v-else-if="currentScene === 'tour'" class="scene">
-      <ChannelTour :slides="channelsQueue" @finish="onTourFinish" />
+      <ChannelTour ref="channelTourRef" :slides="channelsQueue" :feedback-expression="currentExpression" :is-showing-feedback="isShowingFeedback" @finish="onTourFinish" @poke="onPoke" @drag-start="onDragStart" />
     </div>
 
     <div
@@ -551,7 +557,14 @@ onMounted(main)
     >
       <div ref="petalContainer" class="petal-container"></div>
 
-      <CharacterSprite :expression="finishExpression" position="right" :scale="1" interactive @poke="onPoke" @drag-start="onDragStart" />
+      <CharacterSprite :expression="currentExpression" position="right" :scale="1" interactive @poke="onPoke" @drag-start="onDragStart" />
+
+      <DialogueBox
+        v-if="isShowingFeedback"
+        ref="finishDialogueRef"
+        text=""
+        :expression="currentExpression"
+      />
 
       <div class="finish-content">
         <div class="finish-header">
