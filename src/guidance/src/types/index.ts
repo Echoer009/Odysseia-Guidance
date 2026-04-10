@@ -43,7 +43,7 @@ export interface DialogueEntry {
 }
 
 export type Expression = 'normal' | 'happy' | 'wave' | 'shy' | 'thinking' | 'surprised' | 'sad' | 'excited' | 'wink' | 'proud' | 'annoyed' | 'angry' | 'furious'
-export type SceneName = 'loading' | 'welcome' | 'selection' | 'tour' | 'finish'
+export type SceneName = 'loading' | 'welcome' | 'selection' | 'tour' | 'finish' | 'kickout'
 
 export interface GuidanceState {
   currentScene: SceneName

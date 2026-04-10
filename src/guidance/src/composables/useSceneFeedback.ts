@@ -2,7 +2,7 @@ import { ref, watch, nextTick } from 'vue'
 import gsap from 'gsap'
 import type { Expression, SceneName } from '../types'
 import { usePoke } from './usePoke'
-import { getPokeDialogue, getKickoutLine } from '../data/pokeDialogues'
+import { getPokeDialogue } from '../data/pokeDialogues'
 import { getDragDialogue } from '../data/easterEggDialogues'
 import type DialogueBox from '../components/DialogueBox.vue'
 
@@ -29,9 +29,6 @@ export function useSceneFeedback(
   const isShowingFeedback = ref(false)
   const reactionBubbleText = ref('')
   const reactionBubbleVisible = ref(false)
-  const kickoutLine = ref('')
-  const kickoutShown = ref(false)
-  const kickoutOverlayRef = ref<HTMLElement | null>(null)
 
   function showReactionDialogue(text: string, expression: Expression, shakeInt: number, _shakeDur: number) {
     const hasDialogueBox = currentScene.value === 'welcome' || currentScene.value === 'selection' || currentScene.value === 'tour' || currentScene.value === 'finish'
@@ -87,8 +84,6 @@ export function useSceneFeedback(
     feedbackTimer = setTimeout(() => {
       if (pendingKickout) {
         pendingKickout = false
-        const dialogueBox = getDialogueRef()
-        if (dialogueBox) dialogueBox.abortFeedbackRestore()
         triggerKickOut()
       } else if (savedDialogueState) {
         currentExpression.value = savedDialogueState.expression
@@ -113,13 +108,7 @@ export function useSceneFeedback(
   }
 
   function triggerKickOut() {
-    if (kickoutShown.value) return
-    kickoutShown.value = true
-    kickoutLine.value = getKickoutLine()
-    if (kickoutOverlayRef.value) {
-      gsap.to(kickoutOverlayRef.value, { opacity: 1, duration: 0.6, ease: 'power2.in' })
-      gsap.set(kickoutOverlayRef.value, { pointerEvents: 'all' })
-    }
+    currentScene.value = 'kickout'
   }
 
   function cleanup() {
@@ -135,9 +124,6 @@ export function useSceneFeedback(
     isShowingFeedback,
     reactionBubbleText,
     reactionBubbleVisible,
-    kickoutLine,
-    kickoutShown,
-    kickoutOverlayRef,
     handleInteraction,
     triggerKickOut,
   }

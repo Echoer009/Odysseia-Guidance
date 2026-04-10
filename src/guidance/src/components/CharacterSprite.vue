@@ -35,13 +35,17 @@ function getImgPath(expr: Expression): string {
 
 function startIdle() {
   if (!spriteRef.value) return
-  idleTween = gsap.to(spriteRef.value, {
-    y: '+=2',
-    duration: 1.2,
-    yoyo: true,
-    repeat: -1,
-    ease: 'sine.inOut',
-  })
+  stopIdle()
+  idleTween = gsap.fromTo(spriteRef.value,
+    { y: 0 },
+    {
+      y: 2,
+      duration: 1.2,
+      yoyo: true,
+      repeat: -1,
+      ease: 'sine.inOut',
+    },
+  )
 }
 
 function stopIdle() {
@@ -54,11 +58,11 @@ function stopIdle() {
 function animateEntrance() {
   if (!spriteRef.value) return
   stopIdle()
-  gsap.set(spriteRef.value, { x: 200, opacity: 0, scale: 0.9 })
+  gsap.set(spriteRef.value, { x: 200, opacity: 0, scale: props.scale || 1 })
   gsap.to(spriteRef.value, {
     x: 0,
     opacity: 1,
-    scale: 1,
+    scale: props.scale || 1,
     duration: 0.6,
     ease: 'back.out(1.4)',
     onComplete: startIdle,
@@ -97,45 +101,53 @@ function updateImage() {
 }
 
 let isDragging = false
+let isPointerDown = false
 let dragStartPos = { x: 0, y: 0 }
 const DRAG_THRESHOLD = 10
 
 function onPointerDown(e: PointerEvent) {
   if (!props.interactive) return
+  isPointerDown = true
   isDragging = false
   dragStartPos = { x: e.clientX, y: e.clientY }
-  emit('dragStart')
+  stopIdle()
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!props.interactive || !isDragging) return
+  if (!props.interactive || !isPointerDown) return
+  const dx = e.clientX - dragStartPos.x
+  const dy = e.clientY - dragStartPos.y
+  if (!isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+    isDragging = true
+    emit('dragStart')
+  }
+  if (!isDragging) return
   const el = spriteRef.value
   if (!el) return
-  gsap.to(el, {
-    x: (e.clientX - dragStartPos.x) * 0.5,
-    y: (e.clientY - dragStartPos.y) * 0.5,
-    duration: 0.1,
-    ease: 'power1.out',
-    overwrite: true,
+  gsap.set(el, {
+    x: dx * 0.5,
+    y: dy * 0.5,
   })
 }
 
-function onPointerUp(e: PointerEvent) {
-  if (!props.interactive) return
+function onPointerUp(_e: PointerEvent) {
+  if (!props.interactive || !isPointerDown) return
+  isPointerDown = false
   const el = spriteRef.value
-  if (el) {
-    gsap.to(el, { x: 0, y: 0, duration: 0.4, ease: 'elastic.out(1, 0.5)' })
-  }
-  emit('dragEnd')
-  const dx = e.clientX - dragStartPos.x
-  const dy = e.clientY - dragStartPos.y
-  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-    isDragging = true
-  }
-  if (!isDragging) {
+
+  if (isDragging) {
+    if (el) {
+      gsap.to(el, { x: 0, y: 0, duration: 0.4, ease: 'elastic.out(1, 0.5)', onComplete: startIdle })
+    } else {
+      startIdle()
+    }
+    emit('dragEnd')
+  } else {
+    startIdle()
     emit('poke')
   }
+
   isDragging = false
 }
 
@@ -153,6 +165,9 @@ watch(() => props.customSrc, (newVal, oldVal) => {
 })
 
 onMounted(() => {
+  if (spriteRef.value) {
+    gsap.set(spriteRef.value, { scale: props.scale || 1 })
+  }
   updateImage()
   if (props.skipEntrance) {
     startIdle()
@@ -173,10 +188,10 @@ defineExpose({ animateEntrance })
     ref="spriteRef"
     class="character-sprite"
     :class="[position || 'right', { interactive }]"
-    :style="{ transform: `scale(${scale || 1})` }"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
+    @dragstart.prevent
   >
     <div ref="innerRef" class="sprite-inner">
       <div v-if="!imgSrc" class="sprite-placeholder" :style="{ borderColor }">
@@ -228,6 +243,8 @@ defineExpose({ animateEntrance })
 .sprite-inner {
   will-change: transform;
   transform-origin: center bottom;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .sprite-placeholder {
@@ -258,7 +275,6 @@ defineExpose({ animateEntrance })
   height: 380px;
   width: 380px;
   object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
 }
 
 @media (max-width: 768px) {

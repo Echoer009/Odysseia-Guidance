@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import gsap from 'gsap'
 import type { SceneName, Expression, TourSlide } from './types'
 import { welcomeDialogues, selectionHint, tourStartDialogue } from './data/dialogues'
@@ -7,6 +7,7 @@ import { buildTourQueue } from './data/channelData'
 import { buildChannelUrl } from './utils/parser'
 import { cloudAssets, backgroundAssets, expressions } from './data/assetsConfig'
 import { useSceneFeedback } from './composables/useSceneFeedback'
+import { getKickoutLine, getKickoutMutter } from './data/pokeDialogues'
 import CharacterSprite from './components/CharacterSprite.vue'
 import DialogueBox from './components/DialogueBox.vue'
 import CardSelect from './components/CardSelect.vue'
@@ -54,9 +55,6 @@ const {
   isShowingFeedback,
   reactionBubbleText,
   reactionBubbleVisible,
-  kickoutLine,
-  kickoutShown,
-  kickoutOverlayRef,
   handleInteraction,
 } = useSceneFeedback(
   currentScene,
@@ -65,6 +63,10 @@ const {
   currentDialogue,
   getDialogueRef,
 )
+
+const kickoutLine = ref('')
+const kickoutMutter = ref('')
+const kickoutRef = ref<HTMLElement | null>(null)
 
 function tryLoadBg(url: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -281,6 +283,13 @@ function onPoke() {
 function onDragStart() {
   handleInteraction('drag')
 }
+
+watch(currentScene, (scene) => {
+  if (scene === 'kickout') {
+    kickoutLine.value = getKickoutLine()
+    kickoutMutter.value = getKickoutMutter()
+  }
+})
 
 function onWelcomeSceneClick() {
   if (isShowingFeedback.value) return
@@ -570,20 +579,24 @@ onMounted(main)
     </div>
 
     <div
+      v-else-if="currentScene === 'kickout'"
+      ref="kickoutRef"
+      class="scene scene-kickout"
+    >
+      <CharacterSprite expression="angry" position="right" :scale="1" custom-src="/assets/characters/ignore.webp" />
+
+      <div class="kickout-content">
+        <div class="kickout-stamp">你已被踢出引导</div>
+        <div class="kickout-divider"></div>
+        <p class="kickout-mutter">「{{ kickoutMutter }}」</p>
+      </div>
+    </div>
+
+    <div
       v-if="reactionBubbleVisible"
       class="reaction-bubble"
     >
       {{ reactionBubbleText }}
-    </div>
-
-    <div
-      v-if="kickoutShown"
-      ref="kickoutOverlayRef"
-      class="kickout-overlay"
-    >
-      <div class="kickout-content">
-        <p class="kickout-text">{{ kickoutLine }}</p>
-      </div>
     </div>
   </div>
 </template>
@@ -840,30 +853,49 @@ onMounted(main)
   }
 }
 
-.kickout-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  z-index: 200;
+.scene-kickout {
+  background: #0A0A0A;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .kickout-content {
-  text-align: center;
+  position: absolute;
+  top: 50%;
+  left: 60px;
+  right: 430px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  padding: 24px;
 }
 
-.kickout-text {
-  font-size: 28px;
+.kickout-stamp {
+  font-size: 40px;
   font-weight: 900;
-  color: #FF6B6B;
-  line-height: 1.4;
-  max-width: 500px;
-  padding: 0 24px;
-  text-shadow: 0 2px 12px rgba(255, 107, 107, 0.3);
+  color: #FF4444;
+  letter-spacing: -1px;
+  text-shadow: 0 0 40px rgba(255, 68, 68, 0.4), 0 2px 4px rgba(0, 0, 0, 0.8);
+  line-height: 1.2;
+}
+
+.kickout-divider {
+  width: 60px;
+  height: 3px;
+  background: #FF4444;
+  margin: 20px 0;
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.kickout-mutter {
+  font-size: 15px;
+  color: #666;
+  line-height: 1.8;
+  max-width: 400px;
+  font-style: italic;
 }
 
 @media (max-width: 768px) {
@@ -874,8 +906,24 @@ onMounted(main)
     max-width: 200px;
   }
 
-  .kickout-text {
-    font-size: 20px;
+  .kickout-content {
+    left: 16px;
+    right: 16px;
+    padding: 16px;
+    top: auto;
+    bottom: 200px;
+    transform: none;
+    align-items: center;
+    text-align: center;
+  }
+
+  .kickout-stamp {
+    font-size: 28px;
+  }
+
+  .kickout-mutter {
+    font-size: 13px;
+    text-align: center;
   }
 }
 </style>
