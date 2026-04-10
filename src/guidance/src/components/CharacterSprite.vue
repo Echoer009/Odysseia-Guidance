@@ -289,17 +289,17 @@ defineExpose({ animateEntrance })
   }
 
   .sprite-placeholder {
-    width: 180px;
-    height: 180px;
+    width: 140px;
+    height: 140px;
   }
 
   .sprite-icon {
-    font-size: 36px;
+    font-size: 28px;
   }
 
   .sprite-image {
-    height: 180px;
-    width: 180px;
+    height: 140px;
+    width: 140px;
   }
 }
 </style>

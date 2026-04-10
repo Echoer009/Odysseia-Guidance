@@ -162,8 +162,7 @@ defineExpose({ animateIn, startTypewriter, skipToEnd, showFeedback, restoreFeedb
   right: 430px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-normal);
@@ -266,18 +265,19 @@ defineExpose({ animateIn, startTypewriter, skipToEnd, showFeedback, restoreFeedb
 
 @media (max-width: 768px) {
   .dialogue-box {
-    left: 16px;
-    right: 16px;
-    bottom: 20px;
-    min-height: 100px;
+    left: 12px;
+    right: 155px;
+    bottom: 10px;
+    min-height: 80px;
+    max-height: 160px;
   }
 
   .dialogue-body {
-    padding: 14px 18px 12px;
+    padding: 12px 14px 10px;
   }
 
   .dialogue-text {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .dialogue-tail {
