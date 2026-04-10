@@ -1,7 +1,10 @@
 # Caddy 配置文件- Blackjack Activity HTTPS 代理
 # Caddy 会自动申请和续期 Let's Encrypt SSL 证书
 
-blackjackactivity.duckdns.org {
-    # 反向代理到 blackjack_web 容器
+blackjack.echonion.org {
     reverse_proxy blackjack_web:8000
+}
+
+guidance.echonion.org {
+    reverse_proxy guidance_web:8001
 }

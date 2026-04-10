@@ -1,0 +1,150 @@
+:root {
+  --bg-sky-start: #E8F4FD;
+  --bg-sky-end: #F0F7FF;
+  --bg-warm: #FFF9F0;
+  --accent-gold: #CE422B;
+  --accent-gold-hover: #B7410E;
+  --accent-orange: #E8751A;
+  --text-primary: #1A1A2E;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --border-color: #E5E7EB;
+  --border-hover: #D1D5DB;
+  --shadow-color: rgba(0, 0, 0, 0.06);
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --card-bg-solid: #FFFFFF;
+
+  --radius-dialog: 0px;
+  --radius-card: 0px;
+  --radius-button: 0px;
+  --radius-thumb: 0px;
+
+  --shadow-normal: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 0 2px rgba(206, 66, 43, 0.3);
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  color: var(--text-primary);
+  background: linear-gradient(180deg, var(--bg-sky-start), var(--bg-sky-end));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+button {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bg-sky {
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.bg-sky-fallback {
+  background: linear-gradient(180deg, var(--bg-sky-start), var(--bg-sky-end));
+}
+
+.bg-warm {
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.bg-warm-fallback {
+  background: linear-gradient(180deg, #FFFBF5, #FFF5EB);
+}
+
+.bg-finish {
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.bg-finish-fallback {
+  background: linear-gradient(180deg, #FFF8F0 0%, #FDEBD0 50%, #E8F4FD 100%);
+}
+
+.bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.cloud {
+  position: absolute;
+  pointer-events: none;
+  animation: cloud-drift linear infinite;
+}
+
+.cloud img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@keyframes cloud-drift {
+  from {
+    left: 100%;
+    transform: translateX(0);
+  }
+  to {
+    left: -300px;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .cloud {
+    display: none;
+  }
+}

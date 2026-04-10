@@ -66,6 +66,25 @@ services:
     depends_on:
       - db
 
+  guidance_web:
+    image: echoni0n/braingirl:latest
+    container_name: guidance_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    expose:
+      - "8001"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.guidance.app:app --host 0.0.0.0 --port 8001
+    depends_on:
+      - db
+
   # Caddy 反向代理 - 提供 HTTPS
   caddy:
     image: caddy:latest
@@ -81,6 +100,7 @@ services:
       - bot_network
     depends_on:
       - blackjack_web
+      - guidance_web
 
   #  config_web:
   #    build:

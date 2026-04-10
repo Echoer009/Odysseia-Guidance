@@ -18,7 +18,6 @@ load_dotenv()
 
 # 从我们自己的模块中导入
 from src import config
-from src.guidance.utils.database import guidance_db_manager
 from src.chat.utils.database import chat_db_manager
 from src.chat.features.world_book.database.world_book_db_manager import (
     world_book_db_manager,
@@ -263,16 +262,7 @@ class GuidanceBot(commands.Bot):
         """
         log = logging.getLogger(__name__)
 
-        # 1. 重新加载持久化视图
-        # 这必须在加载 Cogs 之前完成，因为 Cogs 可能依赖于这些视图
-        from .guidance.ui.views import GuidancePanelView, PermanentPanelView
-
-        self.add_view(GuidancePanelView())
-        log.info("已成功重新加载持久化视图 (GuidancePanelView)。")
-        self.add_view(PermanentPanelView())
-        log.info("已成功重新加载持久化视图 (PermanentPanelView)。")
-
-        # 2. 加载功能模块 (Cogs)
+        # 1. 加载功能模块 (Cogs)
         log.info("--- 正在加载功能模块 (Cogs) ---")
         from pathlib import Path
 
@@ -280,7 +270,7 @@ class GuidanceBot(commands.Bot):
         src_root = Path(__file__).parent
 
         # 定义所有需要扫描 cogs 的基础路径
-        cog_paths_to_scan = [src_root / "guidance" / "cogs", src_root / "chat" / "cogs"]
+        cog_paths_to_scan = [src_root / "chat" / "cogs"]
 
         # 动态查找所有 features/*/cogs 目录并添加到扫描列表
         features_dir = src_root / "chat" / "features"
@@ -432,12 +422,11 @@ async def main():
 
     # 3. 异步初始化数据库
     log.info("正在异步初始化数据库...")
-    await guidance_db_manager.init_async()
     log.info("初始化 Chat 数据库...")
+    await chat_db_manager.init_async()
 
     log.info("初始化 World Book 数据库...")
     await world_book_db_manager.init_async()
-    await chat_db_manager.init_async()
 
     # 3.5. 初始化商店商品
     # 商品已迁移到PostgreSQL，不再需要从配置文件初始化
@@ -457,7 +446,6 @@ async def main():
 
     # 4. 创建并运行机器人实例
     bot = GuidanceBot()
-    guidance_db_manager.set_bot_instance(bot)
 
     # 在机器人启动时，将 bot 实例注入到 AIService 中
     # 这是确保工具能够访问 Discord API 的关键步骤
