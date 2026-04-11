@@ -383,10 +383,6 @@ onMounted(() => {
     el.addEventListener('mousedown', onMouseDown)
     el.addEventListener('mouseup', onMouseUp)
   }
-
-  setTimeout(() => {
-    gsap.to(swipeHintOpacity, { value: 0, duration: 0.6 })
-  }, 3000)
 })
 
 onUnmounted(() => {
@@ -622,6 +618,14 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
 
   .tour-description {
     font-size: 15px;
+  }
+
+  .tour-bottom {
+    position: absolute;
+    bottom: 170px;
+    left: 0;
+    right: 0;
+    padding-bottom: 0;
   }
 }
 </style>

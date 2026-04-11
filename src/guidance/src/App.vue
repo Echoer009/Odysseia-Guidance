@@ -507,9 +507,10 @@ onMounted(main)
 
     <div
       v-else-if="currentScene === 'selection'"
-      class="scene"
+      class="scene scene-clickable"
       :class="skyBgLoaded ? 'bg-sky' : 'bg-sky-fallback'"
       :style="skyBgLoaded ? { '--bg-image': `url(${backgroundAssets.sky})` } : {}"
+      @click="onSelectionDialogueAdvance"
     >
       <div
         v-for="(cloud, i) in cloudAssets"
@@ -617,6 +618,7 @@ onMounted(main)
 <style>
 .scene-clickable {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .app-root {

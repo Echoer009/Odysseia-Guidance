@@ -283,5 +283,9 @@ defineExpose({ animateIn, startTypewriter, skipToEnd, showFeedback, restoreFeedb
   .dialogue-tail {
     display: none;
   }
+
+  .dialogue-hint {
+    display: none;
+  }
 }
 </style>

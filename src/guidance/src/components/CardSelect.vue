@@ -303,6 +303,20 @@ function toggleTag(tag: TagConfig, event: MouseEvent) {
   } else {
     selectedTags.value.delete(tag.name)
   }
+
+  if (isMobile.value) {
+    setTimeout(() => {
+      gsap.to(cardEl, {
+        rotateX: 0,
+        rotateY: 0,
+        y: 0,
+        zIndex: 0,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+        duration: 0.4,
+        ease: 'power2.out',
+      })
+    }, 300)
+  }
 }
 
 function isSelected(tag: TagConfig): boolean {
@@ -371,6 +385,8 @@ function animateCardsIn() {
     })
   }
 }
+
+const isMobile = ref(window.innerWidth <= 768)
 
 function handleCardMouseEnter(event: MouseEvent) {
   if (isAnimatingIn.value) return
@@ -458,7 +474,7 @@ onUnmounted(() => {
 
 <template>
   <div class="card-select-scene">
-    <div ref="cardsRef" class="card-grid">
+    <div ref="cardsRef" class="card-grid" @click.stop>
       <div
         v-for="(tag, index) in tags"
         :key="tag.name"
@@ -730,7 +746,7 @@ onUnmounted(() => {
   }
 
   .card-select-scene {
-    padding: 10px 16px 0;
+    padding: 50px 16px 0;
   }
 }
 </style>

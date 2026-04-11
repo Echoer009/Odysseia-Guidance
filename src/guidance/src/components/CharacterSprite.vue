@@ -192,6 +192,7 @@ defineExpose({ animateEntrance })
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @dragstart.prevent
+    @click.stop
   >
     <div ref="innerRef" class="sprite-inner">
       <div v-if="!imgSrc" class="sprite-placeholder" :style="{ borderColor }">
@@ -215,6 +216,7 @@ defineExpose({ animateEntrance })
   z-index: 10;
   pointer-events: none;
   will-change: transform;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .character-sprite.interactive {
