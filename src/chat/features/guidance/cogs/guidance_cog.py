@@ -12,27 +12,36 @@ log = logging.getLogger(__name__)
 
 GUIDANCE_APPLICATION_ID = int(os.getenv("VITE_DISCORD_CLIENT_ID") or "0")
 GUIDANCE_TRIGGER_ROLE_ID = int(os.getenv("GUIDANCE_TRIGGER_ROLE_ID") or "0")
+GUIDANCE_CHANNEL_ID = int(os.getenv("GUIDANCE_CHANNEL_ID") or "0")
 
 WELCOME_EMBED_COLOR = 0xCE422B
-WELCOME_TITLE = "欢迎来到类脑社区 ✦"
-WELCOME_DESCRIPTION = (
+WELCOME_FOOTER = "类脑社区 · Odysseia"
+
+DM_TITLE = "欢迎来到类脑社区 ✦"
+DM_DESCRIPTION = (
     "你好呀，新朋友！我是类脑娘，负责引导你熟悉这里～\n\n"
     "社区里有很多有趣的内容等你探索：角色卡、AI绘图、竞技场……\n"
-    "点击下面的按钮，让我带你逛一逛吧！"
+    "点击下面的按钮，前往引导频道开始吧！"
 )
-WELCOME_FOOTER = "类脑社区 · Odysseia"
-BUTTON_LABEL = "开始引导"
-BUTTON_EMOJI = "✨"
+DM_BUTTON_LABEL = "前往引导频道"
+DM_BUTTON_EMOJI = "✨"
+
+CHANNEL_EMBED_TITLE = "开始你的社区引导 ✦"
+CHANNEL_EMBED_DESCRIPTION = "欢迎来到类脑社区！\n\n点击下方按钮，让类脑娘带你熟悉这里～"
+CHANNEL_BUTTON_LABEL = "开始引导"
+CHANNEL_BUTTON_EMOJI = "✨"
+
+GUILD_ID = int(os.getenv("GUILD_ID", "0").split(",")[0].strip() or "0")
 
 
-class GuidanceStartView(discord.ui.View):
+class ChannelActivityView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label=BUTTON_LABEL,
+        label=CHANNEL_BUTTON_LABEL,
         style=discord.ButtonStyle.primary,
-        emoji=BUTTON_EMOJI,
+        emoji=CHANNEL_BUTTON_EMOJI,
         custom_id="guidance:start",
     )
     async def start_guidance(
@@ -71,14 +80,28 @@ class GuidanceStartView(discord.ui.View):
                     pass
 
 
-def build_welcome_embed() -> discord.Embed:
+def build_dm_embed() -> discord.Embed:
     embed = discord.Embed(
-        title=WELCOME_TITLE,
-        description=WELCOME_DESCRIPTION,
+        title=DM_TITLE,
+        description=DM_DESCRIPTION,
         color=WELCOME_EMBED_COLOR,
     )
     embed.set_footer(text=WELCOME_FOOTER)
     return embed
+
+
+def build_channel_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title=CHANNEL_EMBED_TITLE,
+        description=CHANNEL_EMBED_DESCRIPTION,
+        color=WELCOME_EMBED_COLOR,
+    )
+    embed.set_footer(text=WELCOME_FOOTER)
+    return embed
+
+
+def build_channel_view() -> ChannelActivityView:
+    return ChannelActivityView()
 
 
 class GuidanceCog(commands.Cog):
@@ -86,6 +109,58 @@ class GuidanceCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._guidance_message_id: int | None = None
+
+    async def cog_load(self):
+        from src.chat.utils.database import chat_db_manager
+
+        raw = await chat_db_manager.get_global_setting("guidance_message_id")
+        if raw:
+            self._guidance_message_id = int(raw)
+            log.info(f"Loaded cached guidance_message_id: {self._guidance_message_id}")
+
+    async def _ensure_channel_message(self):
+        if GUIDANCE_CHANNEL_ID == 0 or GUILD_ID == 0:
+            log.warning(
+                "GUIDANCE_CHANNEL_ID or GUILD_ID not set, skip channel message setup."
+            )
+            return
+
+        channel = self.bot.get_channel(GUIDANCE_CHANNEL_ID)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(GUIDANCE_CHANNEL_ID)
+            except Exception as e:
+                log.error(f"Cannot fetch guidance channel {GUIDANCE_CHANNEL_ID}: {e}")
+                return
+
+        if self._guidance_message_id:
+            try:
+                msg = await channel.fetch_message(self._guidance_message_id)
+                if msg and msg.author.id == self.bot.user.id:
+                    log.info(
+                        f"Guidance channel message {self._guidance_message_id} exists, skipping."
+                    )
+                    return
+            except discord.NotFound:
+                log.info("Cached guidance message not found, will resend.")
+            except Exception as e:
+                log.warning(f"Error checking guidance message: {e}")
+
+        embed = build_channel_embed()
+        view = build_channel_view()
+        msg = await channel.send(embed=embed, view=view)
+        self._guidance_message_id = msg.id
+
+        from src.chat.utils.database import chat_db_manager
+
+        await chat_db_manager.set_global_setting("guidance_message_id", str(msg.id))
+        log.info(f"Sent guidance channel message: {msg.id}")
+
+    def _get_guidance_jump_url(self) -> str | None:
+        if not self._guidance_message_id or GUILD_ID == 0 or GUIDANCE_CHANNEL_ID == 0:
+            return None
+        return f"https://discord.com/channels/{GUILD_ID}/{GUIDANCE_CHANNEL_ID}/{self._guidance_message_id}"
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
@@ -106,14 +181,33 @@ class GuidanceCog(commands.Cog):
             return
 
         try:
-            embed = build_welcome_embed()
-            view = GuidanceStartView()
-            await after.send(embed=embed, view=view)
+            embed = build_dm_embed()
+            jump_url = self._get_guidance_jump_url()
+
+            if jump_url:
+                view = discord.ui.View()
+                view.add_item(
+                    discord.ui.Button(
+                        label=DM_BUTTON_LABEL,
+                        emoji=DM_BUTTON_EMOJI,
+                        style=discord.ButtonStyle.link,
+                        url=jump_url,
+                    )
+                )
+                await after.send(embed=embed, view=view)
+            else:
+                fallback_view = ChannelActivityView()
+                await after.send(embed=embed, view=fallback_view)
+
             log.info(f"Sent guidance welcome DM to {after.id} ({after.display_name})")
         except discord.errors.Forbidden:
             log.warning(f"Cannot send DM to {after.id}, skipping guidance welcome.")
         except Exception as e:
             log.error(f"Failed to send guidance welcome to {after.id}: {e}")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self._ensure_channel_message()
 
 
 async def setup(bot: commands.Bot):

@@ -44,6 +44,7 @@ let accessToken: string | null = null
 
 const skyBgLoaded = ref(false)
 const finishBgLoaded = ref(false)
+const finishBgReady = ref(false)
 
 function getDialogueRef() {
   if (currentScene.value === 'welcome') return welcomeDialogueRef.value
@@ -70,14 +71,14 @@ const kickoutLine = ref('')
 const kickoutMutter = ref('')
 const kickoutRef = ref<HTMLElement | null>(null)
 
-function tryLoadBg(url: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => resolve(true)
-    img.onerror = () => resolve(false)
-    img.src = url
-  })
-}
+  function tryLoadBg(url: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => resolve(true)
+      img.onerror = () => { console.warn('[BG] Failed to load:', url); resolve(false) }
+      img.src = url
+    })
+  }
 
 async function initBackgrounds() {
   const [skyOk, finishOk] = await Promise.all([
@@ -86,6 +87,7 @@ async function initBackgrounds() {
   ])
   skyBgLoaded.value = skyOk
   finishBgLoaded.value = finishOk
+  if (finishOk) finishBgReady.value = true
 }
 
 function handleCloudError(event: Event) {
@@ -133,13 +135,21 @@ async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, 
 }
 
 async function setupDiscordSdk() {
+  console.log('[SDK] Importing Discord SDK...')
   const { DiscordSDK } = await import('@discord/embedded-app-sdk')
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID
-  if (!clientId) throw new Error('VITE_DISCORD_CLIENT_ID is not set.')
+  if (!clientId) {
+    console.error('[SDK] VITE_DISCORD_CLIENT_ID is not set')
+    throw new Error('VITE_DISCORD_CLIENT_ID is not set.')
+  }
+  console.log('[SDK] Client ID:', clientId)
 
   const discordSdk = new DiscordSDK(clientId)
+  console.log('[SDK] Waiting for ready...')
   await discordSdk.ready()
+  console.log('[SDK] Ready.')
 
+  console.log('[SDK] Authorizing...')
   const { code } = await discordSdk.commands.authorize({
     client_id: discordSdk.clientId,
     response_type: 'code',
@@ -147,20 +157,32 @@ async function setupDiscordSdk() {
     prompt: 'none',
     scope: ['identify', 'guilds'],
   })
+  console.log('[SDK] Authorized, exchanging token...')
 
   const response = await fetch('/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   })
+  if (!response.ok) {
+    const text = await response.text()
+    console.error('[SDK] Token exchange failed:', response.status, text)
+    throw new Error(`Token exchange failed: ${response.status}`)
+  }
   const { access_token } = await response.json()
+  console.log('[SDK] Token obtained, authenticating...')
+
   const auth = await discordSdk.commands.authenticate({ access_token })
-  if (!auth) throw new Error('Authenticate command failed')
+  if (!auth) {
+    console.error('[SDK] Authenticate returned null')
+    throw new Error('Authenticate command failed')
+  }
 
   accessToken = access_token
   if (auth.user?.username) {
     userName.value = auth.user.username
   }
+  console.log('[SDK] Fully initialized. User:', auth.user?.username)
 }
 
 async function fetchUserInfo() {
@@ -176,6 +198,11 @@ async function fetchUserInfo() {
 
 async function preloadAssets() {
   const images = Object.values(expressions).map(e => e.path).filter(Boolean)
+
+  images.push('/assets/characters/annoyed.webp')
+  images.push('/assets/characters/angry.webp')
+  images.push('/assets/characters/furious.webp')
+  images.push('/assets/characters/ignore.webp')
 
   cloudAssets.forEach(c => {
     images.push(`/assets/clouds/${c.file}`)
@@ -420,29 +447,23 @@ function animateFinishContent() {
   }
 }
 
-async function main() {
-  try {
-    if (isEmbedded) {
-      await setupDiscordSdk()
+  async function main() {
+    try {
+      if (isEmbedded) {
+        await setupDiscordSdk()
+      }
       await fetchUserInfo()
-      await initBackgrounds()
-      await preloadAssets()
-    } else {
-      await fetchUserInfo()
-      await initBackgrounds()
-      await preloadAssets()
+    } catch (e: unknown) {
+      console.error('Init error:', e)
     }
+
+    await initBackgrounds()
+    await preloadAssets()
 
     setTimeout(() => {
       startWelcome()
     }, 300)
-  } catch (e: unknown) {
-    console.error('Init error:', e)
-    setTimeout(() => {
-      startWelcome()
-    }, 1000)
   }
-}
 
 onMounted(main)
 </script>
@@ -450,6 +471,13 @@ onMounted(main)
 <template>
   <div class="app-root">
     <div ref="awakeOverlayRef" class="awake-overlay"></div>
+
+    <div
+      v-if="finishBgReady"
+      class="persistent-bg-finish"
+      :class="{ 'persistent-bg-finish--active': currentScene === 'finish' }"
+      :style="{ '--bg-image': `url(${backgroundAssets.finish})` }"
+    ></div>
 
     <div
       v-if="currentScene === 'loading'"
@@ -552,9 +580,7 @@ onMounted(main)
 
     <div
       v-else-if="currentScene === 'finish'"
-      class="scene"
-      :class="finishBgLoaded ? 'bg-finish' : 'bg-finish-fallback'"
-      :style="finishBgLoaded ? { '--bg-image': `url(${backgroundAssets.finish})` } : {}"
+      class="scene scene-transparent"
     >
       <div ref="petalContainer" class="petal-container"></div>
 
@@ -639,6 +665,26 @@ onMounted(main)
 
 .scene-loading {
   background: #000 !important;
+}
+
+.persistent-bg-finish {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.persistent-bg-finish--active {
+  opacity: 1;
+}
+
+.scene-transparent {
+  background: transparent !important;
 }
 
 .loading-content {

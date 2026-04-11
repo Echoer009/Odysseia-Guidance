@@ -69,20 +69,26 @@ function animateEntrance() {
   })
 }
 
-function animateExpressionChange() {
+function animateExpressionChange(onSwitch?: () => void) {
   if (!innerRef.value) return
   isChanging.value = true
   const el = innerRef.value
+  let switched = false
+  const doSwitch = () => {
+    if (!switched) {
+      switched = true
+      onSwitch?.()
+    }
+  }
   gsap.timeline()
-    .to(el, { scaleX: 0.92, scaleY: 1.06, duration: 0.12, ease: 'power2.in' })
+    .to(el, { scaleX: 0, duration: 0.12, ease: 'power2.in', onComplete: doSwitch })
     .to(el, { scaleX: 1.08, scaleY: 0.94, duration: 0.1, ease: 'power2.out' })
     .to(el, { scaleX: 0.98, scaleY: 1.02, duration: 0.1, ease: 'power2.inOut' })
     .to(el, { scaleX: 1, scaleY: 1, duration: 0.15, ease: 'elastic.out(1, 0.5)' })
     .then(() => { isChanging.value = false })
 }
 
-function tryLoadImage(src: string) {
-  if (imgSrc.value === src) return
+function switchToImage(src: string) {
   imgFailed.value = false
   imgSrc.value = src
 }
@@ -92,11 +98,28 @@ function handleImgError() {
   imgSrc.value = ''
 }
 
+function changeExpression(newSrc: string) {
+  if (newSrc === imgSrc.value) {
+    animateExpressionChange()
+    return
+  }
+
+  const probe = new Image()
+  probe.onload = () => {
+    if (isChanging.value) {
+      return
+    }
+    animateExpressionChange(() => switchToImage(newSrc))
+  }
+  probe.onerror = () => {}
+  probe.src = newSrc
+}
+
 function updateImage() {
   if (props.customSrc) {
-    tryLoadImage(props.customSrc)
+    changeExpression(props.customSrc)
   } else {
-    tryLoadImage(getImgPath(props.expression))
+    changeExpression(getImgPath(props.expression))
   }
 }
 
@@ -153,22 +176,21 @@ function onPointerUp(_e: PointerEvent) {
 
 watch(() => props.expression, (newVal, oldVal) => {
   if (newVal !== oldVal) {
-    animateExpressionChange()
+    updateImage()
   }
-  updateImage()
 })
 watch(() => props.customSrc, (newVal, oldVal) => {
   if (newVal !== oldVal) {
-    animateExpressionChange()
+    updateImage()
   }
-  updateImage()
 })
 
 onMounted(() => {
   if (spriteRef.value) {
     gsap.set(spriteRef.value, { scale: props.scale || 1 })
   }
-  updateImage()
+  const src = props.customSrc || getImgPath(props.expression)
+  imgSrc.value = src
   if (props.skipEntrance) {
     startIdle()
   } else {
@@ -195,7 +217,7 @@ defineExpose({ animateEntrance })
     @click.stop
   >
     <div ref="innerRef" class="sprite-inner">
-      <div v-if="!imgSrc" class="sprite-placeholder" :style="{ borderColor }">
+      <div v-if="!imgSrc || imgFailed" class="sprite-placeholder" :style="{ borderColor }">
         <span class="sprite-icon">🌻</span>
         <span class="sprite-expr">{{ exprLabel }}</span>
       </div>

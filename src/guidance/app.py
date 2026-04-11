@@ -127,17 +127,43 @@ async def exchange_code_for_token(request: TokenRequest):
             )
 
 
+GUILD_ID = os.getenv("GUILD_ID", "1234431460159160360")
+
+
+async def get_guild_nickname(user_id: int) -> Optional[str]:
+    bot_token = os.getenv("DISCORD_TOKEN")
+    if not bot_token:
+        return None
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"https://discord.com/api/guilds/{GUILD_ID}/members/{user_id}",
+                headers={"Authorization": f"Bot {bot_token}"},
+            )
+            response.raise_for_status()
+            member_data = response.json()
+            nick = member_data.get("nick")
+            if nick:
+                return nick
+            return member_data.get("user", {}).get("global_name") or member_data.get(
+                "user", {}
+            ).get("username")
+        except Exception as e:
+            log.warning(f"获取服务器昵称失败: {e}")
+            return None
+
+
 @app.get("/api/user")
 async def get_user_info(user_id: int = Depends(get_current_user_id)):
     log.info(f"获取用户 {user_id} 信息")
-    return JSONResponse(
-        content={
-            "user_id": str(user_id),
-            "username": f"旅行者_{user_id % 10000}"
-            if user_id == TEST_USER_ID
-            else None,
-        }
-    )
+    username = None
+    if user_id == TEST_USER_ID:
+        username = f"旅行者_{user_id % 10000}"
+    else:
+        nickname = await get_guild_nickname(user_id)
+        if nickname:
+            username = nickname
+    return JSONResponse(content={"user_id": str(user_id), "username": username})
 
 
 static_files_path = os.path.join(os.path.dirname(__file__), "dist")
