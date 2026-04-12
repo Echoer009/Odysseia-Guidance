@@ -170,8 +170,12 @@ class GuidanceCog(commands.Cog):
 
         from src.chat.utils.database import chat_db_manager
 
+        guidance_url = (
+            f"https://discord.com/channels/{msg.guild.id}/{msg.channel.id}/{msg.id}"
+        )
         await chat_db_manager.set_global_setting("guidance_message_id", str(msg.id))
-        log.info(f"Sent guidance channel message: {msg.id}")
+        await chat_db_manager.set_global_setting("guidance_url", guidance_url)
+        log.info(f"Sent guidance channel message: {msg.id}, url: {guidance_url}")
 
     def _get_guidance_jump_url(self) -> str | None:
         if not self._guidance_message_id or GUILD_ID == 0 or GUIDANCE_CHANNEL_ID == 0:

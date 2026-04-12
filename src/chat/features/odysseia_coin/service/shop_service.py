@@ -155,13 +155,8 @@ class ShopService:
             if "{guidance_url}" in content:
                 from src.chat.utils.database import chat_db_manager
 
-                msg_id = await chat_db_manager.get_global_setting("guidance_message_id")
-                guild_id = os.getenv("GUILD_ID", "0").split(",")[0].strip()
-                channel_id = os.getenv("GUIDANCE_CHANNEL_ID", "0")
-                if msg_id and guild_id != "0" and channel_id != "0":
-                    url = (
-                        f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
-                    )
+                url = await chat_db_manager.get_global_setting("guidance_url")
+                if url:
                     content = content.replace("{guidance_url}", url)
                 else:
                     content = content.replace(
