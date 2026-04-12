@@ -100,8 +100,7 @@ const countdownStyle = computed(() => {
 // --- Core Logic ---
 async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, retries = 2) {
     // The mock API has been removed. All requests now go to the backend via the Vite proxy.
-    if (isEmbedded && !accessToken) {
-        // In embedded mode, we must have an access token.
+    if (!accessToken && isEmbedded) {
         throw new Error("Access Token is not available in embedded mode.");
     }
 
@@ -111,9 +110,7 @@ async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, 
                 'Content-Type': 'application/json',
             };
 
-            // Only add the Authorization header if we are in the embedded client and have a token.
-            // For local development, the backend should handle unauthenticated requests.
-            if (isEmbedded && accessToken) {
+            if (accessToken) {
                 headers['Authorization'] = `Bearer ${accessToken}`;
             }
 
