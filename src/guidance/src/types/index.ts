@@ -31,6 +31,7 @@ export interface TourSlide {
   title: string
   description: string
   footer: string
+  slug: string
   thumbnailUrl?: string
   imageUrl?: string
   charImage?: string

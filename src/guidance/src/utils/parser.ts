@@ -11,6 +11,7 @@ export function parseChannelData(rawData: ChannelInfo[]): TourSlide[] {
       title: channel.permanentMessage.title,
       description: channel.permanentMessage.description,
       footer: channel.permanentMessage.footer,
+      slug: channel.id,
       thumbnailUrl: channel.permanentMessage.thumbnailUrl,
       imageUrl: channel.permanentMessage.imageUrl,
     })
@@ -23,6 +24,7 @@ export function parseChannelData(rawData: ChannelInfo[]): TourSlide[] {
         title: msg.title,
         description: msg.description,
         footer: msg.footer,
+        slug: channel.id,
         thumbnailUrl: msg.thumbnailUrl,
         imageUrl: msg.imageUrl,
       })

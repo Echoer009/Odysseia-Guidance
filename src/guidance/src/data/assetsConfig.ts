@@ -63,10 +63,10 @@ export function getExpressionLabel(expr: Expression): string {
   return expressions[expr]?.label || expr.toUpperCase()
 }
 
-export function getChannelBgPath(channelId: string): string {
-  return `/assets/channels/${channelId}.webp`
+export function getChannelBgPath(slug: string): string {
+  return `/assets/channels/${slug}.webp`
 }
 
-export function getChannelCharPath(channelId: string): string {
-  return `/assets/channels/${channelId}_char.webp`
+export function getChannelCharPath(slug: string): string {
+  return `/assets/channels/${slug}_char.webp`
 }

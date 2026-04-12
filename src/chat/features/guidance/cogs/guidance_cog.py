@@ -14,24 +14,33 @@ GUIDANCE_APPLICATION_ID = int(os.getenv("VITE_DISCORD_CLIENT_ID") or "0")
 GUIDANCE_TRIGGER_ROLE_ID = int(os.getenv("GUIDANCE_TRIGGER_ROLE_ID") or "0")
 GUIDANCE_CHANNEL_ID = int(os.getenv("GUIDANCE_CHANNEL_ID") or "0")
 
-WELCOME_EMBED_COLOR = 0xCE422B
-WELCOME_FOOTER = "类脑社区 · Odysseia"
+WELCOME_EMBED_COLOR = 0xF39C12
 
-DM_TITLE = "欢迎来到类脑社区 ✦"
+DM_TITLE = "嗨～欢迎来到类脑社区！"
 DM_DESCRIPTION = (
-    "你好呀，新朋友！我是类脑娘，负责引导你熟悉这里～\n\n"
-    "社区里有很多有趣的内容等你探索：角色卡、AI绘图、竞技场……\n"
-    "点击下面的按钮，前往引导频道开始吧！"
+    "诶嘿，你终于来啦！我是类脑娘～\n\n"
+    "我们社区可有意思了，角色卡、AI绘图……啥都有！"
+    "大家都很友善的，你肯定会喜欢的\n\n"
+    "不过这里人好多频道也好多，怕你迷路，所以我准备了一个小引导～\n"
+    "点击下面的按钮，让我带你逛一圈吧！"
 )
 DM_BUTTON_LABEL = "前往引导频道"
 DM_BUTTON_EMOJI = "✨"
 
-CHANNEL_EMBED_TITLE = "开始你的社区引导 ✦"
-CHANNEL_EMBED_DESCRIPTION = "欢迎来到类脑社区！\n\n点击下方按钮，让类脑娘带你熟悉这里～"
+CHANNEL_EMBED_TITLE = "让类脑娘带你逛逛～"
+CHANNEL_EMBED_DESCRIPTION = (
+    "好耶！你来了！\n\n"
+    "社区里频道蛮多的，第一次来很容易转晕……"
+    "所以我帮你整理了一份专属导览，会根据你感兴趣的内容推荐对应的频道！\n\n"
+    "放心啦，不会花太长时间的，而且……有我陪着你嘛～\n"
+    "点击下面的按钮就开始吧！"
+)
 CHANNEL_BUTTON_LABEL = "开始引导"
 CHANNEL_BUTTON_EMOJI = "✨"
 
 GUILD_ID = int(os.getenv("GUILD_ID", "0").split(",")[0].strip() or "0")
+
+THUMBNAIL_URL = "https://cdn.discordapp.com/attachments/1403347767912562728/1492801117774418053/ComfyUI_temp_rppad_00648_.png"
 
 
 class ChannelActivityView(discord.ui.View):
@@ -86,7 +95,8 @@ def build_dm_embed() -> discord.Embed:
         description=DM_DESCRIPTION,
         color=WELCOME_EMBED_COLOR,
     )
-    embed.set_footer(text=WELCOME_FOOTER)
+    if THUMBNAIL_URL:
+        embed.set_thumbnail(url=THUMBNAIL_URL)
     return embed
 
 
@@ -96,7 +106,8 @@ def build_channel_embed() -> discord.Embed:
         description=CHANNEL_EMBED_DESCRIPTION,
         color=WELCOME_EMBED_COLOR,
     )
-    embed.set_footer(text=WELCOME_FOOTER)
+    if THUMBNAIL_URL:
+        embed.set_thumbnail(url=THUMBNAIL_URL)
     return embed
 
 
@@ -207,6 +218,8 @@ class GuidanceCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        self.bot.add_view(ChannelActivityView())
+        log.info("Re-registered persistent ChannelActivityView")
         await self._ensure_channel_message()
 
 

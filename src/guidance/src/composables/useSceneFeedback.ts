@@ -86,9 +86,14 @@ export function useSceneFeedback(
         pendingKickout = false
         triggerKickOut()
       } else if (savedDialogueState) {
+        currentDialogue.value = savedDialogueState.text
         currentExpression.value = savedDialogueState.expression
         if (onExpressionChange) onExpressionChange(savedDialogueState.expression)
         currentImage.value = savedDialogueState.image
+
+        const dialogueBox = getDialogueRef()
+        if (dialogueBox) dialogueBox.restoreFeedback(savedDialogueState.text)
+
         savedDialogueState = null
       }
       isShowingFeedback.value = false

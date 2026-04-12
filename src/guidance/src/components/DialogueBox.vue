@@ -61,7 +61,9 @@ let feedbackRestoreTimer: ReturnType<typeof setTimeout> | null = null
 let savedOriginalText = ''
 
 function showFeedback(text: string) {
-  savedOriginalText = displayText.value
+  if (!savedOriginalText) {
+    savedOriginalText = displayText.value
+  }
   if (typewriterInterval) {
     clearInterval(typewriterInterval)
     typewriterInterval = null
@@ -70,12 +72,12 @@ function showFeedback(text: string) {
   isTyping.value = false
 }
 
-function restoreFeedback() {
+function restoreFeedback(originalText?: string) {
   if (feedbackRestoreTimer) {
     clearTimeout(feedbackRestoreTimer)
     feedbackRestoreTimer = null
   }
-  displayText.value = savedOriginalText
+  displayText.value = originalText ?? savedOriginalText
   isTyping.value = false
 }
 

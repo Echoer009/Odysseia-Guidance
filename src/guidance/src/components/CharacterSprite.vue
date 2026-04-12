@@ -24,7 +24,6 @@ const innerRef = ref<HTMLElement | null>(null)
 const imgSrc = ref('')
 const imgFailed = ref(false)
 let idleTween: gsap.core.Tween | null = null
-let isChanging = ref(false)
 
 const borderColor = computed(() => getExpressionColor(props.expression))
 const exprLabel = computed(() => getExpressionLabel(props.expression))
@@ -71,7 +70,6 @@ function animateEntrance() {
 
 function animateExpressionChange(onSwitch?: () => void) {
   if (!innerRef.value) return
-  isChanging.value = true
   const el = innerRef.value
   let switched = false
   const doSwitch = () => {
@@ -85,7 +83,7 @@ function animateExpressionChange(onSwitch?: () => void) {
     .to(el, { scaleX: 1.08, scaleY: 0.94, duration: 0.1, ease: 'power2.out' })
     .to(el, { scaleX: 0.98, scaleY: 1.02, duration: 0.1, ease: 'power2.inOut' })
     .to(el, { scaleX: 1, scaleY: 1, duration: 0.15, ease: 'elastic.out(1, 0.5)' })
-    .then(() => { isChanging.value = false })
+    .then(() => {})
 }
 
 function switchToImage(src: string) {
@@ -106,9 +104,6 @@ function changeExpression(newSrc: string) {
 
   const probe = new Image()
   probe.onload = () => {
-    if (isChanging.value) {
-      return
-    }
     animateExpressionChange(() => switchToImage(newSrc))
   }
   probe.onerror = () => {}

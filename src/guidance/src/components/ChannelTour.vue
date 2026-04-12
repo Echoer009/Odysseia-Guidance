@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 import type { TourSlide, Expression } from '../types'
 import { channelExpressionMap } from '../data/dialogues'
@@ -179,8 +179,8 @@ function getExpression(channelName: string): Expression {
   return 'normal'
 }
 
-function loadChannelBg(channelId: string) {
-  const url = getChannelBgPath(channelId)
+function loadChannelBg(slug: string) {
+  const url = getChannelBgPath(slug)
   channelBgLoaded.value = false
   const img = new Image()
   img.onload = () => {
@@ -195,12 +195,13 @@ function loadChannelBg(channelId: string) {
   img.src = url
 }
 
-function loadChannelChar(channelId: string, charImage?: string) {
+function loadChannelChar(slug: string, charImage?: string) {
   if (charImage) {
     channelCharUrl.value = charImage
     return
   }
-  const url = getChannelCharPath(channelId)
+  const url = getChannelCharPath(slug)
+  channelCharUrl.value = url
   const img = new Image()
   img.onload = () => {
     channelCharUrl.value = url
@@ -328,8 +329,8 @@ async function showSlide(index: number) {
   currentSlide.value = slide
   currentExpression.value = getExpression(slide.channelName)
 
-  loadChannelBg(slide.channelId)
-  loadChannelChar(slide.channelId, slide.charImage)
+  loadChannelBg(slide.slug)
+  loadChannelChar(slide.slug, slide.charImage)
   startTypewriter(slide.description)
 
   setContentStartState(direction)
@@ -364,8 +365,8 @@ onMounted(() => {
     const slide = props.slides[0]
     currentSlide.value = slide
     currentExpression.value = getExpression(slide.channelName)
-    loadChannelBg(slide.channelId)
-    loadChannelChar(slide.channelId, slide.charImage)
+    loadChannelBg(slide.slug)
+    loadChannelChar(slide.slug, slide.charImage)
     startTypewriter(slide.description)
 
     setContentStartState('left')
@@ -395,12 +396,6 @@ onUnmounted(() => {
   }
   if (typewriterInterval) {
     clearInterval(typewriterInterval)
-  }
-})
-
-watch(currentExpression, (expr) => {
-  if (!channelCharUrl.value || channelCharUrl.value.includes('/characters/')) {
-    channelCharUrl.value = getExpressionPath(expr)
   }
 })
 

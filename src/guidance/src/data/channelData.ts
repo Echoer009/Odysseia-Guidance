@@ -1,6 +1,32 @@
 import type { TourSlide } from '../types'
 import { tagsConfig } from './tagsConfig'
 
+const channelSlugMap: Record<string, string> = {
+  '1393179379126767686': 'daily_cards',
+  '1337107956499615744': 'beginner_qa',
+  '1307242450300964986': 'search',
+  '1234431470773338143': 'bot_guide',
+  '1402121015911518379': 'newbie_chat',
+  '1365567153390227508': 'back_to_top',
+  '1431907913055600731': 'preset_limit_break',
+  '1431906908478115891': 'worldbook',
+  '1378738606335594667': 'male_nsfw',
+  '1434215095860203550': 'male_cards',
+  '1378738701919850546': 'female_nsfw',
+  '1374630459828469853': 'female_cards',
+  '1399006747733266452': 'pure_cards',
+  '1337561613821022248': 'abyss',
+  '1378734700318822400': 'ai_talk',
+  '1408471251260932146': 'arena',
+  '1399003980805181521': 'all_orient',
+  '1399004359731314698': 'other_cards',
+  '1376210194887082034': 'tools',
+  '1378743070203576432': 'nsfw_art',
+  '1378742997885390973': 'sfw_art',
+  '1431911482727207002': 'tavern_theme',
+  '1432661851644100679': 'archive',
+}
+
 const channelNameMap: Record<string, string> = {
   '1393179379126767686': '每日新卡',
   '1337107956499615744': '新手答疑',
@@ -35,7 +61,7 @@ const channelDescMap: Record<string, string> = {
   '1307242450300964986':
     '欢迎来到搜索频道！\n\n通过强大的搜索功能，你可以快速找到服务器里任何需要的角色卡、资源或信息，超级方便实用！\n\n搜索机器人的功能真的很强大～不仅可以设置**关键词屏蔽**，还能专门搜索**某个作者**的作品，甚至支持**多种高级筛选条件**！\n\n以后有任何想找的内容，记得先来这里搜索看看，相信它一定能帮到你！',
   '1234431470773338143':
-    '这里介绍角色卡区可使用的Bot功能，一共五大模块：\n\n**📋 楼主自助** — 用 `/自助管理` 管理帖子，支持删帖、锁定、慢速模式等，还有 `/回顶` 快速回到顶部\n**✅ 授权协议** — 发布作品时自动添加授权协议，用 `/内容授权` 自定义管理\n**🔒 匿名反馈** — 用 `/匿名反馈 发送` 匿名发送文字、图片或文件，保护隐私\n**⭐ 关注系统** — 用 `/我的关注` 管理关注的作者、频道和收藏帖子\n**🌟 留言精选** — 用 `/精选` 给优质评论点赞，积攒积分查看统计',
+    '这里介绍角色卡区可使用的Bot功能，一共五大模块：\n\n**楼主自助** — 用 `/自助管理` 管理帖子，支持删帖、锁定、慢速模式等，还有 `/回顶` 快速回到顶部\n**授权协议** — 发布作品时自动添加授权协议，用 `/内容授权` 自定义管理\n**匿名反馈** — 用 `/匿名反馈 发送` 匿名发送文字、图片或文件，保护隐私\n**关注系统** — 用 `/我的关注` 管理关注的作者、频道和收藏帖子\n**留言精选** — 用 `/精选` 给优质评论点赞，积攒积分查看统计',
   '1402121015911518379':
     '这里是服务器里为新人开设的聊天频道～\n\n大家经常在这里分享生活中的趣事、讨论共同的兴趣爱好，氛围特别友好！\n\n快来和大家打个招呼吧，成员们都特别友善，总是很欢迎新朋友的加入～\n\n如果你有什么想聊的话题或者想了解的内容，随时都可以在这里畅所欲言哦！',
   '1365567153390227508':
@@ -147,6 +173,7 @@ export function buildTourQueue(selectedTags: string[]): TourSlide[] {
     const type = channelTypeMap[channelId] || 'channel'
     const footer = channelFooterMap[channelId] || '类脑社区'
 
+    const slug = channelSlugMap[channelId] || channelId
     slides.push({
       channelId,
       channelName: name,
@@ -154,7 +181,8 @@ export function buildTourQueue(selectedTags: string[]): TourSlide[] {
       title: name,
       description: desc,
       footer,
-      thumbnailUrl: `/assets/channels/${channelId}.webp`,
+      slug,
+      thumbnailUrl: `/assets/channels/${slug}.webp`,
     })
   }
 

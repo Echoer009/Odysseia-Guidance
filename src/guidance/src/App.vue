@@ -491,7 +491,7 @@ onMounted(main)
             class="loading-sunflower-img"
             @error="handleSunflowerError"
           />
-          <div class="loading-sunflower-fallback">🌻</div>
+          <div class="loading-sunflower-fallback">☀️</div>
         </div>
       </div>
     </div>
