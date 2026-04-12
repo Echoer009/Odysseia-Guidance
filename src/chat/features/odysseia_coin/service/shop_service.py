@@ -121,7 +121,7 @@ class ShopService:
                         break
 
             # 3. 获取商店公告
-            announcement = self._get_shop_announcement()
+            announcement = await self._get_shop_announcement()
 
             # 4. 获取当前活动
             active_event = event_service.get_active_event()
@@ -140,16 +140,36 @@ class ShopService:
             log.error(f"为用户 {user_id} 准备商店数据时出错: {e}", exc_info=True)
             raise
 
-    def _get_shop_announcement(self) -> Optional[str]:
-        """读取商店公告文件内容"""
+    async def _get_shop_announcement(self) -> Optional[str]:
+        """读取商店公告文件内容，并替换动态变量"""
         try:
             announcement_path = "src/chat/features/odysseia_coin/shop_announcement.md"
-            if (
+            if not (
                 os.path.exists(announcement_path)
                 and os.path.getsize(announcement_path) > 0
             ):
-                with open(announcement_path, "r", encoding="utf-8") as f:
-                    return f.read()
+                return None
+            with open(announcement_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            if "{guidance_url}" in content:
+                from src.chat.utils.database import chat_db_manager
+
+                msg_id = await chat_db_manager.get_global_setting("guidance_message_id")
+                guild_id = os.getenv("GUILD_ID", "0").split(",")[0].strip()
+                channel_id = os.getenv("GUIDANCE_CHANNEL_ID", "0")
+                if msg_id and guild_id != "0" and channel_id != "0":
+                    url = (
+                        f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
+                    )
+                    content = content.replace("{guidance_url}", url)
+                else:
+                    content = content.replace(
+                        "{guidance_url}",
+                        "#（引导链接暂不可用）",
+                    )
+
+            return content
         except Exception as e:
             log.error(f"读取商店公告时出错: {e}")
         return None
