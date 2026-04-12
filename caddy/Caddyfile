@@ -1,10 +1,16 @@
-# Caddy 配置文件- Blackjack Activity HTTPS 代理
+# Caddy 配置文件 - Odysseia Activity HTTPS 代理
 # Caddy 会自动申请和续期 Let's Encrypt SSL 证书
 
+echonion.org {
+    reverse_proxy lobby_web:8002
+}
+
 blackjack.echonion.org {
+    uri strip_prefix /blackjack
     reverse_proxy blackjack_web:8000
 }
 
 guidance.echonion.org {
+    uri strip_prefix /guidance
     reverse_proxy guidance_web:8001
 }

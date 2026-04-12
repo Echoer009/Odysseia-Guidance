@@ -182,7 +182,7 @@ export function buildTourQueue(selectedTags: string[]): TourSlide[] {
       description: desc,
       footer,
       slug,
-      thumbnailUrl: `/assets/channels/${slug}.webp`,
+      thumbnailUrl: `${import.meta.env.BASE_URL}assets/channels/${slug}.webp`,
     })
   }
 

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed} from 'vue';
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 import dialogueConfig from './dialogue.json';
+import { setupChildBridge } from './child-bridge';
 
 // --- Enums and Types ---
 type View = 'loading' | 'betting' | 'game' | 'end-game';
@@ -50,6 +51,8 @@ let assetsPreloaded = false;
 const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
 const queryParams = new URLSearchParams(window.location.search);
 const isEmbedded = queryParams.get('frame_id') != null;
+
+const baseUrl = import.meta.env.BASE_URL;
 
 // --- Computed Properties ---
 const canDouble = computed(() => {
@@ -114,7 +117,7 @@ async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, 
                 headers['Authorization'] = `Bearer ${accessToken}`;
             }
 
-            const response = await fetch(endpoint, {
+            const response = await fetch(baseUrl + endpoint.replace(/^\//, ''), {
                 method,
                 headers,
                 body: body ? JSON.stringify(body) : undefined,
@@ -482,7 +485,7 @@ async function setupDiscordSdk() {
         prompt: "none",
         scope: ["identify", "guilds"],
     });
-    const response = await fetch("/api/token", {
+    const response = await fetch(baseUrl + 'api/token', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
@@ -509,8 +512,8 @@ async function preloadAssets(startPercent: number, endPercent: number) {
     const suits = ['Club', 'Diamond', 'Heart', 'Spade'];
     
     // 优化1: 优先加载关键资源
-    const criticalImages = ['/cards/Background.webp', '/character/normal.webp'];
-    const secondaryImages = ['/character/win.webp', '/character/lose.webp'];
+    const criticalImages = [`${baseUrl}cards/Background.webp`, `${baseUrl}character/normal.webp`];
+    const secondaryImages = [`${baseUrl}character/win.webp`, `${baseUrl}character/lose.webp`];
     
     // 优化2: 将扑克牌分为两批加载，先加载常用牌
     const commonRanks = ['A', 'K', 'Q', 'J', '10'];
@@ -520,8 +523,8 @@ async function preloadAssets(startPercent: number, endPercent: number) {
     const rareCards: string[] = [];
     
     suits.forEach(suit => {
-        commonRanks.forEach(rank => commonCards.push(`/cards/${suit}${rank}.webp`));
-        rareRanks.forEach(rank => rareCards.push(`/cards/${suit}${rank}.webp`));
+        commonRanks.forEach(rank => commonCards.push(`${baseUrl}cards/${suit}${rank}.webp`));
+        rareRanks.forEach(rank => rareCards.push(`${baseUrl}cards/${suit}${rank}.webp`));
     });
     
     // 按优先级排序: 关键图像 -> 常用扑克牌 -> 次要图像 -> 罕见扑克牌
@@ -599,7 +602,15 @@ async function main() {
 
     try {
         progress.value = 5;
-        if (isEmbedded) {
+        const bridgeData = await setupChildBridge()
+        if (bridgeData) {
+            console.log('[Main] Received auth from parent iframe.');
+            accessToken = bridgeData.accessToken;
+            progress.value = 30;
+            await fetchUserInfo();
+            progress.value = 50;
+            await preloadAssets(50, 100);
+        } else if (isEmbedded) {
             console.log('[Main] Embedded environment detected. Setting up Discord SDK...');
             if (!clientId) throw new Error("VITE_DISCORD_CLIENT_ID is not set.");
             await setupDiscordSdk();
@@ -614,7 +625,6 @@ async function main() {
             console.log('[Main] Assets preloaded for embedded.');
         } else {
             console.log('[Main] Browser environment detected.');
-            // In browser mode, we directly call the backend via Vite's proxy.
             await fetchUserInfo();
             progress.value = 50;
             console.log('[Main] Preloading assets for browser...');
@@ -715,7 +725,7 @@ onMounted(() => {
                 </div>
             </div>
             <div id="betting-dealer-section" class="dealer-section">
-                <img :src="`/character/${dealerExpression}.webp`" alt="荷官" class="dealer-image">
+                <img :src="`${baseUrl}character/${dealerExpression}.webp`" alt="荷官" class="dealer-image">
                 <div v-if="dealerDialogue" class="dialogue-box">
                     <p>{{ dealerDialogue }}</p>
                 </div>
@@ -728,14 +738,14 @@ onMounted(() => {
                 <div class="game-area" data-debug-size>
                     <h2>类脑娘 (<span>{{ dealerScore }}</span>)</h2>
                     <TransitionGroup name="card" tag="div" class="hand" data-debug-size>
-                        <img v-for="(card, index) in dealerHand" :key="'dealer-' + index + '-' + card" :src="card === 'Hidden' ? '/cards/Background.webp' : `/cards/${card}.webp`" class="card">
+                        <img v-for="(card, index) in dealerHand" :key="'dealer-' + index + '-' + card" :src="card === 'Hidden' ? `${baseUrl}cards/Background.webp` : `${baseUrl}cards/${card}.webp`" class="card">
                     </TransitionGroup>
                 </div>
                 <div class="game-area" data-debug-size>
                     <h2>玩家 (<span>{{ playerScore }}</span>)</h2>
                     <TransitionGroup name="card" tag="div" class="hand" data-debug-size>
-                        <img v-for="(card, index) in playerHand" :key="'player-' + index + '-' + card" :src="`/cards/${card}.webp`" class="card">
-                        <img v-if="optimisticCard" key="optimistic" src="/cards/Background.webp" class="card">
+                        <img v-for="(card, index) in playerHand" :key="'player-' + index + '-' + card" :src="`${baseUrl}cards/${card}.webp`" class="card">
+                        <img v-if="optimisticCard" key="optimistic" :src="`${baseUrl}cards/Background.webp`" class="card">
                     </TransitionGroup>
                 </div>
                 <div class="messages">{{ messages }}</div>
@@ -746,7 +756,7 @@ onMounted(() => {
                 </div>
             </div>
                 <div id="game-dealer-section" class="dealer-section">
-                <img :src="`/character/${dealerExpression}.webp`" alt="荷官" class="dealer-image">
+                <img :src="`${baseUrl}character/${dealerExpression}.webp`" alt="荷官" class="dealer-image">
                 <div v-if="dealerDialogue" class="dialogue-box">
                     <p>{{ dealerDialogue }}</p>
                 </div>
@@ -760,7 +770,7 @@ onMounted(() => {
                     <span id="end-game-countdown" :style="countdownStyle">{{ countdown }}</span>
                 </div>
                 <div id="end-game-dealer-section" class="dealer-section" data-debug-size>
-                    <img :src="`/character/${dealerExpression}.webp`" alt="荷官" id="end-game-dealer-image" class="dealer-image">
+                    <img :src="`${baseUrl}character/${dealerExpression}.webp`" alt="荷官" id="end-game-dealer-image" class="dealer-image">
                     <div v-if="dealerDialogue" id="end-game-dialogue-box" class="dialogue-box">
                         <p>{{ dealerDialogue }}</p>
                     </div>

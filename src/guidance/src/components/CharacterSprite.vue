@@ -29,7 +29,7 @@ const borderColor = computed(() => getExpressionColor(props.expression))
 const exprLabel = computed(() => getExpressionLabel(props.expression))
 
 function getImgPath(expr: Expression): string {
-  return getExpressionPath(expr) || `/assets/characters/${expr}.webp`
+  return getExpressionPath(expr) || `${import.meta.env.BASE_URL}assets/characters/${expr}.webp`
 }
 
 function startIdle() {

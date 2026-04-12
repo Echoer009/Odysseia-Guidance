@@ -64,6 +64,11 @@ class ChannelActivityView(discord.ui.View):
             return
 
         try:
+            from src.chat.utils.database import chat_db_manager
+
+            await chat_db_manager.set_global_setting(
+                f"user_intent:{interaction.user.id}", "guidance"
+            )
             await interaction.response.launch_activity()
             log.info(f"Launched guidance activity for user {interaction.user.id}")
         except discord.InteractionResponded:

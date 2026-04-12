@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  base: '/guidance/',
   resolve: {
     alias: {
       '@': '/src',
@@ -15,8 +16,9 @@ export default defineConfig({
     hmr: false,
     allowedHosts: ['.trycloudflare.com'],
     proxy: {
-      '/api': {
+      '/guidance/api': {
         target: 'http://127.0.0.1:8001',
+        rewrite: (path) => path.replace(/^\/guidance/, ''),
         changeOrigin: true,
       },
     },

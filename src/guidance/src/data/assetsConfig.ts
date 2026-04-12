@@ -1,5 +1,7 @@
 import type { Expression } from '../types'
 
+const assetBase = import.meta.env.BASE_URL
+
 export interface CloudConfig {
   file: string
   width: number
@@ -23,9 +25,9 @@ export const cloudAssets: CloudConfig[] = [
 ]
 
 export const backgroundAssets = {
-  sky: '/assets/backgrounds/bg_sky.webp',
-  finish: '/assets/backgrounds/bg_finish.webp',
-  sunflower: '/assets/backgrounds/sunflower_loading.webp',
+  sky: `${assetBase}assets/backgrounds/bg_sky.webp`,
+  finish: `${assetBase}assets/backgrounds/bg_finish.webp`,
+  sunflower: `${assetBase}assets/backgrounds/sunflower_loading.webp`,
 }
 
 const DEFAULT_META: ExpressionMeta = {
@@ -35,16 +37,16 @@ const DEFAULT_META: ExpressionMeta = {
 }
 
 export const expressions: Record<string, ExpressionMeta> = {
-  normal:   { path: '/assets/characters/normal.webp',   color: '#CE422B', label: 'NORMAL' },
-  happy:    { path: '/assets/characters/happy.webp',    color: '#FF6B6B', label: 'HAPPY' },
-  wave:     { path: '/assets/characters/wave.webp',     color: '#4FC3F7', label: 'WAVE' },
-  shy:      { path: '/assets/characters/shy.webp',      color: '#F48FB1', label: 'SHY' },
-  thinking: { path: '/assets/characters/thinking.webp', color: '#90CAF9', label: 'THINK' },
-  surprised:{ path: '/assets/characters/surprised.webp', color: '#FFD54F', label: 'O_O' },
-  sad:      { path: '/assets/characters/sad.webp',      color: '#B0BEC5', label: 'SAD' },
-  excited:  { path: '/assets/characters/excited.webp',  color: '#FF7043', label: 'EXCITED' },
-  wink:     { path: '/assets/characters/wink.webp',     color: '#CE93D8', label: 'WINK' },
-  proud:    { path: '/assets/characters/proud.webp',    color: '#AED581', label: 'PROUD' },
+  normal:   { path: `${assetBase}assets/characters/normal.webp`,   color: '#CE422B', label: 'NORMAL' },
+  happy:    { path: `${assetBase}assets/characters/happy.webp`,    color: '#FF6B6B', label: 'HAPPY' },
+  wave:     { path: `${assetBase}assets/characters/wave.webp`,     color: '#4FC3F7', label: 'WAVE' },
+  shy:      { path: `${assetBase}assets/characters/shy.webp`,      color: '#F48FB1', label: 'SHY' },
+  thinking: { path: `${assetBase}assets/characters/thinking.webp`, color: '#90CAF9', label: 'THINK' },
+  surprised:{ path: `${assetBase}assets/characters/surprised.webp`, color: '#FFD54F', label: 'O_O' },
+  sad:      { path: `${assetBase}assets/characters/sad.webp`,      color: '#B0BEC5', label: 'SAD' },
+  excited:  { path: `${assetBase}assets/characters/excited.webp`,  color: '#FF7043', label: 'EXCITED' },
+  wink:     { path: `${assetBase}assets/characters/wink.webp`,     color: '#CE93D8', label: 'WINK' },
+  proud:    { path: `${assetBase}assets/characters/proud.webp`,    color: '#AED581', label: 'PROUD' },
 }
 
 export function getExpressionMeta(expr: Expression): ExpressionMeta {
@@ -64,9 +66,9 @@ export function getExpressionLabel(expr: Expression): string {
 }
 
 export function getChannelBgPath(slug: string): string {
-  return `/assets/channels/${slug}.webp`
+  return `${assetBase}assets/channels/${slug}.webp`
 }
 
 export function getChannelCharPath(slug: string): string {
-  return `/assets/channels/${slug}_char.webp`
+  return `${assetBase}assets/channels/${slug}_char.webp`
 }

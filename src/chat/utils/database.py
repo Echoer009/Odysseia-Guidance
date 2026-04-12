@@ -682,6 +682,11 @@ class ChatDatabaseManager:
         await self._execute(self._db_transaction, query, (key, value), commit=True)
         log.info(f"已更新全局设置: {key} = {value}")
 
+    async def delete_global_setting(self, key: str) -> None:
+        """删除一个全局设置。"""
+        query = "DELETE FROM global_settings WHERE key = ?"
+        await self._execute(self._db_transaction, query, (key,), commit=True)
+
     async def get_global_chat_config(self, guild_id: int) -> Optional[sqlite3.Row]:
         """获取服务器的全局聊天配置。"""
         query = "SELECT * FROM global_chat_config WHERE guild_id = ?"

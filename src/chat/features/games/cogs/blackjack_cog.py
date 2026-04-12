@@ -50,6 +50,11 @@ class BlackjackCog(commands.Cog):
             return
 
         try:
+            from src.chat.utils.database import chat_db_manager
+
+            await chat_db_manager.set_global_setting(
+                f"user_intent:{interaction.user.id}", "blackjack"
+            )
             # 根据最新的 discord.py 文档 (v2.6+)，
             # 使用官方提供的 launch_activity() 方法来直接启动活动。
             # 这是最正确、最稳定的方式。

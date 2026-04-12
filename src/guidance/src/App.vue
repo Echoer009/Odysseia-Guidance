@@ -8,6 +8,7 @@ import { buildChannelUrl } from './utils/parser'
 import { cloudAssets, backgroundAssets, expressions } from './data/assetsConfig'
 import { useSceneFeedback } from './composables/useSceneFeedback'
 import { getKickoutLine, getKickoutMutter } from './data/pokeDialogues'
+import { setupChildBridge } from './child-bridge'
 import CharacterSprite from './components/CharacterSprite.vue'
 import DialogueBox from './components/DialogueBox.vue'
 import CardSelect from './components/CardSelect.vue'
@@ -41,6 +42,8 @@ const queryParams = new URLSearchParams(window.location.search)
 const isEmbedded = queryParams.get('frame_id') != null
 
 let accessToken: string | null = null
+
+const baseUrl = import.meta.env.BASE_URL
 
 const skyBgLoaded = ref(false)
 const finishBgLoaded = ref(false)
@@ -116,7 +119,7 @@ async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, 
         headers['Authorization'] = `Bearer ${accessToken}`
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(baseUrl + endpoint.replace(/^\//, ''), {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -159,7 +162,7 @@ async function setupDiscordSdk() {
   })
   console.log('[SDK] Authorized, exchanging token...')
 
-  const response = await fetch('/api/token', {
+  const response = await fetch(baseUrl + 'api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
@@ -199,13 +202,13 @@ async function fetchUserInfo() {
 async function preloadAssets() {
   const images = Object.values(expressions).map(e => e.path).filter(Boolean)
 
-  images.push('/assets/characters/annoyed.webp')
-  images.push('/assets/characters/angry.webp')
-  images.push('/assets/characters/furious.webp')
-  images.push('/assets/characters/ignore.webp')
+  images.push(`${baseUrl}assets/characters/annoyed.webp`)
+  images.push(`${baseUrl}assets/characters/angry.webp`)
+  images.push(`${baseUrl}assets/characters/furious.webp`)
+  images.push(`${baseUrl}assets/characters/ignore.webp`)
 
   cloudAssets.forEach(c => {
-    images.push(`/assets/clouds/${c.file}`)
+    images.push(`${baseUrl}assets/clouds/${c.file}`)
   })
 
   const loadImg = (src: string) =>
@@ -449,7 +452,11 @@ function animateFinishContent() {
 
   async function main() {
     try {
-      if (isEmbedded) {
+      const bridgeData = await setupChildBridge()
+      if (bridgeData) {
+        accessToken = bridgeData.accessToken
+        if (bridgeData.user?.username) userName.value = bridgeData.user.username
+      } else if (isEmbedded) {
         await setupDiscordSdk()
       }
       await fetchUserInfo()
@@ -516,7 +523,7 @@ onMounted(main)
         }"
       >
         <img
-          :src="'/assets/clouds/' + cloud.file"
+          :src="baseUrl + 'assets/clouds/' + cloud.file"
           alt=""
           @error="handleCloudError"
         />
@@ -553,7 +560,7 @@ onMounted(main)
         }"
       >
         <img
-          :src="'/assets/clouds/' + cloud.file"
+          :src="baseUrl + 'assets/clouds/' + cloud.file"
           alt=""
           @error="handleCloudError"
         />
@@ -623,7 +630,7 @@ onMounted(main)
       ref="kickoutRef"
       class="scene scene-kickout"
     >
-      <CharacterSprite expression="angry" position="right" :scale="1" custom-src="/assets/characters/ignore.webp" />
+      <CharacterSprite expression="angry" position="right" :scale="1" :custom-src="`${baseUrl}assets/characters/ignore.webp`" />
 
       <div class="kickout-content">
         <div class="kickout-stamp">你已被踢出引导</div>

@@ -1,5 +1,7 @@
 import type { TagConfig } from '../types'
 
+const b = import.meta.env.BASE_URL
+
 export const tagsConfig: TagConfig[] = [
   {
     name: '默认',
@@ -15,7 +17,7 @@ export const tagsConfig: TagConfig[] = [
       '1431907913055600731',
       '1431906908478115891',
     ],
-    cover: '/assets/tags/tag_default.webp',
+    cover: `${b}assets/tags/tag_default.webp`,
     comment: '这里就是我们的家啦！核心频道都给你准备好了～',
     commentExpression: 'happy',
   },
@@ -26,7 +28,7 @@ export const tagsConfig: TagConfig[] = [
       '1378738606335594667',
       '1434215095860203550',
     ],
-    cover: '/assets/tags/tag_male.webp',
+    cover: `${b}assets/tags/tag_male.webp`,
     comment: '嘿嘿，这里有你喜欢的～欢迎来到男性向分区！',
     commentExpression: 'excited',
   },
@@ -37,7 +39,7 @@ export const tagsConfig: TagConfig[] = [
       '1378738701919850546',
       '1374630459828469853',
     ],
-    cover: '/assets/tags/tag_female.webp',
+    cover: `${b}assets/tags/tag_female.webp`,
     comment: '好眼光！女性向分区有很多精彩的内容等着你哦～',
     commentExpression: 'happy',
   },
@@ -47,7 +49,7 @@ export const tagsConfig: TagConfig[] = [
     channelIds: [
       '1399006747733266452',
     ],
-    cover: '/assets/tags/tag_pure.webp',
+    cover: `${b}assets/tags/tag_pure.webp`,
     comment: '纯净的世界最美好啦！这里一定不会让你失望的～',
     commentExpression: 'happy',
   },
@@ -57,7 +59,7 @@ export const tagsConfig: TagConfig[] = [
     channelIds: [
       '1337561613821022248',
     ],
-    cover: '/assets/tags/tag_abyss.webp',
+    cover: `${b}assets/tags/tag_abyss.webp`,
     comment: '哦？你对深渊感兴趣...很勇敢嘛，欢迎探索！',
     commentExpression: 'thinking',
   },
@@ -68,7 +70,7 @@ export const tagsConfig: TagConfig[] = [
       '1378734700318822400',
       '1408471251260932146',
     ],
-    cover: '/assets/tags/tag_chat.webp',
+    cover: `${b}assets/tags/tag_chat.webp`,
     comment: '来聊天区一起玩吧！大家都超有趣的～',
     commentExpression: 'wave',
   },
@@ -80,7 +82,7 @@ export const tagsConfig: TagConfig[] = [
       '1399004359731314698',
       '1376210194887082034',
     ],
-    cover: '/assets/tags/tag_other.webp',
+    cover: `${b}assets/tags/tag_other.webp`,
     comment: '探索精神满分！这里有很多有趣的分区等你发现～',
     commentExpression: 'excited',
   },
@@ -91,7 +93,7 @@ export const tagsConfig: TagConfig[] = [
       '1378743070203576432',
       '1378742997885390973',
     ],
-    cover: '/assets/tags/tag_aiart.webp',
+    cover: `${b}assets/tags/tag_aiart.webp`,
     comment: 'AI画师集结！期待你的作品哦～',
     commentExpression: 'excited',
   },
@@ -101,7 +103,7 @@ export const tagsConfig: TagConfig[] = [
     channelIds: [
       '1431911482727207002',
     ],
-    cover: '/assets/tags/tag_beauty.webp',
+    cover: `${b}assets/tags/tag_beauty.webp`,
     comment: '美化大师就是你！期待看到你的作品～',
     commentExpression: 'happy',
   },
@@ -111,7 +113,7 @@ export const tagsConfig: TagConfig[] = [
     channelIds: [
       '1432661851644100679',
     ],
-    cover: '/assets/tags/tag_archive.webp',
+    cover: `${b}assets/tags/tag_archive.webp`,
     comment: '档案馆里有很多珍贵的回忆，慢慢翻阅吧～',
     commentExpression: 'thinking',
   },
