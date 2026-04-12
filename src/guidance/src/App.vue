@@ -106,7 +106,7 @@ function handleSunflowerError(event: Event) {
 }
 
 async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, retries = 2) {
-  if (isEmbedded && !accessToken) {
+  if (!accessToken && isEmbedded) {
     throw new Error('Access Token is not available in embedded mode.')
   }
 
@@ -115,7 +115,7 @@ async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       }
-      if (isEmbedded && accessToken) {
+      if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
       }
 
