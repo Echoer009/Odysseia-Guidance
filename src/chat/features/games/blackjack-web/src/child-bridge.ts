@@ -5,10 +5,8 @@ export interface BridgeData {
 
 export function setupChildBridge(): Promise<BridgeData | null> {
   const isInIframe = window.parent !== window
-  const queryParams = new URLSearchParams(window.location.search)
-  const isEmbedded = queryParams.get('frame_id') != null
 
-  if (!isInIframe || !isEmbedded) {
+  if (!isInIframe) {
     return Promise.resolve(null)
   }
 
