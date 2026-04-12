@@ -66,6 +66,25 @@ services:
     depends_on:
       - db
 
+  lobby_web:
+    image: echoni0n/braingirl:latest
+    container_name: lobby_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    expose:
+      - "8002"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.lobby.app:app --host 0.0.0.0 --port 8002
+    depends_on:
+      - db
+
   guidance_web:
     image: echoni0n/braingirl:latest
     container_name: guidance_web
@@ -101,6 +120,7 @@ services:
     depends_on:
       - blackjack_web
       - guidance_web
+      - lobby_web
 
   #  config_web:
   #    build:
