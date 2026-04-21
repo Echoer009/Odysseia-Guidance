@@ -252,6 +252,8 @@ class ReviewService:
 
         if preview_parts:
             preview_content = "\n".join(preview_parts)
+            if len(preview_content) > 1024:
+                preview_content = preview_content[:1021] + "..."
         else:
             preview_content = "没有提供额外信息。"
 
