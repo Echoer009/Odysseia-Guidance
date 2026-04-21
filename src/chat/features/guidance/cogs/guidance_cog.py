@@ -152,12 +152,17 @@ class GuidanceCog(commands.Cog):
 
         if self._guidance_message_id:
             try:
-                msg = await channel.fetch_message(self._guidance_message_id)
-                if msg and msg.author.id == self.bot.user.id:
-                    log.info(
-                        f"Guidance channel message {self._guidance_message_id} exists, skipping."
-                    )
-                    return
+                old_msg = await self.bot.fetch_message(self._guidance_message_id)
+                if old_msg and old_msg.author.id == self.bot.user.id:
+                    if old_msg.channel.id == GUIDANCE_CHANNEL_ID:
+                        log.info(
+                            f"Guidance channel message {self._guidance_message_id} exists in current channel, skipping."
+                        )
+                        return
+                    else:
+                        log.info(
+                            f"Guidance channel message {self._guidance_message_id} is in a different channel ({old_msg.channel.id}), will resend to {GUIDANCE_CHANNEL_ID}."
+                        )
             except discord.NotFound:
                 log.info("Cached guidance message not found, will resend.")
             except Exception as e:
