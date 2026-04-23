@@ -593,6 +593,55 @@ class ConversationBlockService:
                 return True
             return False
 
+    async def delete_recent_blocks(self, discord_id: str, count: int) -> int:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ConversationBlock.id)
+                .where(ConversationBlock.discord_id == discord_id)
+                .order_by(ConversationBlock.start_time.desc())
+                .limit(count)
+            )
+            ids_to_delete = [row[0] for row in result.fetchall()]
+
+            if not ids_to_delete:
+                return 0
+
+            await session.execute(
+                delete(ConversationBlock).where(
+                    ConversationBlock.id.in_(ids_to_delete)
+                )
+            )
+            await session.commit()
+
+            log.info(
+                f"用户 {discord_id} 删除了 {len(ids_to_delete)} 个最近对话块"
+            )
+            return len(ids_to_delete)
+
+    async def delete_blocks_within_minutes(
+        self, discord_id: str, minutes: int
+    ) -> int:
+        from datetime import timedelta
+
+        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                delete(ConversationBlock)
+                .where(
+                    ConversationBlock.discord_id == discord_id,
+                    ConversationBlock.start_time >= cutoff,
+                )
+                .returning(ConversationBlock.id)
+            )
+            deleted_rows = result.fetchall()
+            await session.commit()
+
+            log.info(
+                f"用户 {discord_id} 删除了 {len(deleted_rows)} 个最近 {minutes} 分钟内的对话块"
+            )
+            return len(deleted_rows)
+
 
 # 创建单例
 conversation_block_service = ConversationBlockService()

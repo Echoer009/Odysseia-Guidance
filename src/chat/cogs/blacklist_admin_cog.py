@@ -7,6 +7,9 @@ import logging
 import os
 from datetime import datetime, timedelta
 from src.chat.utils.database import chat_db_manager
+from src.chat.features.personal_memory.services.conversation_block_service import (
+    conversation_block_service,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +48,32 @@ def is_developer():
     return app_commands.check(predicate)
 
 
+def _parse_delete_param(delete_param: str) -> tuple[str, int]:
+    delete_param = delete_param.strip()
+    if delete_param.lower().endswith("min"):
+        minutes = int(delete_param[:-3].strip())
+        return ("time", minutes)
+    else:
+        count = int(delete_param)
+        return ("count", count)
+
+
 class BlacklistAdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    async def _delete_user_conversation_blocks(
+        self, user_id: int, mode: str, value: int
+    ) -> int:
+        discord_id = str(user_id)
+        if mode == "time":
+            return await conversation_block_service.delete_blocks_within_minutes(
+                discord_id, value
+            )
+        else:
+            return await conversation_block_service.delete_recent_blocks(
+                discord_id, value
+            )
 
     @app_commands.command(name="封禁", description="将用户加入黑名单 (仅开发者可用)")
     @app_commands.describe(
@@ -56,6 +82,7 @@ class BlacklistAdminCog(commands.Cog):
         reason="封禁理由",
         global_ban="是否全局封禁 (默认否)",
         message="发送给用户的私信内容 (可选，可独立使用)",
+        delete_messages="删除用户对话块 (例如: '5' 删除最近5个, '30min' 删除30分钟内的)",
     )
     @app_commands.default_permissions(manage_guild=True)
     @is_developer()
@@ -67,6 +94,7 @@ class BlacklistAdminCog(commands.Cog):
         reason: str = "无",
         global_ban: bool = False,
         message: str | None = None,
+        delete_messages: str | None = None,
     ):
         try:
             target_user_id = int(user_id)
@@ -80,6 +108,20 @@ class BlacklistAdminCog(commands.Cog):
 
         # 先发送响应，避免超时
         await interaction.response.defer(ephemeral=True)
+
+        # 删除用户对话块（如果提供了 delete_messages 参数）
+        deleted_count = 0
+        if delete_messages:
+            try:
+                mode, value = _parse_delete_param(delete_messages)
+                deleted_count = await self._delete_user_conversation_blocks(
+                    target_user_id, mode, value
+                )
+                log.info(
+                    f"已删除用户 {target_user_id} 的 {deleted_count} 个对话块 (模式: {mode}, 值: {value})"
+                )
+            except (ValueError, Exception) as e:
+                log.warning(f"删除用户 {target_user_id} 的对话块时出错: {e}")
 
         # 发送自定义私信（如果提供了 message 参数）
         if message:
@@ -114,6 +156,12 @@ class BlacklistAdminCog(commands.Cog):
                     color=discord.Color.red(),
                 )
                 embed.add_field(name="理由", value=reason, inline=False)
+                if deleted_count > 0:
+                    embed.add_field(
+                        name="已删除对话块",
+                        value=f"已删除您的 {deleted_count} 个对话记忆块。",
+                        inline=False,
+                    )
                 embed.add_field(
                     name="如有疑问",
                     value="如有疑问，请前往以下服务器询问：\nhttps://discord.gg/urzQv5WTHq\nhttps://discord.gg/BZuAMRNuMM",
