@@ -95,6 +95,65 @@ const dragDialogues: Record<number, string[]> = {
   ],
 }
 
+const tutorialDragDialogues: Record<number, string[]> = {
+  0: [
+    '诶！我在教东西呢！不要拽我！',
+    '呀！你捏到我的教案了！',
+    '放、放手！我在上课呢！',
+    '呜哇！我的教案都歪了！',
+    '你在上什么课！deformation课吗！',
+    '不要在上课的时候搞小动作！',
+    '我的教学形象！全毁了！',
+  ],
+  1: [
+    '你又来拽我了！教案都看不清了！',
+    '你是不是想把我拽到教程里去……',
+    '好好好，拽够了没有！看教程！',
+    '你拽我的时候，教程又偷偷翻了一页……',
+    '你要是觉得拽我比看教程有趣，那我很难过',
+    '你是不是把我当成"教程压力球"了',
+    '我的脸已经不是教书的脸了……是被揉过的脸……',
+    '你再拽，我就要变成面团老师了！',
+    '能不能好好听课！别拽老师！',
+  ],
+  2: [
+    '……你还拽？不想学了吗？',
+    '教程第三页！快去看！别拽我了！',
+    '你的手是不是只会拽……',
+    '我认真教你的样子你完全不在乎是吧……',
+    '你是不是对"认真听课"有什么误解',
+    '你拽我的时间够你看完整个教程了',
+    '放手。看教程。就这两件事。能做到吗？',
+    '我觉得你需要一个"不要拽老师"的教程',
+  ],
+  3: [
+    '够了！！我是老师！尊重我！！',
+    '你拽够了没有！！教程在哪你知道吗！！',
+    '你给我去面壁！上我的课还拽我！！',
+    '你是不是从来没有好好上过一堂课！！',
+    '我要给你记过了！！上课拽老师！！',
+    '你看看教程！再看看你拽我的手！哪个更重要！！',
+    '我要开家长会了！！告诉你家长你上课拽老师！！',
+    '再拽一下！我就把教程贴你脸上！！用胶水！！',
+    '你是不是觉得拽老师很好玩！一点都不！！',
+  ],
+  4: [
+    '你给我放手！！！！不学就滚！！',
+    '我教的课你不听！！你拽我干什么！！',
+    '我已经……无语了……你赢了……你走吧……',
+    '你不看教程还拽我！你到底想怎样！！！',
+    '我把你开除了！！理由：上课严重违纪！！',
+    '我的教案都被你拽散了！！！你看你干的好事！！！',
+    '你以为拽老师不用付出代价吗！！！要付出的！！！',
+    '你最后一次机会！！！放手！！！看教程！！！否则！！！',
+    '我从来没有遇到过你这样的学生！！从来没有！！！',
+    '你、给、我、看、教、程！！！！不许再碰我了！！！',
+  ],
+  5: [
+    '滚出去！！！',
+  ],
+}
+
 const skipRageDialogues = [
   '你是不是太急了！慢慢看啦！',
   '你都不看我说的话的吗！！',
@@ -116,10 +175,12 @@ export function getIdleDialogue(count: number): string {
   return idleFollowUp[Math.floor(Math.random() * idleFollowUp.length)]
 }
 
-export function getDragDialogue(phase: number): string {
-  const pool = dragDialogues[phase]
-  if (!pool || pool.length === 0) return '……'
-  return pool[Math.floor(Math.random() * pool.length)]
+export function getDragDialogue(phase: number, scene?: string): string {
+  let pool: Record<number, string[]> = dragDialogues
+  if (scene === 'tutorial') pool = tutorialDragDialogues
+  const p = pool[phase]
+  if (!p || p.length === 0) return '……'
+  return p[Math.floor(Math.random() * p.length)]
 }
 
 export function getSkipRageDialogue(): string {

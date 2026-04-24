@@ -1,5 +1,6 @@
 export { welcomeDialogues } from './welcome'
 export { selectionHint } from './selection'
 export { tourStartDialogue, tourEndDialogue, channelExpressionMap } from './tour'
+export { tutorialStartDialogue, tutorialEndDialogue } from './tutorial'
 export { finishDialogues } from './finish'
 export { loadingFlavorTexts } from './loading'

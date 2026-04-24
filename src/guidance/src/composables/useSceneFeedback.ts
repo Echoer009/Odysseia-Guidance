@@ -31,7 +31,7 @@ export function useSceneFeedback(
   const reactionBubbleVisible = ref(false)
 
   function showReactionDialogue(text: string, expression: Expression, shakeInt: number, _shakeDur: number) {
-    const hasDialogueBox = currentScene.value === 'welcome' || currentScene.value === 'selection' || currentScene.value === 'tour' || currentScene.value === 'finish'
+    const hasDialogueBox = currentScene.value === 'welcome' || currentScene.value === 'selection' || currentScene.value === 'tour' || currentScene.value === 'tutorial' || currentScene.value === 'finish'
 
     if (!savedDialogueState) {
       savedDialogueState = {
@@ -51,7 +51,7 @@ export function useSceneFeedback(
         const dialogueBox = getDialogueRef()
         if (dialogueBox) dialogueBox.showFeedback(text)
       }
-      if (currentScene.value === 'tour' || currentScene.value === 'finish') {
+      if (currentScene.value === 'tour' || currentScene.value === 'finish' || currentScene.value === 'tutorial') {
         nextTick(applyFeedback)
       } else {
         applyFeedback()
@@ -106,8 +106,8 @@ export function useSceneFeedback(
     const result = doPoke()
     if (!result) return
     const dialogue = type === 'poke'
-      ? getPokeDialogue((currentScene.value === 'tour' ? 'tour' : currentScene.value) as any, result.phase)
-      : getDragDialogue(result.phase)
+      ? getPokeDialogue((currentScene.value) as any, result.phase)
+      : getDragDialogue(result.phase, currentScene.value)
     showReactionDialogue(dialogue, result.expression, result.shakeIntensity, result.shakeDuration)
     if (result.isKicked) pendingKickout = true
   }
@@ -120,6 +120,7 @@ export function useSceneFeedback(
     if (feedbackTimer) { clearTimeout(feedbackTimer); feedbackTimer = null; savedDialogueState = null }
     if (reactionBubbleTimer) { clearTimeout(reactionBubbleTimer); reactionBubbleTimer = null }
     reactionBubbleVisible.value = false
+    isShowingFeedback.value = false
   }
 
   watch(currentScene, cleanup)
@@ -130,6 +131,7 @@ export function useSceneFeedback(
     reactionBubbleText,
     reactionBubbleVisible,
     handleInteraction,
+    showReactionDialogue,
     triggerKickOut,
   }
 }

@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
-import type { TourSlide, Expression } from '../types'
-import { channelExpressionMap } from '../data/dialogues'
-import { getChannelBgPath, getChannelCharPath, getExpressionPath } from '../data/assetsConfig'
+import type { TutorialSlide, Expression } from '../types'
 import { parseDescription, tokenCharCount, renderTokens } from '../utils/parser'
 import ProgressBar from './ProgressBar.vue'
 import CharacterSprite from './CharacterSprite.vue'
 import DialogueBox from './DialogueBox.vue'
 
 const props = defineProps<{
-  slides: TourSlide[]
+  slides: TutorialSlide[]
   feedbackExpression?: Expression
   isShowingFeedback?: boolean
 }>()
@@ -19,6 +17,8 @@ const emit = defineEmits<{
   finish: []
   poke: []
   dragStart: []
+  skipAttempt: [attempt: number]
+  skipRequest: []
 }>()
 
 const currentIndex = ref(0)
@@ -28,28 +28,45 @@ const descRef = ref<HTMLElement | null>(null)
 const hashRef = ref<HTMLElement | null>(null)
 const footerRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
-const bgRef = ref<HTMLElement | null>(null)
 const sceneRef = ref<HTMLElement | null>(null)
-const currentSlide = ref<TourSlide | null>(null)
+const currentSlide = ref<TutorialSlide | null>(null)
 const currentExpression = ref<Expression>('normal')
-const channelBgUrl = ref('')
-const channelBgLoaded = ref(false)
-const channelCharUrl = ref('')
 const swipeHintOpacity = ref(1)
 const revealedChars = ref(0)
-const tourDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
+const tutorialDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
+const skipAttempt = ref(0)
+const skipBtnRef = ref<HTMLElement | null>(null)
 let typewriterInterval: ReturnType<typeof setInterval> | null = null
+
+function onSkipAttempt() {
+  if (skipAttempt.value < 3) {
+    emit('skipAttempt', skipAttempt.value)
+
+    if (skipBtnRef.value) {
+      gsap.fromTo(skipBtnRef.value,
+        { x: 0 },
+        { x: 8, duration: 0.08, ease: 'none', yoyo: true, repeat: 5 },
+      )
+    }
+
+    skipAttempt.value++
+  } else {
+    emit('skipRequest')
+  }
+}
+
+const skipBtnLabel = computed(() => {
+  if (skipAttempt.value === 0) return '跳过教程'
+  if (skipAttempt.value === 1) return '真的要跳过吗？'
+  if (skipAttempt.value === 2) return '最后一次机会……'
+  return '跳过教程'
+})
 
 const displayExpression = computed<Expression>(() => {
   if (props.isShowingFeedback && props.feedbackExpression) {
     return props.feedbackExpression
   }
   return currentExpression.value
-})
-
-const displayCustomSrc = computed(() => {
-  if (props.isShowingFeedback) return undefined
-  return channelCharUrl.value || undefined
 })
 
 const currentTokens = computed(() => parseDescription(currentSlide.value?.description || ''))
@@ -116,45 +133,6 @@ function hideSwipeHint() {
   }
 }
 
-function getExpression(channelName: string): Expression {
-  const mapped = channelExpressionMap[channelName]
-  if (mapped) return mapped as Expression
-  return 'normal'
-}
-
-function loadChannelBg(slug: string) {
-  const url = getChannelBgPath(slug)
-  channelBgLoaded.value = false
-  const img = new Image()
-  img.onload = () => {
-    channelBgUrl.value = url
-    channelBgLoaded.value = true
-    animateBgIn()
-  }
-  img.onerror = () => {
-    channelBgLoaded.value = false
-    channelBgUrl.value = ''
-  }
-  img.src = url
-}
-
-function loadChannelChar(slug: string, charImage?: string) {
-  if (charImage) {
-    channelCharUrl.value = charImage
-    return
-  }
-  const url = getChannelCharPath(slug)
-  channelCharUrl.value = url
-  const img = new Image()
-  img.onload = () => {
-    channelCharUrl.value = url
-  }
-  img.onerror = () => {
-    channelCharUrl.value = getExpressionPath(currentExpression.value)
-  }
-  img.src = url
-}
-
 function startTypewriter(_text: string) {
   if (typewriterInterval) {
     clearInterval(typewriterInterval)
@@ -197,7 +175,7 @@ function animateContentIn() {
     )
   }
 
-  const accent = contentRef.value?.querySelector('.tour-accent-line') as HTMLElement
+  const accent = contentRef.value?.querySelector('.tutorial-accent-line') as HTMLElement
   if (accent) {
     tl.to(accent,
       { scaleX: 1, duration: 0.4, ease: 'power2.out' },
@@ -220,17 +198,8 @@ function animateContentIn() {
   }
 }
 
-function animateBgIn() {
-  if (!bgRef.value) return
-  gsap.fromTo(
-    bgRef.value,
-    { opacity: 0, scale: 1.05 },
-    { opacity: 1, scale: 1, duration: 0.8, ease: 'power2.out' },
-  )
-}
-
 function animateContentOut(direction: 'left' | 'right'): Promise<void> {
-  const elements = [hashRef.value, titleRef.value, contentRef.value?.querySelector('.tour-accent-line'), descRef.value, footerRef.value].filter(Boolean) as HTMLElement[]
+  const elements = [hashRef.value, titleRef.value, contentRef.value?.querySelector('.tutorial-accent-line'), descRef.value, footerRef.value].filter(Boolean) as HTMLElement[]
   if (elements.length === 0) return Promise.resolve()
 
   return new Promise((resolve) => {
@@ -248,7 +217,7 @@ function animateContentOut(direction: 'left' | 'right'): Promise<void> {
 function setContentStartState(direction: 'left' | 'right') {
   const xVal = direction === 'left' ? 100 : -100
   const elements = [hashRef.value, titleRef.value, descRef.value, footerRef.value].filter(Boolean) as HTMLElement[]
-  const accent = contentRef.value?.querySelector('.tour-accent-line') as HTMLElement
+  const accent = contentRef.value?.querySelector('.tutorial-accent-line') as HTMLElement
   if (accent) elements.push(accent)
 
   gsap.set(elements, { x: xVal, opacity: 0 })
@@ -270,10 +239,8 @@ async function showSlide(index: number) {
   currentIndex.value = index
   const slide = props.slides[index]
   currentSlide.value = slide
-  currentExpression.value = getExpression(slide.channelName)
+  currentExpression.value = slide.expression
 
-  loadChannelBg(slide.slug)
-  loadChannelChar(slide.slug, slide.charImage)
   startTypewriter(slide.description)
 
   setContentStartState(direction)
@@ -307,9 +274,7 @@ onMounted(() => {
   if (props.slides.length > 0) {
     const slide = props.slides[0]
     currentSlide.value = slide
-    currentExpression.value = getExpression(slide.channelName)
-    loadChannelBg(slide.slug)
-    loadChannelChar(slide.slug, slide.charImage)
+    currentExpression.value = slide.expression
     startTypewriter(slide.description)
 
     setContentStartState('left')
@@ -342,22 +307,16 @@ onUnmounted(() => {
   }
 })
 
-defineExpose({ dialogueBoxRef: tourDialogueRef })
+defineExpose({ dialogueBoxRef: tutorialDialogueRef })
 </script>
 
 <template>
-  <div ref="sceneRef" class="tour-scene" style="user-select: none; -webkit-user-select: none; cursor: grab;">
-    <div
-      ref="bgRef"
-      class="tour-bg-layer"
-      :style="channelBgLoaded ? { backgroundImage: `url(${channelBgUrl})` } : { display: 'none' }"
-    ></div>
-    <div class="tour-bg-fallback"></div>
+  <div ref="sceneRef" class="tutorial-scene" style="user-select: none; -webkit-user-select: none; cursor: grab;">
+    <div class="tutorial-bg-fallback"></div>
 
     <CharacterSprite
       v-if="currentSlide"
       :expression="displayExpression"
-      :custom-src="displayCustomSrc"
       position="right"
       :scale="1"
       interactive
@@ -367,34 +326,36 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
 
     <ProgressBar :current="currentIndex + 1" :total="slides.length" />
 
-    <div v-if="currentSlide" ref="contentRef" class="tour-content">
-      <div class="tour-header">
-        <span ref="hashRef" class="tour-hash">#</span>
-        <h2 ref="titleRef" class="tour-channel-name">{{ currentSlide.channelName }}</h2>
+    <div v-if="currentSlide" ref="contentRef" class="tutorial-content">
+      <div class="tutorial-header">
+        <span ref="hashRef" class="tutorial-hash">{{ currentSlide.icon || '#' }}</span>
+        <h2 ref="titleRef" class="tutorial-title">{{ currentSlide.title }}</h2>
       </div>
-      <div class="tour-accent-line"></div>
-      <div ref="descRef" class="tour-description" v-html="renderedDesc" @touchstart.stop @touchend.stop @mousedown.stop @mouseup.stop></div>
-      <span ref="footerRef" class="tour-footer">{{ currentSlide.footer }}</span>
+      <div class="tutorial-accent-line"></div>
+      <div ref="descRef" class="tutorial-description" v-html="renderedDesc" @touchstart.stop @touchend.stop @mousedown.stop @mouseup.stop></div>
+      <span ref="footerRef" class="tutorial-footer">{{ currentSlide.tip || '' }}</span>
     </div>
 
     <DialogueBox
       v-if="isShowingFeedback"
-      ref="tourDialogueRef"
+      ref="tutorialDialogueRef"
       text=""
       :expression="feedbackExpression || 'normal'"
-      class="tour-feedback-dialogue"
+      class="tutorial-feedback-dialogue"
     />
 
-    <div class="tour-bottom">
+    <div class="tutorial-bottom">
       <span class="swipe-hint" :style="{ opacity: swipeHintOpacity }">
         ← 左右滑动切换 · 到最后一张继续滑动完成 →
       </span>
     </div>
+
+    <button ref="skipBtnRef" class="tutorial-skip-btn" @click.stop="onSkipAttempt">{{ skipBtnLabel }}</button>
   </div>
 </template>
 
 <style scoped>
-.tour-scene {
+.tutorial-scene {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -403,23 +364,14 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   overflow: hidden;
 }
 
-.tour-bg-layer {
+.tutorial-bg-fallback {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background: linear-gradient(180deg, #FFF8F0, #FFEDE0);
   z-index: 0;
 }
 
-.tour-bg-fallback {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, #FFFBF5, #FFF5EB);
-  z-index: 0;
-}
-
-.tour-content {
+.tutorial-content {
   position: relative;
   z-index: 5;
   flex: 1;
@@ -432,14 +384,14 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   min-height: 0;
 }
 
-.tour-header {
+.tutorial-header {
   display: flex;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 8px;
 }
 
-.tour-hash {
+.tutorial-hash {
   font-size: 36px;
   font-weight: 900;
   color: var(--accent-gold);
@@ -449,7 +401,7 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   backface-visibility: hidden;
 }
 
-.tour-channel-name {
+.tutorial-title {
   font-size: 42px;
   font-weight: 900;
   color: var(--text-primary);
@@ -460,7 +412,7 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   backface-visibility: hidden;
 }
 
-.tour-accent-line {
+.tutorial-accent-line {
   width: 80px;
   height: 3px;
   background: var(--accent-gold);
@@ -470,7 +422,7 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   will-change: transform;
 }
 
-.tour-description {
+.tutorial-description {
   font-size: 18px;
   line-height: 1.8;
   color: var(--text-primary);
@@ -484,26 +436,26 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   backface-visibility: hidden;
 }
 
-.tour-description::-webkit-scrollbar {
+.tutorial-description::-webkit-scrollbar {
   display: none;
 }
 
-.tour-description :deep(.desc-bold) {
+.tutorial-description :deep(.desc-bold) {
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.tour-description :deep(.desc-accent) {
+.tutorial-description :deep(.desc-accent) {
   color: var(--accent-gold);
   font-weight: 600;
 }
 
-.tour-description :deep(.desc-gap) {
+.tutorial-description :deep(.desc-gap) {
   display: block;
   height: 12px;
 }
 
-.tour-description :deep(.desc-separator) {
+.tutorial-description :deep(.desc-separator) {
   display: block;
   height: 1px;
   background: linear-gradient(90deg, var(--accent-gold), transparent);
@@ -511,7 +463,7 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   opacity: 0.4;
 }
 
-.tour-description :deep(.desc-warning) {
+.tutorial-description :deep(.desc-warning) {
   display: inline;
   background: rgba(206, 66, 43, 0.08);
   color: var(--accent-gold);
@@ -533,7 +485,7 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   51%, 100% { opacity: 0; }
 }
 
-.tour-footer {
+.tutorial-footer {
   font-size: 12px;
   color: var(--text-muted);
   letter-spacing: 0.5px;
@@ -543,12 +495,35 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   backface-visibility: hidden;
 }
 
-.tour-bottom {
+.tutorial-bottom {
   display: flex;
   justify-content: center;
   z-index: 5;
   padding-bottom: 10px;
   pointer-events: none;
+}
+
+.tutorial-skip-btn {
+  position: absolute;
+  top: 34px;
+  right: 60px;
+  z-index: 15;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  border-radius: 0;
+  white-space: nowrap;
+}
+
+.tutorial-skip-btn:hover {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
 }
 
 .swipe-hint {
@@ -558,37 +533,44 @@ defineExpose({ dialogueBoxRef: tourDialogueRef })
   transition: opacity 0.3s;
 }
 
-.tour-feedback-dialogue {
+.tutorial-feedback-dialogue {
   pointer-events: none;
 }
 
 @media (max-width: 768px) {
-  .tour-scene {
+  .tutorial-scene {
     padding: 50px 20px 20px;
   }
 
-  .tour-content {
+  .tutorial-content {
     padding-left: 0;
   }
 
-  .tour-hash {
+  .tutorial-hash {
     font-size: 24px;
   }
 
-  .tour-channel-name {
+  .tutorial-title {
     font-size: 28px;
   }
 
-  .tour-description {
+  .tutorial-description {
     font-size: 15px;
   }
 
-  .tour-bottom {
+  .tutorial-bottom {
     position: absolute;
     bottom: 170px;
     left: 0;
     right: 0;
     padding-bottom: 0;
+  }
+
+  .tutorial-skip-btn {
+    top: 52px;
+    right: 16px;
+    font-size: 11px;
+    padding: 4px 10px;
   }
 }
 </style>

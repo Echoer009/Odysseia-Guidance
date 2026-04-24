@@ -2,9 +2,10 @@
 import { ref, watch, onMounted } from 'vue'
 import gsap from 'gsap'
 import type { SceneName, Expression, TourSlide } from './types'
-import { welcomeDialogues, selectionHint, tourStartDialogue } from './data/dialogues'
+import { welcomeDialogues, selectionHint, tourStartDialogue, tutorialStartDialogue } from './data/dialogues'
 import { buildTourQueue } from './data/channelData'
-import { buildChannelUrl } from './utils/parser'
+import { tutorialSlides } from './data/tutorialConfig'
+import { parseDescription, renderTokens } from './utils/parser'
 import { cloudAssets, backgroundAssets, expressions } from './data/assetsConfig'
 import { useSceneFeedback } from './composables/useSceneFeedback'
 import { getKickoutLine, getKickoutMutter } from './data/pokeDialogues'
@@ -13,6 +14,7 @@ import CharacterSprite from './components/CharacterSprite.vue'
 import DialogueBox from './components/DialogueBox.vue'
 import CardSelect from './components/CardSelect.vue'
 import ChannelTour from './components/ChannelTour.vue'
+import TutorialTour from './components/TutorialTour.vue'
 
 const currentScene = ref<SceneName>('loading')
 const userName = ref('')
@@ -27,16 +29,16 @@ const selectedTags = ref<string[]>([])
 const channelsQueue = ref<TourSlide[]>([])
 const charOrigin = ref<{ x: number; y: number } | null>(null)
 
-const finishChannels = ref<{ name: string; url: string }[]>([])
+const finishChannels = ref<{ name: string; channelId: string; description: string }[]>([])
+const expandedChannelId = ref<string | null>(null)
 const petalContainer = ref<HTMLElement | null>(null)
 const awakeOverlayRef = ref<HTMLElement | null>(null)
 const welcomeDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 const cardSelectRef = ref<InstanceType<typeof CardSelect> | null>(null)
 const selectionDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
 const channelTourRef = ref<InstanceType<typeof ChannelTour> | null>(null)
+const tutorialTourRef = ref<InstanceType<typeof TutorialTour> | null>(null)
 const finishDialogueRef = ref<InstanceType<typeof DialogueBox> | null>(null)
-
-const GUILD_ID = '1234431460159160360'
 
 const queryParams = new URLSearchParams(window.location.search)
 const isEmbedded = queryParams.get('frame_id') != null
@@ -53,6 +55,7 @@ function getDialogueRef() {
   if (currentScene.value === 'welcome') return welcomeDialogueRef.value
   if (currentScene.value === 'selection') return selectionDialogueRef.value
   if (currentScene.value === 'tour') return channelTourRef.value?.dialogueBoxRef ?? null
+  if (currentScene.value === 'tutorial') return tutorialTourRef.value?.dialogueBoxRef ?? null
   if (currentScene.value === 'finish') return finishDialogueRef.value
   return null
 }
@@ -62,6 +65,7 @@ const {
   reactionBubbleText,
   reactionBubbleVisible,
   handleInteraction,
+  showReactionDialogue,
 } = useSceneFeedback(
   currentScene,
   currentExpression,
@@ -96,13 +100,6 @@ async function initBackgrounds() {
 function handleCloudError(event: Event) {
   const el = event.target as HTMLElement
   if (el.parentElement) el.parentElement.style.display = 'none'
-}
-
-function handleSunflowerError(event: Event) {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-  const fallback = img.nextElementSibling as HTMLElement
-  if (fallback) fallback.style.display = 'flex'
 }
 
 async function apiCall(endpoint: string, method: 'GET' | 'POST', body?: object, retries = 2) {
@@ -357,9 +354,30 @@ function onTagConfirm(tags: string[]) {
 }
 
 function onTourFinish() {
+  transitionTo('tutorial')
+  currentDialogue.value = tutorialStartDialogue.text
+  currentExpression.value = tutorialStartDialogue.expression
+  currentImage.value = tutorialStartDialogue.image
+}
+
+const SKIP_BLOCK_MESSAGES: { text: string; expression: Expression }[] = [
+  { text: '诶！不要跳过教程啦！很重要的！', expression: 'surprised' },
+  { text: '你真的要跳过吗……？我花了好久准备的……', expression: 'sad' },
+  { text: '好吧好吧……随你便吧……哼！', expression: 'annoyed' },
+]
+
+function onSkipAttempt(attempt: number) {
+  const block = SKIP_BLOCK_MESSAGES[attempt]
+  if (block) {
+    showReactionDialogue(block.text, block.expression, 0, 0)
+  }
+}
+
+function onTutorialFinish() {
   finishChannels.value = channelsQueue.value.map(s => ({
     name: s.channelName,
-    url: buildChannelUrl(GUILD_ID, s.channelId),
+    channelId: s.channelId,
+    description: s.description,
   }))
 
   currentExpression.value = 'happy'
@@ -376,6 +394,14 @@ function onTourFinish() {
   setTimeout(() => {
     animateFinishContent()
   }, 200)
+}
+
+function toggleChannelExpand(ch: { channelId: string }) {
+  if (expandedChannelId.value === ch.channelId) {
+    expandedChannelId.value = null
+  } else {
+    expandedChannelId.value = ch.channelId
+  }
 }
 
 function createPetals() {
@@ -490,17 +516,9 @@ onMounted(main)
       v-if="currentScene === 'loading'"
       class="scene scene-loading"
     >
-      <div class="loading-content">
-        <div class="loading-sunflower">
-          <img
-            :src="backgroundAssets.sunflower"
-            alt=""
-            class="loading-sunflower-img"
-            @error="handleSunflowerError"
-          />
-          <div class="loading-sunflower-fallback">☀️</div>
+        <div class="loading-content">
+          <div class="loading-sunflower">☀️</div>
         </div>
-      </div>
     </div>
 
     <div
@@ -585,6 +603,10 @@ onMounted(main)
       <ChannelTour ref="channelTourRef" :slides="channelsQueue" :feedback-expression="currentExpression" :is-showing-feedback="isShowingFeedback" @finish="onTourFinish" @poke="onPoke" @drag-start="onDragStart" />
     </div>
 
+    <div v-else-if="currentScene === 'tutorial'" class="scene">
+      <TutorialTour ref="tutorialTourRef" :slides="tutorialSlides" :feedback-expression="currentExpression" :is-showing-feedback="isShowingFeedback" @finish="onTutorialFinish" @poke="onPoke" @drag-start="onDragStart" @skip-attempt="onSkipAttempt" @skip-request="onTutorialFinish" />
+    </div>
+
     <div
       v-else-if="currentScene === 'finish'"
       class="scene scene-transparent"
@@ -609,18 +631,21 @@ onMounted(main)
         <p class="finish-subtitle">以下是为你推荐的频道</p>
 
         <div class="finish-channels">
-          <a
+          <div
             v-for="ch in finishChannels"
-            :key="ch.url"
-            :href="ch.url"
+            :key="ch.channelId"
+            :data-channel-id="ch.channelId"
             class="finish-channel-item"
-            target="_blank"
-            rel="noopener"
+            :class="{ expanded: expandedChannelId === ch.channelId }"
+            @click="toggleChannelExpand(ch)"
           >
-            <span class="finish-channel-hash">#</span>
-            <span class="finish-channel-name">{{ ch.name }}</span>
-            <span class="finish-channel-arrow">→</span>
-          </a>
+            <div class="finish-channel-header">
+              <span class="finish-channel-hash">#</span>
+              <span class="finish-channel-name">{{ ch.name }}</span>
+              <span class="finish-channel-arrow" :class="{ rotated: expandedChannelId === ch.channelId }">▾</span>
+            </div>
+            <div class="finish-channel-desc" :class="{ open: expandedChannelId === ch.channelId }" v-html="renderTokens(parseDescription(ch.description), Infinity)" />
+          </div>
         </div>
       </div>
     </div>
@@ -708,21 +733,7 @@ onMounted(main)
 .loading-sunflower {
   width: 96px;
   height: 96px;
-}
-
-.loading-sunflower-img {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
-  animation: self-spin 8s linear infinite;
-  transform-origin: center center;
-  filter: drop-shadow(0 0 12px rgba(206, 66, 43, 0.3));
-}
-
-.loading-sunflower-fallback {
-  display: none;
-  width: 96px;
-  height: 96px;
+  display: flex;
   align-items: center;
   justify-content: center;
   font-size: 72px;
@@ -823,22 +834,35 @@ onMounted(main)
 
 .finish-channel-item {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+  flex-direction: column;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card);
-  text-decoration: none;
   color: var(--text-primary);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
 .finish-channel-item:hover {
   border-color: var(--accent-gold);
-  transform: translateX(6px);
   box-shadow: 0 4px 16px rgba(206, 66, 43, 0.12);
+}
+
+.finish-channel-item.expanded {
+  border-color: var(--accent-gold);
+}
+
+.finish-channel-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.finish-channel-item:hover .finish-channel-header {
+  transform: translateX(4px);
+  transition: transform 0.2s ease;
 }
 
 .finish-channel-hash {
@@ -858,17 +882,42 @@ onMounted(main)
   flex: 1;
   font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .finish-channel-arrow {
   color: var(--accent-gold);
-  font-weight: 400;
-  font-size: 16px;
-  transition: transform 0.15s ease;
+  font-size: 14px;
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
 }
 
-.finish-channel-item:hover .finish-channel-arrow {
-  transform: translateX(4px);
+.finish-channel-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.finish-channel-desc {
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+.finish-channel-desc.open {
+  max-height: 500px;
+  padding: 0 18px 16px 18px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.finish-channel-desc.open::-webkit-scrollbar {
+  display: none;
 }
 
 @media (max-width: 768px) {
@@ -888,6 +937,10 @@ onMounted(main)
 
   .finish-channel-name {
     font-size: 14px;
+  }
+
+  .finish-channel-desc.open {
+    max-height: 400px;
   }
 }
 

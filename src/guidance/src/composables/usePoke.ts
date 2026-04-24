@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Expression } from '../types'
 
 export type PokePhase = 0 | 1 | 2 | 3 | 4 | 5
-export type PokeScene = 'welcome' | 'selection' | 'tour' | 'finish'
+export type PokeScene = 'welcome' | 'selection' | 'tour' | 'tutorial' | 'finish'
 
 const pokeCount = ref(0)
 const isPoking = ref(false)

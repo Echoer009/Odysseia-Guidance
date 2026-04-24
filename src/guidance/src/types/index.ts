@@ -44,7 +44,16 @@ export interface DialogueEntry {
 }
 
 export type Expression = 'normal' | 'happy' | 'wave' | 'shy' | 'thinking' | 'surprised' | 'sad' | 'excited' | 'wink' | 'proud' | 'annoyed' | 'angry' | 'furious'
-export type SceneName = 'loading' | 'welcome' | 'selection' | 'tour' | 'finish' | 'kickout'
+export type SceneName = 'loading' | 'welcome' | 'selection' | 'tour' | 'tutorial' | 'finish' | 'kickout'
+
+export interface TutorialSlide {
+  id: string
+  title: string
+  description: string
+  tip?: string
+  expression: Expression
+  icon?: string
+}
 
 export interface GuidanceState {
   currentScene: SceneName
