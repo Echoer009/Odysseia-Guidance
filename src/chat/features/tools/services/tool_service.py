@@ -79,18 +79,23 @@ def _convert_dict_to_pydantic(
                         log.warning(
                             f"转换参数 '{param_name}' 到 {param_annotation.__name__} 失败: {e}"
                         )
-            # 情况2: 参数不存在于 tool_args 中，但函数签名要求该参数
-            # 如果 Pydantic 模型的所有字段都有默认值，则创建默认实例
+            # 情况2: 参数不存在于 tool_args 中
+            # 尝试从 tool_args 中收集属于该模型的字段来构造实例
             elif param.default is inspect.Parameter.empty:
-                # 参数没有默认值，需要创建 Pydantic 模型实例
+                model_fields = set(param_annotation.model_fields.keys())
+                matched_kwargs = {
+                    k: v for k, v in tool_args.items() if k in model_fields
+                }
                 try:
-                    tool_args[param_name] = param_annotation()
+                    tool_args[param_name] = param_annotation(**matched_kwargs)
+                    for k in matched_kwargs:
+                        tool_args.pop(k, None)
                     log.debug(
-                        f"自动创建默认实例: {param_name} -> {param_annotation.__name__}()"
+                        f"自动收集字段构造: {param_name} -> {param_annotation.__name__}({matched_kwargs})"
                     )
                 except Exception as e:
                     log.warning(
-                        f"创建参数 '{param_name}' 的默认 {param_annotation.__name__} 实例失败: {e}"
+                        f"构造参数 '{param_name}' 的 {param_annotation.__name__} 实例失败: {e}"
                     )
 
     return tool_args
