@@ -265,7 +265,7 @@ class ForumVectorDBService:
                 sql_query = text(
                     sql_query.text
                     + """
-                    ORDER BY score DESC
+                    ORDER BY score DESC, ft.created_at DESC
                     LIMIT :limit
                     """
                 )
@@ -460,7 +460,7 @@ class ForumVectorDBService:
                 sql_query = text(
                     sql_query.text
                     + """
-                    ORDER BY final_score DESC
+                    ORDER BY final_score DESC, ft.created_at DESC
                     LIMIT :final_k
                     """
                 )
