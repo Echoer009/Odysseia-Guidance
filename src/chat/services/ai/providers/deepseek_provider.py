@@ -40,6 +40,8 @@ class DeepSeekProvider(BaseProvider):
     supported_models = [
         "deepseek-chat",
         "deepseek-reasoner",
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
     ]
     supports_vision = False
     supports_tools = True  # deepseek-chat 支持工具调用

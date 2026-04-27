@@ -37,7 +37,20 @@ services:
         condition: service_healthy
       # ollama 只在本地向量模式下需要
       # 如果 VECTOR_MODE=none 或 VECTOR_MODE=api，可以手动注释掉 ollama 依赖
-      ollama:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: odysseia_searxng
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - ./data/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    networks:
+      - bot_network
+
+  ollama:
         condition: service_started
         required: false
 

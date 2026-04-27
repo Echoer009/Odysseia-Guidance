@@ -174,6 +174,8 @@ def get_provider_configs() -> Dict[str, ProviderConfig]:
             models=[
                 "deepseek-chat",
                 "deepseek-reasoner",
+                "deepseek-v4-flash",
+                "deepseek-v4-pro",
             ],
             default_model="deepseek-chat",
         )

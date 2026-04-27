@@ -167,6 +167,24 @@ RAG_N_RESULTS_DEFAULT = 8  # 普通聊天的默认值
 RAG_N_RESULTS_THREAD_COMMENTOR = 10  # 暖贴功能的特定值
 FORUM_SEARCH_DEFAULT_LIMIT = 5  # 论坛搜索工具返回结果的默认数量
 
+# --- 联网搜索配置 ---
+RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "False").lower() == "true"
+_searxng_url = (
+    os.getenv("SEARXNG_URL", "http://searxng:8080")
+    if RUNNING_IN_DOCKER
+    else os.getenv("SEARXNG_URL", "http://localhost:8888")
+)
+WEB_SEARCH_CONFIG = {
+    "SEARXNG_URL": _searxng_url,
+    "MAX_RESULTS": int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5")),
+    "TIMEOUT": float(os.getenv("WEB_SEARCH_TIMEOUT", "10")),
+    "SCRAPE_TIMEOUT": float(os.getenv("WEB_SCRAPE_TIMEOUT", "15")),
+    "SCRAPE_MAX_LENGTH": int(os.getenv("WEB_SCRAPE_MAX_LENGTH", "5000")),
+    "RATE_LIMIT_SEARCH": int(os.getenv("WEB_SEARCH_RATE_LIMIT_SEARCH", "3")),
+    "RATE_LIMIT_SCRAPE": int(os.getenv("WEB_SEARCH_RATE_LIMIT_SCRAPE", "5")),
+    "RATE_LIMIT_WINDOW": int(os.getenv("WEB_SEARCH_RATE_LIMIT_WINDOW", "60")),
+}
+
 # RAG 搜索结果的距离阈值。分数越低越相似。
 # 只有距离小于或等于此值的知识才会被采纳。
 # 注意：bge-m3 模型使用余弦距离，范围是 [0, 2]
