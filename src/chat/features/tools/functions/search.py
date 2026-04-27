@@ -352,12 +352,18 @@ async def search(
     搜索社区内部资源：论坛帖子、频道消息历史、教程知识库。
 
     scope 参数说明：
-    - "auto": 系统自动判断搜索哪些数据源（默认）
+    - "auto": 系统自动选择数据源（默认搜索论坛+频道，若关键词含教程相关词汇则额外搜索教程库）
     - "forum": 仅搜索论坛帖子
     - "channel": 仅搜索服务器消息历史
     - "tutorial": 仅搜索教程知识库
 
     返回格式：字典，每个数据源一个键（forum/channel/tutorial），值为该源的搜索结果。
+
+    各数据源的结果格式：
+    - forum: {"results": ["分类名 > 帖子链接", ...]}，每条结果为 "分类名 > URL" 格式的字符串。
+      你在最终回复时，必须原样输出帖子链接和分类名，不要对链接进行任何再加工、转换或添加Markdown格式。
+    - channel: {"results": [{"id": "...", "author": "...", "content": "...", "timestamp": "..."}]}
+    - tutorial: {"results": "格式化后的教程文本"}
     """
     query = params.query
 
