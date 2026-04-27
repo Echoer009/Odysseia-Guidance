@@ -25,13 +25,21 @@ class GlobalToolSettingsService:
         """
         获取全局禁用的工具列表。
 
+        自动过滤掉已不存在的旧工具名，保持与当前工具注册表一致。
+
         Returns:
             被全局禁用的工具名称列表
         """
         try:
             value = await chat_db_manager.get_global_setting("disabled_tools")
             if value:
-                return [t.strip() for t in value.split(",") if t.strip()]
+                raw = [t.strip() for t in value.split(",") if t.strip()]
+                valid = [t for t in raw if t in TOOL_METADATA]
+                if len(valid) != len(raw):
+                    stale = set(raw) - set(valid)
+                    log.info(f"自动清理了已不存在的旧工具名: {stale}")
+                    await self.set_disabled_tools(valid)
+                return valid
             return []
         except Exception as e:
             log.error(f"获取禁用工具列表失败: {e}", exc_info=True)

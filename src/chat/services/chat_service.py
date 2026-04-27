@@ -401,7 +401,7 @@ class ChatService:
             final_response = self._format_ai_response(ai_response)
 
             # --- 为特定工具调用添加后缀 ---
-            if "query_tutorial_knowledge_base" in _called_tools:
+            if "search" in _called_tools:
                 final_response += chat_config.TUTORIAL_SEARCH_SUFFIX
 
             # 6. --- 异步执行后续任务（不阻塞回复） ---

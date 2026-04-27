@@ -70,6 +70,9 @@ def load_tools_from_directory(
                     if name.startswith("_"):  # 忽略私有函数
                         continue
 
+                    if func.__module__ != module.__name__:
+                        continue
+
                     log.info(f"  -> 发现工具函数: '{name}'")
 
                     # 获取函数的元数据（如果有）
