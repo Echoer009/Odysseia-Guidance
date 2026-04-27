@@ -127,6 +127,54 @@ function onMouseUp(e: MouseEvent) {
   hideSwipeHint()
 }
 
+let descTouchStartX = 0
+let descTouchStartY = 0
+let descIsTracking = false
+
+function onDescTouchStart(e: TouchEvent) {
+  if (isAnimating.value) return
+  descTouchStartX = e.touches[0].clientX
+  descTouchStartY = e.touches[0].clientY
+  descIsTracking = true
+}
+
+function onDescTouchEnd(e: TouchEvent) {
+  if (!descIsTracking || isAnimating.value) return
+  descIsTracking = false
+  const dx = e.changedTouches[0].clientX - descTouchStartX
+  const dy = e.changedTouches[0].clientY - descTouchStartY
+  if (Math.abs(dy) > Math.abs(dx)) return
+  if (Math.abs(dx) < SWIPE_THRESHOLD) {
+    if (isTyping.value) skipTypewriter()
+    return
+  }
+  if (dx < 0) next()
+  else prev()
+  hideSwipeHint()
+}
+
+let descMouseStartX = 0
+let descIsTrackingMouse = false
+
+function onDescMouseDown(e: MouseEvent) {
+  if (isAnimating.value) return
+  descMouseStartX = e.clientX
+  descIsTrackingMouse = true
+}
+
+function onDescMouseUp(e: MouseEvent) {
+  if (!descIsTrackingMouse || isAnimating.value) return
+  descIsTrackingMouse = false
+  const dx = e.clientX - descMouseStartX
+  if (Math.abs(dx) < SWIPE_THRESHOLD) {
+    if (isTyping.value) skipTypewriter()
+    return
+  }
+  if (dx < 0) next()
+  else prev()
+  hideSwipeHint()
+}
+
 function hideSwipeHint() {
   if (swipeHintOpacity.value > 0) {
     gsap.to(swipeHintOpacity, { value: 0, duration: 0.3 })
@@ -332,7 +380,7 @@ defineExpose({ dialogueBoxRef: tutorialDialogueRef })
         <h2 ref="titleRef" class="tutorial-title">{{ currentSlide.title }}</h2>
       </div>
       <div class="tutorial-accent-line"></div>
-      <div ref="descRef" class="tutorial-description" v-html="renderedDesc" @touchstart.stop @touchend.stop @mousedown.stop @mouseup.stop></div>
+      <div ref="descRef" class="tutorial-description" v-html="renderedDesc" @touchstart.stop="onDescTouchStart" @touchend.stop="onDescTouchEnd" @mousedown.stop="onDescMouseDown" @mouseup.stop="onDescMouseUp"></div>
       <span ref="footerRef" class="tutorial-footer">{{ currentSlide.tip || '' }}</span>
     </div>
 
