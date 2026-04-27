@@ -51,6 +51,7 @@ class AffectionService:
                     record.daily_affection_gain = 0
                     record.last_update_date = today
                     await session.commit()
+                    await session.refresh(record)
                     log.info(f"用户 {user_id} 的每日聊天好感度上限已于 {today} 重置。")
 
                 return {
