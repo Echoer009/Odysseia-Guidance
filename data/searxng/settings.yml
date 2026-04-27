@@ -1,0 +1,45 @@
+# SearXNG 搜索引擎配置
+# 文档: https://docs.searxng.org/admin/settings/settings.html
+
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+  default_lang: ""
+  safe_search: 0
+
+server:
+  secret_key: "odysseia_guidance_searxng_secret_change_me"
+  limiter: false
+  image_proxy: false
+
+ui:
+  static_use_hash: true
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+  - name: karmasearch
+    disabled: true
+  - name: brave
+    disabled: true
