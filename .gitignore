@@ -295,6 +295,7 @@ $RECYCLE.BIN/
 *.lnk
 # Data files
 /data/
+!data/searxng/settings.yml
 
 # Ignore local Vite config with SSL for development
 src/chat/features/games/blackjack-web/vite.config.ts
