@@ -320,13 +320,19 @@ class ChatService:
 
             # 定义工具执行器（使用闭包追踪本次请求中调用的工具）
             _called_tools: List[str] = []
+            _search_scopes: List[str] = []
 
             async def tool_executor(call, **kwargs):
                 # 记录被调用的工具名称（兼容 dict 和 FunctionCall 对象）
                 if isinstance(call, dict):
-                    _called_tools.append(call.get("name", ""))
+                    name = call.get("name", "")
+                    args = call.get("arguments", {})
                 else:
-                    _called_tools.append(getattr(call, "name", ""))
+                    name = getattr(call, "name", "")
+                    args = dict(call.args) if call.args else {}
+                _called_tools.append(name)
+                if name == "search":
+                    _search_scopes.append(args.get("scope", "auto"))
                 return await ai_service.tool_service.execute_tool_call(
                     call,
                     channel=message.channel,
@@ -401,7 +407,9 @@ class ChatService:
             final_response = self._format_ai_response(ai_response)
 
             # --- 为特定工具调用添加后缀 ---
-            if "search" in _called_tools:
+            if _search_scopes and any(
+                "tutorial" in scope for scope in _search_scopes
+            ):
                 final_response += chat_config.TUTORIAL_SEARCH_SUFFIX
 
             # 6. --- 异步执行后续任务（不阻塞回复） ---

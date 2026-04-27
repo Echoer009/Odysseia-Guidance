@@ -152,7 +152,7 @@ class GuidanceCog(commands.Cog):
 
         if self._guidance_message_id:
             try:
-                old_msg = await self.bot.fetch_message(self._guidance_message_id)
+                old_msg = await channel.fetch_message(self._guidance_message_id)
                 if old_msg and old_msg.author.id == self.bot.user.id:
                     if old_msg.channel.id == GUIDANCE_CHANNEL_ID:
                         log.info(
