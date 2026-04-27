@@ -340,7 +340,7 @@ function onSelectionDialogueAdvance() {
   if (!dialogueComplete.value) {
     selectionDialogueRef.value?.skipToEnd()
   } else {
-    onTagConfirm(Array.from((cardSelectRef.value as any)?.selectedTags?.value ?? ['默认']))
+    onTagConfirm(Array.from((cardSelectRef.value as any)?.selectedTags ?? ['默认']))
   }
 }
 
