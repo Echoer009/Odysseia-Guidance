@@ -228,9 +228,20 @@ class UserConversationBlocksView(discord.ui.View):
 
         # 删除所有对话块按钮
         if self.current_list_items:
+            delete_all_blocks_button = discord.ui.Button(
+                label="删除所有对话块",
+                emoji="🗑️",
+                style=discord.ButtonStyle.danger,
+                row=2,
+            )
+            delete_all_blocks_button.callback = self.confirm_delete_all_blocks
+            self.add_item(delete_all_blocks_button)
+
+        # 删除所有对话块并清除个人印象按钮
+        if self.current_list_items:
             delete_all_button = discord.ui.Button(
                 label="删除所有记忆",
-                emoji="🗑️",
+                emoji="💥",
                 style=discord.ButtonStyle.danger,
                 row=2,
             )
@@ -380,8 +391,16 @@ class UserConversationBlocksView(discord.ui.View):
                     int(self.current_item_id)
                 )
                 if deleted:
+                    from src.chat.features.personal_memory.services.personal_memory_service import (
+                        personal_memory_service,
+                    )
+
+                    await personal_memory_service.delete_conversation_history(
+                        int(self.user_id)
+                    )
+
                     log.info(
-                        f"用户 {self.user_id} 删除了对话块 #{self.current_item_id}"
+                        f"用户 {self.user_id} 删除了对话块 #{self.current_item_id}，并清理了未总结的聊天记录"
                     )
                     await interaction.followup.send(
                         f"✅ 已成功删除对话记忆 **#{self.current_item_id}**。",
@@ -421,6 +440,73 @@ class UserConversationBlocksView(discord.ui.View):
 
         await interaction.response.send_message(
             f"**⚠️ 确认操作**\n你确定要永久删除对话记忆 **#{self.current_item_id}** 吗？此操作无法撤销。",
+            view=confirm_view,
+            ephemeral=True,
+        )
+
+    async def confirm_delete_all_blocks(self, interaction: discord.Interaction):
+        """确认删除所有对话块，但保留个人印象"""
+        block_count = len(self.current_list_items)
+        if block_count == 0:
+            await interaction.response.send_message(
+                "你没有对话记忆可删除。", ephemeral=True
+            )
+            return
+
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                deleted_count = await conversation_block_service.delete_all_user_blocks(
+                    self.user_id
+                )
+
+                from src.chat.features.personal_memory.services.personal_memory_service import (
+                    personal_memory_service,
+                )
+
+                await personal_memory_service.delete_conversation_history(
+                    int(self.user_id)
+                )
+
+                log.info(
+                    f"用户 {self.user_id} 删除了所有 {deleted_count} 个对话块，保留了个人印象。"
+                )
+                await interaction.followup.send(
+                    f"✅ 已成功删除你的 {deleted_count} 个对话记忆。\n"
+                    f"类脑娘对你的整体印象保留不变。",
+                    ephemeral=True,
+                )
+
+                await self._load_user_blocks()
+                self.view_mode = "list"
+                self.current_page = 0
+                self._initialize_components()
+                await self.update_view()
+
+            except Exception as e:
+                log.error(f"删除用户对话块失败: {e}", exc_info=True)
+                await interaction.followup.send(f"❌ 删除失败: {e}", ephemeral=True)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(
+            label="确认删除所有对话块", style=discord.ButtonStyle.danger
+        )
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.response.send_message(
+            f"**⚠️ 确认操作**\n"
+            f"你确定要永久删除所有 **{block_count}** 个对话记忆吗？\n"
+            f"类脑娘对你的个人印象将保留。\n此操作无法撤销。",
             view=confirm_view,
             ephemeral=True,
         )
