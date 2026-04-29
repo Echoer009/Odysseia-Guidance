@@ -257,6 +257,8 @@ class DeepSeekProvider(BaseProvider):
                         for call in tool_calls_list
                     ],
                 }
+                if result.thinking_content:
+                    assistant_message["reasoning_content"] = result.thinking_content
                 conversation_history.append(assistant_message)
 
                 # 执行工具并添加结果
@@ -398,6 +400,9 @@ class DeepSeekProvider(BaseProvider):
                             log.warning(f"未知的 tool_call 格式: {call}")
                     else:
                         log.warning(f"非字典类型的 tool_call: {type(call)}")
+                reasoning_content = msg.get("reasoning_content")
+                if reasoning_content:
+                    assistant_msg["reasoning_content"] = reasoning_content
                 converted_messages.append(assistant_msg)
                 continue
 
