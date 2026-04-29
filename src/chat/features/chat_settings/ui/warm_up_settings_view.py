@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import discord
-from discord.ui import View
+from discord.ui import View, Select
 from discord import SelectOption, Interaction, ForumChannel
 from typing import List, Optional
 
@@ -12,11 +12,13 @@ from src.chat.features.chat_settings.ui.components import PaginatedSelect
 
 
 class WarmUpSettingsView(View):
-    """一个用于管理暖贴频道设置的UI视图。"""
+    """一个用于管理暖贴频道设置的UI视图，支持跨服务器操作。"""
 
     def __init__(self, interaction: Interaction, parent_view_message: discord.Message):
         super().__init__(timeout=300)
-        self.guild = interaction.guild
+        self.bot: discord.Client = interaction.client
+        self.original_guild: Optional[discord.Guild] = interaction.guild
+        self.selected_guild: Optional[discord.Guild] = interaction.guild
         self.service = chat_settings_service
         self.parent_view_message = parent_view_message
         self.initial_selection: List[int] = []
@@ -24,9 +26,11 @@ class WarmUpSettingsView(View):
 
     async def _initialize(self):
         """异步获取设置并构建UI。"""
-        if not self.guild:
+        if not self.selected_guild:
             return
-        self.initial_selection = await self.service.get_warm_up_channels(self.guild.id)
+        self.initial_selection = await self.service.get_warm_up_channels(
+            self.selected_guild.id
+        )
         self._create_paginator()
         self._create_view_items()
 
@@ -39,11 +43,30 @@ class WarmUpSettingsView(View):
         await view._initialize()
         return view
 
+    def _get_guild_options(self) -> List[SelectOption]:
+        """获取所有可用服务器的下拉选项。"""
+        options = []
+        for guild in sorted(self.bot.guilds, key=lambda g: g.name):
+            is_current = (
+                self.selected_guild is not None and guild.id == self.selected_guild.id
+            )
+            options.append(
+                SelectOption(
+                    label=guild.name,
+                    value=str(guild.id),
+                    description=f"ID: {guild.id}",
+                    default=is_current,
+                )
+            )
+        return options
+
     def _create_paginator(self):
         """创建分页器实例。"""
-        if not self.guild:
+        if not self.selected_guild:
             return
-        forum_channels = [c for c in self.guild.channels if isinstance(c, ForumChannel)]
+        forum_channels = [
+            c for c in self.selected_guild.channels if isinstance(c, ForumChannel)
+        ]
 
         options = []
         for channel in sorted(forum_channels, key=lambda c: c.position):
@@ -67,35 +90,74 @@ class WarmUpSettingsView(View):
         """根据当前设置创建并添加所有UI组件。"""
         self.clear_items()
 
+        selected_guild_name = (
+            self.selected_guild.name if self.selected_guild else "未知"
+        )
+
+        # 第 0 行：服务器选择器
+        guild_options = self._get_guild_options()
+        if guild_options:
+            guild_select = Select(
+                placeholder="选择要管理的服务器...",
+                options=guild_options[:25],
+                custom_id="warm_up_guild_select",
+                row=0,
+            )
+            guild_select.callback = self.on_guild_select
+            self.add_item(guild_select)
+
+        # 第 1 行：论坛频道选择器
         if self.paginator:
-            select = self.paginator.create_select(row=0)
-            # 我们需要允许多选
+            select = self.paginator.create_select(row=1)
             select.min_values = 0
             select.max_values = len(select.options) if select.options else 1
             self.add_item(select)
 
-            # 将分页按钮添加到第 1 行
-            for btn in self.paginator.get_buttons(row=1):
+            # 将分页按钮添加到第 2 行
+            for btn in self.paginator.get_buttons(row=2):
                 self.add_item(btn)
         else:
             self.add_item(
-                discord.ui.Button(label="服务器内没有论坛频道", disabled=True, row=0)
+                discord.ui.Button(
+                    label=f"{selected_guild_name} 内没有论坛频道",
+                    disabled=True,
+                    row=1,
+                )
             )
 
-        # 将返回按钮放到第 2 行
+        # 将返回按钮放到第 3 行
         back_button = discord.ui.Button(
             label="返回主菜单",
             style=discord.ButtonStyle.gray,
             custom_id="back_to_main",
-            row=2,
+            row=3,
         )
         back_button.callback = self.on_back
         self.add_item(back_button)
 
+    async def on_guild_select(self, interaction: Interaction):
+        """处理服务器选择事件。"""
+        if not interaction.data or "values" not in interaction.data:
+            await interaction.response.defer()
+            return
+
+        selected_guild_id = int(interaction.data["values"][0])
+        guild = self.bot.get_guild(selected_guild_id)
+        if not guild:
+            await interaction.response.send_message(
+                "❌ 找不到该服务器，bot 可能已不在该服务器中。",
+                ephemeral=True,
+            )
+            return
+
+        self.selected_guild = guild
+        await self._update_view(interaction)
+
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
-        self._create_view_items()
+        await self._initialize()
         embed = self._create_embed()
+        self._create_view_items()
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def interaction_check(self, interaction: Interaction) -> bool:
@@ -104,35 +166,46 @@ class WarmUpSettingsView(View):
         custom_id = interaction.data.get("custom_id")
 
         if self.paginator and custom_id and self.paginator.handle_pagination(custom_id):
-            # 分页时，只重新构建项目并更新视图，不重新初始化
             self._create_view_items()
             await interaction.response.edit_message(view=self)
-            return False  # 阻止 on_selection 被调用
+            return False
 
         return True
 
     def _create_embed(self) -> discord.Embed:
         """创建一个显示当前已启用暖贴频道的Embed。"""
+        selected_guild_name = (
+            self.selected_guild.name if self.selected_guild else "未知"
+        )
         embed = discord.Embed(title="暖贴频道设置", color=discord.Color.blue())
+        embed.description = (
+            f"当前服务器: **{selected_guild_name}**\n在此管理服务器内论坛频道的暖贴功能。"
+        )
 
         if not self.initial_selection:
-            embed.description = "目前没有频道启用暖贴功能。"
+            embed.add_field(
+                name="已启用频道",
+                value="目前没有频道启用暖贴功能。",
+                inline=False,
+            )
         else:
             channel_mentions = []
-            if not self.guild:
-                return discord.Embed(title="暖贴频道设置", color=discord.Color.blue())
+            if not self.selected_guild:
+                return embed
             for channel_id in self.initial_selection:
-                channel = self.guild.get_channel(channel_id)
+                channel = self.selected_guild.get_channel(channel_id)
                 if channel:
                     channel_mentions.append(channel.mention)
                 else:
                     channel_mentions.append(f"`ID: {channel_id}` (已删除)")
 
-            embed.description = "✅ 以下频道已启用暖贴功能：\n\n" + "\n".join(
-                channel_mentions
+            embed.add_field(
+                name="已启用频道",
+                value="\n".join(channel_mentions),
+                inline=False,
             )
 
-        embed.set_footer(text="在下面的下拉菜单中勾选或取消勾选以进行修改。")
+        embed.set_footer(text="先选择服务器，再在下拉菜单中勾选或取消勾选论坛频道。")
         return embed
 
     async def _on_select_callback(self, interaction: Interaction, values: List[str]):
@@ -143,34 +216,32 @@ class WarmUpSettingsView(View):
         """处理频道选择事件。"""
         await interaction.response.defer()
 
-        # 获取当前页面所有被选中的频道的ID
         current_page_selected_ids = {int(v) for v in values}
 
-        # 获取当前页面所有的选项ID
         if not self.paginator:
             return
         current_page_option_ids = {
             int(opt.value) for opt in self.paginator.pages[self.paginator.current_page]
         }
 
-        # 找出在当前页面被取消选择的频道
         deselected_ids = current_page_option_ids - current_page_selected_ids
 
-        # 从数据库中移除被取消选择的频道
-        if not self.guild:
+        if not self.selected_guild:
             return
         for channel_id in deselected_ids:
             if channel_id in self.initial_selection:
-                await self.service.remove_warm_up_channel(self.guild.id, channel_id)
+                await self.service.remove_warm_up_channel(
+                    self.selected_guild.id, channel_id
+                )
 
-        # 添加新选择的频道到数据库
         for channel_id in current_page_selected_ids:
             if channel_id not in self.initial_selection:
-                await self.service.add_warm_up_channel(self.guild.id, channel_id)
+                await self.service.add_warm_up_channel(
+                    self.selected_guild.id, channel_id
+                )
 
         await interaction.followup.send("暖贴频道设置已更新。", ephemeral=True)
 
-        # 刷新视图以显示最新状态
         await self._initialize()
         self._create_view_items()
         embed = self._create_embed()
@@ -178,7 +249,6 @@ class WarmUpSettingsView(View):
 
     async def on_back(self, interaction: Interaction):
         """返回主设置菜单。"""
-        # 延迟导入以避免循环导入
         from src.chat.features.chat_settings.ui.chat_settings_view import (
             ChatSettingsView,
         )
@@ -188,5 +258,4 @@ class WarmUpSettingsView(View):
         await self.parent_view_message.edit(
             content="在此管理服务器的聊天设置：", view=main_view, embed=None
         )
-        # 停止当前视图
         self.stop()
