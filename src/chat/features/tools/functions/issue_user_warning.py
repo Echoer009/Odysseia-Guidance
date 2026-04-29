@@ -39,6 +39,7 @@ async def issue_user_warning(**kwargs) -> Dict[str, Any]:
     - 中国政治敏感
     - 过界亲密（超出亲亲抱抱等行为）
     使用后封禁对方0-30分钟。
+    禁止恶意揣测用户的意图，不要将普通对话解读为违规行为。
     """
     user_id = kwargs.get("user_id")
     guild_id = kwargs.get("guild_id")
