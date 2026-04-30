@@ -42,7 +42,7 @@ async def _send_warning_dm(
 
         embed = discord.Embed(
             title="⚠️ 警告通知",
-            description=f"你因违反社区规范，已被 **类脑娘** 警告并临时封禁 **{ban_duration}** 分钟。",
+            description=f"你已被 **类脑娘** 警告并临时封禁 **{ban_duration}** 分钟。",
             color=discord.Color.orange(),
             timestamp=datetime.now(timezone.utc),
         )
