@@ -19,6 +19,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHAT_ENABLED, MESSAGE_SETTINGS
 from src.chat.config import chat_config
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.chat.utils.message_utils import safe_reply, safe_send
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ class AIChatCog(commands.Cog):
                     or isinstance(message.channel, discord.Thread)
                 )
                 if is_unrestricted:
-                    await message.reply(response_text, mention_author=True)
+                    await safe_reply(message, response_text, mention_author=True)
                     return
 
                 # 3. 如果以上都不是，则检查是否为需要发送私信的普通长消息
@@ -135,9 +136,8 @@ class AIChatCog(commands.Cog):
                             else "你们的私信"
                         )
 
-                        await message.author.send(
-                            f"刚刚在 {channel_mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
-                        )
+                        dm_text = f"刚刚在 {channel_mention} 频道里，你想听我说的话有点多，在这里悄悄告诉你哦：\n\n{response_text}"
+                        await safe_send(message.author, dm_text)
                         log.info(
                             f"回复因过长已通过私信发送给 {message.author.display_name}"
                         )
@@ -152,7 +152,7 @@ class AIChatCog(commands.Cog):
                     return
 
                 # 4. 默认情况：直接在频道回复短消息
-                await message.reply(response_text, mention_author=True)
+                await safe_reply(message, response_text, mention_author=True)
 
             except discord.errors.HTTPException as e:
                 log.warning(f"发送回复时发生HTTP错误: {e}")

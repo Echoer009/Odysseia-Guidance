@@ -15,6 +15,7 @@ from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import replace_emojis
+from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
 from src.config import DEVELOPER_USER_IDS
 from src.chat.services.event_service import event_service
 from src.chat.features.affection.utils.interaction_checks import (
@@ -149,7 +150,9 @@ class ConfessionCog(commands.Cog):
 
             embed = discord.Embed(
                 title="来自类脑娘的低语",
-                description=replace_emojis(ai_response),
+                description=truncate_text(
+                    replace_emojis(ai_response), DISCORD_EMBED_DESCRIPTION_LIMIT
+                ),
                 color=discord.Color.purple(),
             )
             embed.set_author(

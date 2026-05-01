@@ -11,6 +11,7 @@ from src.chat.features.thread_commentor.services.thread_commentor_service import
 from src.chat.config.chat_config import THREAD_COMMENTOR_CONFIG, WARMUP_MESSAGES
 from src.chat.features.thread_commentor.ui.warmup_consent_view import WarmupConsentView
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.chat.utils.message_utils import safe_send
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class ThreadCommentorCog(commands.Cog):
 
             # 如果成功生成，则发送到帖子
             if praise_text:
-                await thread.send(praise_text)
+                await safe_send(thread, praise_text)
                 log.info(
                     f"[ThreadCommentorCog] 成功发送对帖子 '{thread.name}' 的评价。"
                 )

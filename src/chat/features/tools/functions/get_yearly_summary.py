@@ -15,6 +15,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.utils.message_utils import safe_send
 from src import config as app_config
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.database.database import AsyncSessionLocal
@@ -134,7 +135,7 @@ async def get_yearly_summary(**kwargs) -> Dict[str, Any]:
                     "message": "在为你撰写总结时，我的灵感突然消失了...",
                 }
 
-            await user.send(result.content)
+            await safe_send(user, result.content)
             log.info(
                 f"已成功为 Tier {tier} 用户 {user.name} ({user_id}) 发送年度总结长文。"
             )

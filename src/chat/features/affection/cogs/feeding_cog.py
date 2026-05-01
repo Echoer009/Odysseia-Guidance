@@ -18,6 +18,7 @@ from src.chat.config.chat_config import (
 )
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
+from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
 from src.config import DEVELOPER_USER_IDS
 from src.chat.features.affection.utils.interaction_checks import (
     check_command_availability,
@@ -159,6 +160,9 @@ class FeedingCog(commands.Cog):
             embed_description = evaluation_with_emojis
             if system_message:
                 embed_description += f"\n\n{system_message}"
+            embed_description = truncate_text(
+                embed_description, DISCORD_EMBED_DESCRIPTION_LIMIT
+            )
 
             embed = discord.Embed(
                 description=embed_description,
