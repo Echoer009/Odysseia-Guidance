@@ -15,7 +15,7 @@ EMOJI_MAPPINGS = [
     (re.compile(r"\<伤心\>"), ["<:shang_xin:1413095411601637479>"]),
     (re.compile(r"\<生气\>"), ["<:angry:1413095198258630748>"]),
     (re.compile(r"\<乖巧\>"), ["<:guai_qiao:1413095057099067442>"]),
-    (re.compile(r"\<傲娇\>"), ["<:ao_jiao:1413094971799502869>"]),
+    (re.compile(r"\<得意\>"), ["<:ao_jiao:1413094971799502869>"]),
     (re.compile(r"\<尴尬赞\>"), ["<:ganga_zan:1425171040354701454>"]),
     (re.compile(r"\<赞\>"), ["<:good:1425170994917675139>"]),
     (re.compile(r"\<吃瓜\>"), ["<:chi_gua:1425170954052440074>"]),
@@ -167,7 +167,7 @@ FACTION_EMOJI_MAPPINGS = {
             ),
             (re.compile(r"\<吃瓜\>"), ["<:Christmas_chigua:1452280544078331949>"]),
             (re.compile(r"\<尴尬赞\>"), ["<:Christmas_ganga_zan:1452280484393648229>"]),
-            (re.compile(r"\<傲娇\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
+            (re.compile(r"\<得意\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
             (
                 re.compile(r"\<生气\>"),
                 [
@@ -225,7 +225,7 @@ FACTION_EMOJI_MAPPINGS = {
             ),
             (re.compile(r"\<吃瓜\>"), ["<:Christmas_chigua:1452280544078331949>"]),
             (re.compile(r"\<尴尬赞\>"), ["<:Christmas_ganga_zan:1452280484393648229>"]),
-            (re.compile(r"\<傲娇\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
+            (re.compile(r"\<得意\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
             (
                 re.compile(r"\<生气\>"),
                 [
@@ -283,7 +283,7 @@ FACTION_EMOJI_MAPPINGS = {
             ),
             (re.compile(r"\<吃瓜\>"), ["<:Christmas_chigua:1452280544078331949>"]),
             (re.compile(r"\<尴尬赞\>"), ["<:Christmas_ganga_zan:1452280484393648229>"]),
-            (re.compile(r"\<傲娇\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
+            (re.compile(r"\<得意\>"), ["<:Christmas_aojiao:1452280409852481626>"]),
             (
                 re.compile(r"\<生气\>"),
                 [
@@ -328,7 +328,7 @@ FACTION_EMOJI_MAPPINGS = {
             (re.compile(r"\<尴尬赞\>"), ["<:gangazan:1472635148628525291>"]),
             (re.compile(r"\<吃瓜1\>"), ["<:chigua:1472635051962532107>"]),
             (re.compile(r"\<吃瓜2\>"), ["<:chigua2:1472635126092398712>"]),
-            (re.compile(r"\<傲娇\>"), ["<:aojiao:1472635018261299281>"]),
+            (re.compile(r"\<得意\>"), ["<:aojiao:1472635018261299281>"]),
         ],
         "spring_festival_day": [
             (re.compile(r"\<做鬼脸1\>"), ["<:zuoguilian:1472635367697027302>"]),
@@ -355,7 +355,7 @@ FACTION_EMOJI_MAPPINGS = {
             (re.compile(r"\<尴尬赞\>"), ["<:gangazan:1472635148628525291>"]),
             (re.compile(r"\<吃瓜1\>"), ["<:chigua:1472635051962532107>"]),
             (re.compile(r"\<吃瓜2\>"), ["<:chigua2:1472635126092398712>"]),
-            (re.compile(r"\<傲娇\>"), ["<:aojiao:1472635018261299281>"]),
+            (re.compile(r"\<得意\>"), ["<:aojiao:1472635018261299281>"]),
         ],
         "spring_festival_generic_day": [
             (re.compile(r"\<做鬼脸1\>"), ["<:zuoguilian:1472635367697027302>"]),
@@ -382,7 +382,7 @@ FACTION_EMOJI_MAPPINGS = {
             (re.compile(r"\<尴尬赞\>"), ["<:gangazan:1472635148628525291>"]),
             (re.compile(r"\<吃瓜1\>"), ["<:chigua:1472635051962532107>"]),
             (re.compile(r"\<吃瓜2\>"), ["<:chigua2:1472635126092398712>"]),
-            (re.compile(r"\<傲娇\>"), ["<:aojiao:1472635018261299281>"]),
+            (re.compile(r"\<得意\>"), ["<:aojiao:1472635018261299281>"]),
         ],
     },
 }
