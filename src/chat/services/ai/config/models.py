@@ -270,7 +270,7 @@ _model_configs_cache: Optional[Dict[str, ModelConfig]] = None
 
 def _load_models_from_json() -> Dict[str, ModelConfig]:
     """
-    从 JSON 配置文件加载模型配置
+    从 JSON 配置文件加载模型配置（回退用）
 
     Returns:
         Dict[str, ModelConfig]: 模型名称到配置的映射
@@ -296,12 +296,69 @@ def _load_models_from_json() -> Dict[str, ModelConfig]:
     return configs
 
 
-def get_model_configs() -> Dict[str, ModelConfig]:
+async def _load_models_from_db() -> Dict[str, ModelConfig]:
     """
-    获取所有模型配置
+    从 PostgreSQL 数据库加载模型配置。
 
-    配置只从 JSON 配置文件加载 (models_config.json)
-    自定义端点的 URL 和 API 密钥在 providers.py 中从环境变量读取
+    Returns:
+        Dict[str, ModelConfig]: 模型名称到配置的映射
+    """
+    configs = {}
+    try:
+        from src.database.database import AsyncSessionLocal
+        from src.database.services.ai_config_service import ai_config_service
+
+        async with AsyncSessionLocal() as session:
+            models = await ai_config_service.get_all_models(session, enabled_only=True)
+            for m in models:
+                gen_dict = m.generation_config or {}
+                prompt_dict = m.prompt_config or {}
+
+                gen_config = GenerationConfigParams(
+                    temperature=gen_dict.get("temperature", 1.0),
+                    top_p=gen_dict.get("top_p", 0.95),
+                    top_k=gen_dict.get("top_k"),
+                    max_output_tokens=gen_dict.get("max_output_tokens", m.max_output_tokens),
+                    presence_penalty=gen_dict.get("presence_penalty", 0.0),
+                    frequency_penalty=gen_dict.get("frequency_penalty", 0.0),
+                    thinking_budget_tokens=gen_dict.get("thinking_budget_tokens"),
+                )
+
+                prompt_config = PromptConfig(
+                    system_prompt=prompt_dict.get("system_prompt"),
+                    jailbreak_user_prompt=prompt_dict.get("jailbreak_user_prompt"),
+                    jailbreak_model_response=prompt_dict.get("jailbreak_model_response"),
+                    jailbreak_final_instruction=prompt_dict.get("jailbreak_final_instruction"),
+                    use_cache_optimized_build=prompt_dict.get("use_cache_optimized_build"),
+                )
+
+                provider_name = m.provider.name if m.provider else "unknown"
+
+                configs[m.model_name] = ModelConfig(
+                    display_name=m.display_name,
+                    provider=provider_name,
+                    actual_model=m.actual_model,
+                    description=m.description or "",
+                    supports_vision=bool(m.supports_vision),
+                    supports_tools=bool(m.supports_tools),
+                    supports_thinking=bool(m.supports_thinking),
+                    max_output_tokens=m.max_output_tokens,
+                    generation_config=gen_config,
+                    prompt_config=prompt_config,
+                )
+
+        if configs:
+            log.info(f"[DB] 已从数据库加载 {len(configs)} 个模型配置")
+
+    except Exception as e:
+        log.warning(f"从数据库加载模型配置失败: {e}")
+
+    return configs
+
+
+async def get_model_configs_async() -> Dict[str, ModelConfig]:
+    """
+    异步获取所有模型配置。优先从 PG 数据库读取，数据库为空时回退到 JSON 文件。
 
     Returns:
         Dict[str, ModelConfig]: 模型名称到配置的映射
@@ -311,12 +368,33 @@ def get_model_configs() -> Dict[str, ModelConfig]:
     if _model_configs_cache is not None:
         return _model_configs_cache
 
-    # 从 JSON 配置文件加载
+    db_configs = await _load_models_from_db()
+    if db_configs:
+        _model_configs_cache = db_configs
+        return db_configs
+
+    log.info("数据库中无模型配置，回退到 JSON 文件")
     configs = _load_models_from_json()
-
-    # 缓存配置
     _model_configs_cache = configs
+    return configs
 
+
+def get_model_configs() -> Dict[str, ModelConfig]:
+    """
+    同步获取所有模型配置。
+    优先返回缓存；无缓存时从 JSON 文件加载（向后兼容）。
+    新代码应使用 get_model_configs_async() 异步版本。
+
+    Returns:
+        Dict[str, ModelConfig]: 模型名称到配置的映射
+    """
+    global _model_configs_cache
+
+    if _model_configs_cache is not None:
+        return _model_configs_cache
+
+    configs = _load_models_from_json()
+    _model_configs_cache = configs
     return configs
 
 
@@ -330,6 +408,18 @@ def reload_model_configs() -> Dict[str, ModelConfig]:
     global _model_configs_cache
     _model_configs_cache = None
     return get_model_configs()
+
+
+async def reload_model_configs_async() -> Dict[str, ModelConfig]:
+    """
+    异步重新加载模型配置（清除缓存，从数据库重新读取）
+
+    Returns:
+        Dict[str, ModelConfig]: 模型名称到配置的映射
+    """
+    global _model_configs_cache
+    _model_configs_cache = None
+    return await get_model_configs_async()
 
 
 def get_model_config(model_name: str) -> Optional[ModelConfig]:

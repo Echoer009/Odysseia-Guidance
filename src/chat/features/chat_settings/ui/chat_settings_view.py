@@ -191,6 +191,25 @@ class ChatSettingsView(View):
             )
         )
 
+        # 第 4 行：Provider / Model 管理
+        self.add_item(
+            Button(
+                label="🔌 Provider管理",
+                style=ButtonStyle.success,
+                custom_id="provider_management",
+                row=4,
+            )
+        )
+
+        self.add_item(
+            Button(
+                label="🤖 Model管理",
+                style=ButtonStyle.success,
+                custom_id="model_management",
+                row=4,
+            )
+        )
+
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
         await self._initialize()  # 重新获取所有数据，包括派系
@@ -219,6 +238,10 @@ class ChatSettingsView(View):
             await self.on_global_tools_settings(interaction)
         elif custom_id == "model_params_settings":
             await self.on_model_params_settings(interaction)
+        elif custom_id == "provider_management":
+            await self.on_provider_management(interaction)
+        elif custom_id == "model_management":
+            await self.on_model_management(interaction)
 
         return True
 
@@ -302,14 +325,12 @@ class ChatSettingsView(View):
 
     async def on_ai_model_settings(self, interaction: Interaction):
         """打开AI模型设置视图。"""
-        # 获取当前模型和 Provider
         (
             current_provider,
             current_model,
         ) = await self.service.get_current_ai_model_with_provider()
 
-        # 创建新的选择视图
-        view = AIModelSettingsView(
+        view = await AIModelSettingsView.create(
             current_provider=current_provider,
             current_model=current_model,
         )
@@ -438,5 +459,61 @@ class ChatSettingsView(View):
         embed = model_params_view._get_params_embed()
         await interaction.edit_original_response(
             content=None, embed=embed, view=model_params_view
+        )
+        self.stop()
+
+    async def on_provider_management(self, interaction: Interaction):
+        """切换到 Provider 管理视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+        from src.chat.features.chat_settings.ui.provider_management_view import (
+            ProviderManagementView,
+        )
+
+        async def back_callback(back_interaction: Interaction):
+            await back_interaction.response.defer()
+            main_view = await ChatSettingsView.create(back_interaction)
+            main_view.message = self.message
+            await back_interaction.edit_original_response(
+                content=None, embed=None, view=main_view
+            )
+
+        provider_view = await ProviderManagementView.create(back_callback)
+        provider_view.message = self.message
+        await interaction.edit_original_response(
+            content=None, embed=provider_view._get_embed(), view=provider_view
+        )
+        self.stop()
+
+    async def on_model_management(self, interaction: Interaction):
+        """切换到 Model 管理视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+        from src.chat.features.chat_settings.ui.model_management_view import (
+            ModelManagementView,
+        )
+
+        async def back_callback(back_interaction: Interaction):
+            await back_interaction.response.defer()
+            main_view = await ChatSettingsView.create(back_interaction)
+            main_view.message = self.message
+            await back_interaction.edit_original_response(
+                content=None, embed=None, view=main_view
+            )
+
+        model_view = await ModelManagementView.create(back_callback)
+        model_view.message = self.message
+        await interaction.edit_original_response(
+            content=None, embed=model_view._get_embed(), view=model_view
         )
         self.stop()

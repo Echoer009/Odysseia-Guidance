@@ -464,6 +464,9 @@ async def main():
     ai_service.set_tools(available_tools, tool_map, tool_service)
     log.info(f"已加载 {len(available_tools)} 个工具: {list(tool_map.keys())}")
 
+    # 异步初始化 AI Service（从 PG 数据库加载 Provider 和 Model 配置）
+    await ai_service.initialize()
+
     # 为 context_service_test 注入 bot 实例，使其能够访问缓存
     from src.chat.services.context_service_test import initialize_context_service_test
 

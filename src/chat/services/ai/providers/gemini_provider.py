@@ -135,11 +135,17 @@ class GeminiProvider(BaseProvider):
         Returns:
             genai.Client: Gemini 客户端
         """
+        REQUEST_TIMEOUT_MS = 40000
         if self.base_url:
-            http_options = genai_types.HttpOptions(base_url=self.base_url)
+            http_options = genai_types.HttpOptions(
+                base_url=self.base_url, timeout=REQUEST_TIMEOUT_MS
+            )
             return genai.Client(api_key=api_key, http_options=http_options)
         else:
-            return genai.Client(api_key=api_key)
+            return genai.Client(
+                api_key=api_key,
+                http_options=genai_types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+            )
 
     def get_client(self) -> Any:
         """

@@ -33,26 +33,99 @@ class AIModelSettingsView(View):
         self.selected_model: Optional[str] = current_model
         self.confirmed = False
 
-        # 获取按 Provider 分组的模型
-        self._models_by_provider = self._get_models_by_provider()
+        self._models_by_provider: Dict[str, Dict[str, "ModelConfig"]] = {}
 
-        # 构建 UI
+    async def _initialize(self):
+        self._models_by_provider = await self._get_models_by_provider()
         self._create_provider_select()
         self._create_model_select()
         self._create_buttons()
 
-    def _get_models_by_provider(self) -> Dict[str, Dict[str, "ModelConfig"]]:
-        """
-        获取按 Provider 分组的模型配置
+    @classmethod
+    async def create(
+        cls,
+        current_provider: Optional[str] = None,
+        current_model: Optional[str] = None,
+    ) -> "AIModelSettingsView":
+        view = cls(current_provider, current_model)
+        await view._initialize()
+        return view
 
-        Returns:
-            {"provider_name": {"model_name": ModelConfig, ...}, ...}
-        """
+    async def _get_models_by_provider(self) -> Dict[str, Dict[str, "ModelConfig"]]:
+        grouped: Dict[str, Dict[str, "ModelConfig"]] = {}
+
+        try:
+            from src.database.database import AsyncSessionLocal
+            from src.database.services.ai_config_service import ai_config_service
+            from src.chat.services.ai.config.models import (
+                ModelConfig,
+                GenerationConfigParams,
+                PromptConfig,
+            )
+
+            async with AsyncSessionLocal() as session:
+                models = await ai_config_service.get_all_models(
+                    session, enabled_only=True
+                )
+
+                for m in models:
+                    gen_dict = m.generation_config or {}
+                    prompt_dict = m.prompt_config or {}
+
+                    gen_config = GenerationConfigParams(
+                        temperature=gen_dict.get("temperature", 1.0),
+                        top_p=gen_dict.get("top_p", 0.95),
+                        top_k=gen_dict.get("top_k"),
+                        max_output_tokens=gen_dict.get(
+                            "max_output_tokens", m.max_output_tokens
+                        ),
+                        presence_penalty=gen_dict.get("presence_penalty", 0.0),
+                        frequency_penalty=gen_dict.get("frequency_penalty", 0.0),
+                        thinking_budget_tokens=gen_dict.get("thinking_budget_tokens"),
+                    )
+
+                    prompt_config = PromptConfig(
+                        system_prompt=prompt_dict.get("system_prompt"),
+                        jailbreak_user_prompt=prompt_dict.get("jailbreak_user_prompt"),
+                        jailbreak_model_response=prompt_dict.get(
+                            "jailbreak_model_response"
+                        ),
+                        jailbreak_final_instruction=prompt_dict.get(
+                            "jailbreak_final_instruction"
+                        ),
+                        use_cache_optimized_build=prompt_dict.get(
+                            "use_cache_optimized_build"
+                        ),
+                    )
+
+                    provider_name = m.provider.name if m.provider else "unknown"
+
+                    config = ModelConfig(
+                        display_name=m.display_name,
+                        provider=provider_name,
+                        actual_model=m.actual_model,
+                        description=m.description or "",
+                        supports_vision=bool(m.supports_vision),
+                        supports_tools=bool(m.supports_tools),
+                        supports_thinking=bool(m.supports_thinking),
+                        max_output_tokens=m.max_output_tokens,
+                        generation_config=gen_config,
+                        prompt_config=prompt_config,
+                    )
+
+                    if provider_name not in grouped:
+                        grouped[provider_name] = {}
+                    grouped[provider_name][m.model_name] = config
+
+            if grouped:
+                return grouped
+
+        except Exception:
+            pass
+
         from src.chat.services.ai.config.models import get_model_configs
 
         model_configs = get_model_configs()
-        grouped: Dict[str, Dict[str, "ModelConfig"]] = {}
-
         for model_name, config in model_configs.items():
             provider = config.provider or "unknown"
             if provider not in grouped:
@@ -62,7 +135,6 @@ class AIModelSettingsView(View):
         return grouped
 
     def _get_provider_display_name(self, provider_name: str) -> str:
-        """获取 Provider 的显示名称"""
         provider_names = {
             "gemini_official": "📦 Gemini 官方",
             "deepseek": "📦 DeepSeek",
@@ -70,7 +142,6 @@ class AIModelSettingsView(View):
             "unknown": "📦 未知",
         }
 
-        # 自定义 Gemini 端点
         if provider_name.startswith("gemini_custom_"):
             endpoint_name = provider_name.replace("gemini_custom_", "")
             return f"📦 Gemini 自定义 ({endpoint_name})"
@@ -78,7 +149,6 @@ class AIModelSettingsView(View):
         return provider_names.get(provider_name, f"📦 {provider_name}")
 
     def _create_provider_select(self):
-        """创建 Provider 选择下拉框"""
         options = []
 
         for provider_name in sorted(self._models_by_provider.keys()):
@@ -86,7 +156,7 @@ class AIModelSettingsView(View):
             is_default = provider_name == self.selected_provider
             options.append(
                 SelectOption(
-                    label=display_name[:100],  # Discord 限制 100 字符
+                    label=display_name[:100],
                     value=provider_name,
                     default=is_default,
                 )
@@ -99,7 +169,7 @@ class AIModelSettingsView(View):
 
         self.provider_select = Select(
             placeholder="选择供应商...",
-            options=options[:25],  # Discord 限制最多 25 个选项
+            options=options[:25],
             custom_id="provider_select",
             row=0,
         )
@@ -107,8 +177,6 @@ class AIModelSettingsView(View):
         self.add_item(self.provider_select)
 
     def _create_model_select(self, provider_name: Optional[str] = None):
-        """创建或更新 Model 选择下拉框"""
-        # 移除旧的 model_select（如果存在）
         for item in self.children:
             if isinstance(item, Select) and item.custom_id == "model_select":
                 self.remove_item(item)
@@ -148,13 +216,12 @@ class AIModelSettingsView(View):
         self.add_item(self.model_select)
 
     def _create_buttons(self):
-        """创建确认和取消按钮"""
         self.confirm_button = Button(
             label="✅ 确认",
             style=ButtonStyle.green,
             custom_id="confirm",
             row=2,
-            disabled=True,  # 初始禁用，选择模型后启用
+            disabled=True,
         )
         self.confirm_button.callback = self._on_confirm
         self.add_item(self.confirm_button)
@@ -169,35 +236,21 @@ class AIModelSettingsView(View):
         self.add_item(self.cancel_button)
 
     async def _on_provider_select(self, interaction: Interaction):
-        """Provider 选择回调"""
         self.selected_provider = self.provider_select.values[0]
-
-        # 重置模型选择
         self.selected_model = None
-
-        # 更新模型下拉框
         self._create_model_select(self.selected_provider)
-
-        # 禁用确认按钮
         self.confirm_button.disabled = True
-
         await interaction.response.edit_message(view=self)
 
     async def _on_model_select(self, interaction: Interaction):
-        """Model 选择回调"""
         self.selected_model = self.model_select.values[0]
-
-        # 启用确认按钮
         self.confirm_button.disabled = False
-
         await interaction.response.edit_message(view=self)
 
     async def _on_confirm(self, interaction: Interaction):
-        """确认按钮回调"""
         self.confirmed = True
         self.stop()
 
-        # 获取模型显示名称
         display_name = self.selected_model or ""
         if (
             self.selected_provider
@@ -226,7 +279,6 @@ class AIModelSettingsView(View):
         await interaction.response.edit_message(embed=embed, view=None)
 
     async def _on_cancel(self, interaction: Interaction):
-        """取消按钮回调"""
         self.stop()
 
         embed = discord.Embed(
@@ -238,12 +290,6 @@ class AIModelSettingsView(View):
         await interaction.response.edit_message(embed=embed, view=None)
 
     def get_selected_full_model_id(self) -> Optional[str]:
-        """
-        获取选中的完整模型 ID
-
-        Returns:
-            "provider_name:model_name" 或 None
-        """
         if self.confirmed and self.selected_provider and self.selected_model:
             return f"{self.selected_provider}:{self.selected_model}"
         return None
@@ -252,15 +298,6 @@ class AIModelSettingsView(View):
     def parse_full_model_id(
         cls, full_model_id: str
     ) -> tuple[Optional[str], Optional[str]]:
-        """
-        解析完整模型 ID
-
-        Args:
-            full_model_id: "provider_name:model_name" 格式的字符串
-
-        Returns:
-            (provider_name, model_name) 元组
-        """
         if not full_model_id:
             return None, None
 
@@ -268,7 +305,6 @@ class AIModelSettingsView(View):
             parts = full_model_id.split(":", 1)
             return parts[0], parts[1]
 
-        # 旧格式兼容：只有模型名，尝试从配置查找 provider
         from src.chat.services.ai.config.models import get_model_configs
 
         model_configs = get_model_configs()

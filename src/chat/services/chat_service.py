@@ -388,7 +388,7 @@ class ChatService:
             ai_response = result.content
 
             if not ai_response:
-                log.info(f"AI服务未返回回复（可能由于冷却），跳过用户 {author.id}。")
+                log.warning(f"AI服务未返回回复（重试+故障转移均失败），跳过用户 {author.id}。")
                 return None
 
             # --- 新增：调用新的个人记忆服务 ---

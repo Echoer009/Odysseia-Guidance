@@ -2,10 +2,12 @@
 """
 AI Provider 配置模块
 
-定义各种 AI 服务提供者的配置
+优先从 PostgreSQL 数据库读取 Provider/Model 配置，
+数据库为空时回退到环境变量（向后兼容）。
 """
 
 import os
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Literal, Any
@@ -58,39 +60,77 @@ class ProviderConfig:
         return self.enabled and bool(self.api_key)
 
 
+async def get_provider_configs_from_db() -> Dict[str, ProviderConfig]:
+    """
+    从 PostgreSQL 数据库加载 Provider 配置。
+
+    Returns:
+        Dict[str, ProviderConfig]: Provider 名称到配置的映射
+    """
+    configs = {}
+    try:
+        from src.database.database import AsyncSessionLocal
+        from src.database.services.ai_config_service import ai_config_service
+
+        async with AsyncSessionLocal() as session:
+            providers = await ai_config_service.get_all_providers(
+                session, enabled_only=True
+            )
+
+            for provider in providers:
+                api_key = provider.api_key_encrypted
+
+                model_names = [m.model_name for m in provider.models if m.enabled]
+                if not model_names:
+                    default_model = None
+                else:
+                    default_model = model_names[0]
+
+                provider_type = provider.provider_type
+                extra = dict(provider.extra) if provider.extra else {}
+
+                if provider_type == "gemini_custom":
+                    provider_type = "custom"
+                    extra["original_provider"] = "gemini"
+
+                configs[provider.name] = ProviderConfig(
+                    name=provider.name,
+                    type=provider_type,
+                    api_key=api_key,
+                    base_url=provider.base_url,
+                    models=model_names,
+                    default_model=default_model,
+                    extra=extra,
+                )
+                log.info(
+                    f"[DB] 已加载 Provider '{provider.name}'，"
+                    f"类型: {provider_type}，模型: {model_names}"
+                )
+
+    except Exception as e:
+        log.warning(f"从数据库加载 Provider 配置失败: {e}")
+
+    return configs
+
+
 def _parse_custom_gemini_endpoints() -> Dict[str, ProviderConfig]:
     """
-    从环境变量解析自定义 Gemini 端点配置
-
-    环境变量格式：
-    - CUSTOM_GEMINI_URL_<NAME>=https://...          (必填) 端点 URL
-    - CUSTOM_GEMINI_API_KEY_<NAME>=key              (必填) API 密钥
-
-    模型列表从 models_config.json 中读取，查找所有使用 gemini_custom_<name> provider 的模型。
-
-    示例：
-    - CUSTOM_GEMINI_URL_GG=https://api.example.com
-    - CUSTOM_GEMINI_API_KEY_GG=sk-xxx
-    - models_config.json 中的模型 provider 设为 "gemini_custom_gg"
+    从环境变量解析自定义 Gemini 端点配置（回退用）
     """
     configs = {}
 
-    # 遍历环境变量查找自定义端点
     for key, value in os.environ.items():
         if key.startswith("CUSTOM_GEMINI_URL_") and key != "CUSTOM_GEMINI_URL":
             endpoint_name = key[len("CUSTOM_GEMINI_URL_") :].lower()
             provider_name = f"gemini_custom_{endpoint_name}"
 
-            # 查找对应的 API 密钥
             api_key = os.getenv(f"CUSTOM_GEMINI_API_KEY_{endpoint_name.upper()}")
             if not api_key:
                 api_key = os.getenv(f"CUSTOM_GEMINI_API_KEY_{endpoint_name}")
 
             if api_key and value:
-                # 从 models_config.json 读取该 provider 支持的模型
                 models = _get_models_for_provider(provider_name)
 
-                # 如果没有配置模型，使用默认模型名
                 if not models:
                     default_model = f"gemini-{endpoint_name.replace('_', '-')}-custom"
                     models = [default_model]
@@ -107,7 +147,7 @@ def _parse_custom_gemini_endpoints() -> Dict[str, ProviderConfig]:
                     extra={"original_provider": "gemini"},
                 )
                 log.info(
-                    f"已加载自定义 Gemini 端点: {provider_name}，支持模型: {models}"
+                    f"[ENV] 已加载自定义 Gemini 端点: {provider_name}，支持模型: {models}"
                 )
 
     return configs
@@ -115,13 +155,7 @@ def _parse_custom_gemini_endpoints() -> Dict[str, ProviderConfig]:
 
 def _get_models_for_provider(provider_name: str) -> List[str]:
     """
-    从 models_config.json 获取指定 provider 的所有模型
-
-    Args:
-        provider_name: Provider 名称
-
-    Returns:
-        List[str]: 模型名称列表
+    从 models_config.json 获取指定 provider 的所有模型（回退用）
     """
     try:
         from .models import get_model_configs
@@ -139,22 +173,18 @@ def _get_models_for_provider(provider_name: str) -> List[str]:
         return []
 
 
-def get_provider_configs() -> Dict[str, ProviderConfig]:
+def _get_provider_configs_from_env() -> Dict[str, ProviderConfig]:
     """
-    获取所有 Provider 配置
-
-    Returns:
-        Dict[str, ProviderConfig]: Provider 名称到配置的映射
+    从环境变量加载 Provider 配置（回退方法）
     """
     configs = {}
 
-    # 1. Gemini 官方 API
     google_api_keys = os.getenv("GOOGLE_API_KEYS_LIST", "")
     if google_api_keys:
         configs["gemini_official"] = ProviderConfig(
             name="gemini_official",
             type="gemini",
-            api_key=google_api_keys.split(",")[0].strip(),  # 使用第一个密钥
+            api_key=google_api_keys.split(",")[0].strip(),
             base_url=os.getenv("GEMINI_API_BASE_URL"),
             models=[
                 "gemini-2.5-flash",
@@ -163,7 +193,6 @@ def get_provider_configs() -> Dict[str, ProviderConfig]:
             default_model="gemini-2.5-flash",
         )
 
-    # 2. DeepSeek API
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
     if deepseek_key:
         configs["deepseek"] = ProviderConfig(
@@ -180,7 +209,6 @@ def get_provider_configs() -> Dict[str, ProviderConfig]:
             default_model="deepseek-chat",
         )
 
-    # 3. OpenAI 兼容端点
     openai_key = os.getenv("OPENAI_COMPATIBLE_API_KEY")
     openai_url = os.getenv("OPENAI_COMPATIBLE_URL")
     if openai_key and openai_url:
@@ -197,22 +225,35 @@ def get_provider_configs() -> Dict[str, ProviderConfig]:
             default_model="gpt-4o",
         )
 
-    # 4. 自定义 Gemini 端点（从环境变量加载）
     custom_endpoints = _parse_custom_gemini_endpoints()
     configs.update(custom_endpoints)
 
     return configs
 
 
-def get_provider_config(provider_name: str) -> Optional[ProviderConfig]:
+async def get_provider_configs() -> Dict[str, ProviderConfig]:
     """
-    获取指定 Provider 的配置
+    获取所有 Provider 配置。
 
-    Args:
-        provider_name: Provider 名称
+    优先从 PG 数据库读取；如果数据库中无任何 Provider 配置，
+    则回退到环境变量（向后兼容旧部署）。
 
     Returns:
-        Optional[ProviderConfig]: Provider 配置，如果不存在则返回 None
+        Dict[str, ProviderConfig]: Provider 名称到配置的映射
     """
-    configs = get_provider_configs()
+    db_configs = await get_provider_configs_from_db()
+    if db_configs:
+        log.info(f"使用数据库 Provider 配置，共 {len(db_configs)} 个")
+        return db_configs
+
+    log.info("数据库中无 Provider 配置，回退到环境变量")
+    return _get_provider_configs_from_env()
+
+
+def get_provider_config(provider_name: str) -> Optional[ProviderConfig]:
+    """
+    同步获取指定 Provider 的配置（仅从环境变量，用于向后兼容）。
+    新代码应使用 get_provider_configs() 异步版本。
+    """
+    configs = _get_provider_configs_from_env()
     return configs.get(provider_name)

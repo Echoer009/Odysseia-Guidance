@@ -828,3 +828,126 @@ class UserWarningRecord(Base):
         return (
             f"<UserWarningRecord(user_id='{self.user_id}', guild_id='{self.guild_id}')>"
         )
+
+
+# --- AI Provider / Model 配置模型 (PostgreSQL) ---
+
+
+AI_CONFIG_SCHEMA = "ai_config"
+
+
+class AiProvider(Base):
+    """
+    AI 服务提供商配置表。
+    通过 Discord UI 动态管理，API Key 加密存储。
+    """
+
+    __tablename__ = "ai_providers"
+    __table_args__ = (
+        Index("ix_ai_provider_name", "name", unique=True),
+        {"schema": AI_CONFIG_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, comment="Provider 唯一标识名称"
+    )
+    provider_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Provider 类型: gemini / deepseek / openai_compatible",
+    )
+    display_name: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="显示名称"
+    )
+    api_key_encrypted: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="加密后的 API Key"
+    )
+    base_url: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="API 基础 URL"
+    )
+    extra: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, comment="额外配置参数 (JSON)"
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=1, comment="是否启用 (1=启用, 0=禁用)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    models: Mapped[list["AiModel"]] = relationship(
+        "AiModel", back_populates="provider", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<AiProvider(name='{self.name}', type='{self.provider_type}')>"
+
+
+class AiModel(Base):
+    """
+    AI 模型配置表。
+    每个 Model 关联到一个 AiProvider，通过 Discord UI 动态管理。
+    """
+
+    __tablename__ = "ai_models"
+    __table_args__ = (
+        Index("ix_ai_model_name", "model_name", unique=True),
+        Index("ix_ai_model_provider", "provider_id"),
+        {"schema": AI_CONFIG_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    model_name: Mapped[str] = mapped_column(
+        String(200), unique=True, nullable=False, comment="模型唯一标识 (如 deepseek-chat)"
+    )
+    display_name: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="模型显示名称"
+    )
+    provider_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(f"{AI_CONFIG_SCHEMA}.ai_providers.id"),
+        nullable=False,
+        comment="所属 Provider ID",
+    )
+    actual_model: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="实际调用的模型名称"
+    )
+    description: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="模型描述"
+    )
+    supports_vision: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=0, comment="是否支持视觉"
+    )
+    supports_tools: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=1, comment="是否支持工具调用"
+    )
+    supports_thinking: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=0, comment="是否支持思考模式"
+    )
+    max_output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=8192, comment="最大输出 token 数"
+    )
+    generation_config: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, comment="生成参数配置 (temperature, top_p 等)"
+    )
+    prompt_config: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, comment="提示词配置"
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=1, comment="是否启用 (1=启用, 0=禁用)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    provider: Mapped["AiProvider"] = relationship("AiProvider", back_populates="models")
+
+    def __repr__(self):
+        return f"<AiModel(model_name='{self.model_name}', provider_id={self.provider_id})>"

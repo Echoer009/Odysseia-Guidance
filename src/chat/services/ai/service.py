@@ -28,7 +28,7 @@ from .providers import (
     DeepSeekProvider,
     OpenAICompatibleProvider,
 )
-from .config.providers import get_provider_configs, ProviderConfig
+from .config.providers import get_provider_configs, ProviderConfig, _get_provider_configs_from_env
 from .config.models import get_fallback_providers, get_model_config
 from src.chat.config.chat_config import PROVIDER_RETRY_CONFIG
 
@@ -60,12 +60,20 @@ class AIService:
         self._available_tools: List[Any] = []
         self._tool_map: Dict[str, Any] = {}
 
-        # 初始化 Providers
-        self._initialize_providers()
+        self._initialized = False
+
+    async def initialize(self):
+        """异步初始化：优先从 PG 数据库加载 Provider，回退到环境变量。"""
+        if self._initialized:
+            return
+        await self._initialize_providers_async()
+        from .config.models import get_model_configs_async
+        await get_model_configs_async()
+        self._initialized = True
 
     def _initialize_providers(self):
-        """根据配置初始化所有 Provider"""
-        provider_configs = get_provider_configs()
+        """同步初始化 Provider（从环境变量回退，向后兼容）"""
+        provider_configs = _get_provider_configs_from_env()
 
         for provider_name, config in provider_configs.items():
             if not config.is_available():
@@ -77,11 +85,9 @@ class AIService:
                 if provider:
                     self._providers[provider_name] = provider
 
-                    # 建立模型到 Provider 的映射
                     for model_name in config.models:
                         self._model_to_provider[model_name] = config.name
 
-                    # 设置默认 Provider
                     if self._default_provider is None:
                         self._default_provider = provider_name
 
@@ -93,6 +99,48 @@ class AIService:
                 log.error(f"初始化 Provider '{provider_name}' 失败: {e}", exc_info=True)
 
         log.info(f"AIService 初始化完成，共 {len(self._providers)} 个 Provider")
+
+    async def _initialize_providers_async(self):
+        """异步初始化 Provider（优先 PG 数据库）"""
+        provider_configs = await get_provider_configs()
+
+        if not provider_configs:
+            log.info("异步初始化未获得 Provider 配置，尝试同步回退")
+            self._initialize_providers()
+            return
+
+        for provider_name, config in provider_configs.items():
+            if not config.is_available():
+                log.info(f"Provider '{provider_name}' 不可用，跳过初始化")
+                continue
+
+            try:
+                provider = self._create_provider(config)
+                if provider:
+                    self._providers[provider_name] = provider
+
+                    for model_name in config.models:
+                        self._model_to_provider[model_name] = config.name
+
+                    if self._default_provider is None:
+                        self._default_provider = provider_name
+
+                    log.info(
+                        f"[Async] 成功初始化 Provider '{provider_name}'，支持模型: {config.models}"
+                    )
+
+            except Exception as e:
+                log.error(f"初始化 Provider '{provider_name}' 失败: {e}", exc_info=True)
+
+        log.info(f"AIService 异步初始化完成，共 {len(self._providers)} 个 Provider")
+
+    async def reload_providers(self):
+        """重新加载 Provider 配置（用于运行时通过 Discord UI 添加/删除后刷新）"""
+        self._providers.clear()
+        self._model_to_provider.clear()
+        self._default_provider = None
+        self._initialized = False
+        await self.initialize()
 
     def _create_provider(self, config: ProviderConfig) -> Optional[BaseProvider]:
         """
@@ -515,13 +563,18 @@ class AIService:
 
         for attempt in range(max_retries + 1):
             try:
-                return await provider.generate(
+                result = await provider.generate(
                     messages=messages,
                     config=config,
                     tools=tools,
                     model=model,
                     **kwargs,
                 )
+                if not result.content:
+                    raise GenerationError(
+                        "空响应", provider_type=provider_name
+                    )
+                return result
             except Exception as e:
                 last_error = e
                 if attempt < max_retries:
@@ -585,7 +638,7 @@ class AIService:
 
         for attempt in range(max_retries + 1):
             try:
-                return await provider.generate_with_tools(
+                result = await provider.generate_with_tools(
                     messages=messages,
                     config=config,
                     tools=tools,
@@ -594,6 +647,11 @@ class AIService:
                     model=model,
                     **kwargs,
                 )
+                if not result.content:
+                    raise GenerationError(
+                        "空响应", provider_type=provider_name
+                    )
+                return result
             except Exception as e:
                 last_error = e
                 if attempt < max_retries:
@@ -739,6 +797,11 @@ class AIService:
                         tools=None,
                         model=fallback_model,
                         **kwargs,
+                    )
+
+                if not result.content:
+                    raise GenerationError(
+                        "故障转移后仍为空响应", provider_type=fallback_name
                     )
 
                 log.info(f"故障转移到 Provider '{fallback_name}' 成功")
