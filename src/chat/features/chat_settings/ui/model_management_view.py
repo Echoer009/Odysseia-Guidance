@@ -36,7 +36,7 @@ class AddModelModal(Modal):
         providers: List[AiProvider],
         on_save: Callable[[Interaction, dict], Awaitable[None]],
     ):
-        super().__init__(title="添加 Model (1/2 基础信息)")
+        super().__init__(title="添加 Model")
         self.on_save = on_save
         self.providers = providers
 
@@ -77,76 +77,15 @@ class AddModelModal(Modal):
         )
         self.add_item(self.actual_model_input)
 
-        self.description_input = TextInput(
-            label="描述(可选)",
-            placeholder="模型的简短描述",
-            custom_id="description",
-            required=False,
-            max_length=500,
-        )
-        self.add_item(self.description_input)
-
-    async def on_submit(self, interaction: Interaction):
-        try:
-            provider_id = int(self.provider_id_input.value.strip())
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ Provider ID 必须是数字", ephemeral=True
-            )
-            return
-
-        data = {
-            "provider_id": provider_id,
-            "model_name": self.model_name_input.value.strip(),
-            "display_name": self.display_name_input.value.strip(),
-            "actual_model": self.actual_model_input.value.strip(),
-            "description": self.description_input.value.strip() or None,
-        }
-        await interaction.response.send_modal(
-            AddModelAbilitiesModal(data=data, on_save=self.on_save)
-        )
-
-
-class AddModelAbilitiesModal(Modal):
-    def __init__(
-        self,
-        data: dict,
-        on_save: Callable[[Interaction, dict], Awaitable[None]],
-    ):
-        super().__init__(title="添加 Model (2/2 能力与参数)")
-        self.base_data = data
-        self.on_save = on_save
-
         self.capabilities_input = TextInput(
             label="能力开关 (vision,tools,thinking)",
             placeholder="例: vision=true,tools=true,thinking=false",
             default="vision=true,tools=true,thinking=false",
             custom_id="capabilities",
-            required=True,
+            required=False,
             max_length=200,
         )
         self.add_item(self.capabilities_input)
-
-        self.max_tokens_input = TextInput(
-            label="最大输出 tokens",
-            placeholder="例: 8192",
-            default="8192",
-            custom_id="max_output_tokens",
-            required=True,
-            max_length=10,
-        )
-        self.add_item(self.max_tokens_input)
-
-        self.gen_config_input = TextInput(
-            label="生成参数 (JSON, 可选)",
-            default='{"temperature":1.0,"top_p":0.95,"max_output_tokens":8192}',
-            placeholder='{"temperature":1.0,"top_p":0.95,"max_output_tokens":8192}',
-            custom_id="gen_config",
-            required=False,
-            style=discord.TextStyle.paragraph,
-            max_length=1000,
-        )
-        self.add_item(self.gen_config_input)
 
     def _parse_capabilities(self, raw: str) -> dict:
         caps = {"supports_vision": False, "supports_tools": True, "supports_thinking": False}
@@ -166,32 +105,27 @@ class AddModelAbilitiesModal(Modal):
         return caps
 
     async def on_submit(self, interaction: Interaction):
-        import json
-
-        caps = self._parse_capabilities(self.capabilities_input.value)
-
         try:
-            max_output_tokens = int(self.max_tokens_input.value.strip())
+            provider_id = int(self.provider_id_input.value.strip())
         except ValueError:
             await interaction.response.send_message(
-                "❌ 最大输出 tokens 必须是数字", ephemeral=True
+                "❌ Provider ID 必须是数字", ephemeral=True
             )
             return
 
-        gen_config = None
-        if self.gen_config_input.value.strip():
-            try:
-                gen_config = json.loads(self.gen_config_input.value.strip())
-            except json.JSONDecodeError:
-                await interaction.response.send_message(
-                    "❌ 生成参数 JSON 格式错误", ephemeral=True
-                )
-                return
+        caps = self._parse_capabilities(self.capabilities_input.value)
 
-        self.base_data.update(caps)
-        self.base_data["max_output_tokens"] = max_output_tokens
-        self.base_data["generation_config"] = gen_config or dict(DEFAULT_GEN_CONFIG)
-        await self.on_save(interaction, self.base_data)
+        data = {
+            "provider_id": provider_id,
+            "model_name": self.model_name_input.value.strip(),
+            "display_name": self.display_name_input.value.strip(),
+            "actual_model": self.actual_model_input.value.strip(),
+            "description": None,
+            "max_output_tokens": 8192,
+            "generation_config": dict(DEFAULT_GEN_CONFIG),
+        }
+        data.update(caps)
+        await self.on_save(interaction, data)
 
 
 class EditModelModal(Modal):
