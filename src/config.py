@@ -33,10 +33,6 @@ GUILD_ID = os.getenv("GUILD_ID")
 # --- 代理配置 ---
 PROXY_URL = os.getenv("PROXY_URL")
 
-# --- Gemini API 配置 ---
-# 如果使用自定义的 API 端点（例如通过 Cloudflare Worker 代理），请在此设置
-GEMINI_API_BASE_URL = os.getenv("GEMINI_API_BASE_URL")
-
 # --- 权限控制 ---
 # 从 .env 文件加载并解析拥有管理权限的用户和角色 ID
 DEVELOPER_USER_IDS = _parse_ids("DEVELOPER_USER_IDS")

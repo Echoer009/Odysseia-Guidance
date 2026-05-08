@@ -83,37 +83,8 @@ else:
 
 
 # --- Gemini AI 配置 ---
-# 定义要使用的 Gemini 模型名称
-GEMINI_MODEL = "gemini-2.5-flash"
-
 # 用于个人记忆摘要的模型。
 SUMMARY_MODEL = "gemini-2.5-flash-custom"
-
-# --- 自定义 Gemini 端点配置 ---
-# 用于通过自定义 URL (例如公益站) 调用模型
-# 格式: "模型别名": {"base_url": "...", "api_key": "...", "model_name": "..."}
-CUSTOM_GEMINI_ENDPOINTS = {
-    "gemini-2.5-flash-custom": {
-        "base_url": os.getenv("CUSTOM_GEMINI_URL"),
-        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
-        "model_name": "gemini-2.5-flash",  # 该端点实际对应的模型名称
-    },
-    "gemini-3-pro-preview-custom": {
-        "base_url": os.getenv("CUSTOM_GEMINI_URL"),
-        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
-        "model_name": "gemini-3-pro-preview",
-    },
-    "gemini-2.5-pro-custom": {
-        "base_url": os.getenv("CUSTOM_GEMINI_URL"),
-        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
-        "model_name": "gemini-2.5-pro",
-    },
-    "gemini-3-flash-custom": {
-        "base_url": os.getenv("CUSTOM_GEMINI_URL"),
-        "api_key": os.getenv("CUSTOM_GEMINI_API_KEY"),
-        "model_name": "gemini-3-flash-preview",
-    },
-}
 
 # --- ComfyUI 图像生成配置 ---
 COMFYUI_CONFIG = {
@@ -586,9 +557,5 @@ IMAGE_PROCESSING_CONFIG = {
 DEBUG_CONFIG = {
     "LOG_FINAL_CONTEXT": False,  # 是否在日志中打印发送给AI的最终上下文，用于调试
     "LOG_AI_FULL_CONTEXT": os.getenv("LOG_AI_FULL_CONTEXT", "False").lower()
-    == "true",  # 是否记录AI可见的完整上下文日志
-    "LOG_DETAILED_GEMINI_PROCESS": os.getenv(
-        "LOG_DETAILED_GEMINI_PROCESS", "False"
-    ).lower()
-    == "true",  # 控制是否输出详细的Gemini处理过程日志（工具调用、思考等）
+    == "true",
 }
