@@ -554,9 +554,10 @@ class CoinService:
         uid = str(user_id)
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(CoinLoan).where(
-                    CoinLoan.user_id == uid, CoinLoan.status == "active"
-                )
+                select(CoinLoan)
+                .where(CoinLoan.user_id == uid, CoinLoan.status == "active")
+                .order_by(CoinLoan.id.desc())
+                .limit(1)
             )
             loan = result.scalar_one_or_none()
             if not loan:
@@ -578,63 +579,62 @@ class CoinService:
         if amount > max_loan:
             return False, f"❌ 单次最多只能借 {max_loan} 类脑币。"
 
-        active_loan = await self.get_active_loan(user_id)
-        if active_loan:
-            return (
-                False,
-                f"❌ 你还有一笔 **{active_loan['amount']}** 类脑币的借款尚未还清，请先还款。",
-            )
+        uid = str(user_id)
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(CoinLoan)
+                    .where(CoinLoan.user_id == uid, CoinLoan.status == "active")
+                    .with_for_update()
+                )
+                existing = result.first()
+                if existing:
+                    return (
+                        False,
+                        f"❌ 你还有一笔 **{existing[0].amount}** 类脑币的借款尚未还清，请先还款。",
+                    )
 
-        try:
-            await self.add_coins(user_id, amount, "从系统借款")
-
-            uid = str(user_id)
-            async with AsyncSessionLocal() as session:
                 loan = CoinLoan(user_id=uid, amount=amount)
                 session.add(loan)
-                await session.commit()
 
-            log.info(f"用户 {user_id} 成功借款 {amount} 类脑币。")
-            return True, f"✅ 成功借款 **{amount}** 类脑币！"
-        except Exception as e:
-            log.error(f"用户 {user_id} 借款失败: {e}")
-            return False, f"❌ 借款时发生未知错误: {e}"
+        await self.add_coins(user_id, amount, "从系统借款")
+
+        log.info(f"用户 {user_id} 成功借款 {amount} 类脑币。")
+        return True, f"✅ 成功借款 **{amount}** 类脑币！"
 
     async def repay_loan(self, user_id: int) -> tuple[bool, str]:
-        active_loan = await self.get_active_loan(user_id)
-        if not active_loan:
-            return False, "❌ 你当前没有需要偿还的贷款。"
-
-        loan_amount = active_loan["amount"]
-        current_balance = await self.get_balance(user_id)
-
-        if current_balance < loan_amount:
-            return (
-                False,
-                f"❌ 你的余额不足以偿还贷款。需要 **{loan_amount}**，你只有 **{current_balance}**。",
-            )
-
-        try:
-            new_balance = await self.remove_coins(user_id, loan_amount, "偿还系统贷款")
-            if new_balance is None:
-                return False, "❌ 还款失败，无法扣除类脑币。"
-
-            uid = str(user_id)
-            async with AsyncSessionLocal() as session:
+        uid = str(user_id)
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
                 result = await session.execute(
-                    select(CoinLoan).where(CoinLoan.id == active_loan["loan_id"])
+                    select(CoinLoan)
+                    .where(CoinLoan.user_id == uid, CoinLoan.status == "active")
+                    .order_by(CoinLoan.id.desc())
+                    .limit(1)
+                    .with_for_update()
                 )
                 loan = result.scalar_one_or_none()
-                if loan:
-                    loan.status = "paid"
-                    loan.paid_at = datetime.utcnow()
-                    await session.commit()
+                if not loan:
+                    return False, "❌ 你当前没有需要偿还的贷款。"
 
-            log.info(f"用户 {user_id} 成功偿还 {loan_amount} 类脑币的贷款。")
-            return True, f"✅ 成功偿还 **{loan_amount}** 类脑币的贷款！"
-        except Exception as e:
-            log.error(f"用户 {user_id} 还款失败: {e}")
-            return False, f"❌ 还款时发生未知错误: {e}"
+                loan_amount = loan.amount
+                current_balance = await self.get_balance(user_id)
+
+                if current_balance < loan_amount:
+                    return (
+                        False,
+                        f"❌ 你的余额不足以偿还贷款。需要 **{loan_amount}**，你只有 **{current_balance}**。",
+                    )
+
+                new_balance = await self.remove_coins(user_id, loan_amount, "偿还系统贷款")
+                if new_balance is None:
+                    return False, "❌ 还款失败，无法扣除类脑币。"
+
+                loan.status = "paid"
+                loan.paid_at = datetime.utcnow()
+
+        log.info(f"用户 {user_id} 成功偿还 {loan_amount} 类脑币的贷款。")
+        return True, f"✅ 成功偿还 **{loan_amount}** 类脑币的贷款！"
 
     async def get_transaction_history(
         self, user_id: int, limit: int = 10, offset: int = 0
