@@ -106,11 +106,7 @@ class SearchParams(BaseModel):
 
 
 def _auto_route(query: str) -> List[str]:
-    sources = ["forum", "channel"]
-    q = query.lower() if query else ""
-    if any(kw in q for kw in TUTORIAL_KEYWORDS):
-        sources.append("tutorial")
-    return sources
+    return ["forum", "channel", "tutorial"]
 
 
 def _format_channel_results(messages: List[Dict]) -> List[Dict[str, Any]]:

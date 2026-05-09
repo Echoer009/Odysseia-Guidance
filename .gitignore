@@ -305,3 +305,5 @@ src/chat/features/games/blackjack-web/vite.config.ts
 /ollama_data/
 # Ignore tutorial source files, as they are processed into the database
 tutorial/
+
+AGENTS.md

@@ -408,7 +408,7 @@ class ChatService:
 
             # --- 为特定工具调用添加后缀 ---
             if _search_scopes and any(
-                "tutorial" in scope for scope in _search_scopes
+                scope in ("tutorial", "auto") for scope in _search_scopes
             ):
                 final_response += chat_config.TUTORIAL_SEARCH_SUFFIX
 
