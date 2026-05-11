@@ -125,7 +125,7 @@ GPT_IMAGE_CONFIG = {
     "MODEL": os.getenv("GPT_IMAGE_MODEL", "gpt-image-2"),
     "SIZE": "1024x1024",
     "QUALITY": "medium",
-    "TIMEOUT": 60,
+    "TIMEOUT": 120,
     "REFERENCE_IMAGE_URL": os.getenv(
         "GPT_IMAGE_REFERENCE_URL",
         "https://cdn.discordapp.com/attachments/1403347767912562728/1418576178326802524/3_632830043818943_00001_.png",
