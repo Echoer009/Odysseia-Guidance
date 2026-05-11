@@ -467,6 +467,9 @@ async def main():
     # 异步初始化 AI Service（从 PG 数据库加载 Provider 和 Model 配置）
     await ai_service.initialize()
 
+    from src.chat.services.gpt_image_service import gpt_image_service
+    await gpt_image_service.initialize()
+
     # 为 context_service_test 注入 bot 实例，使其能够访问缓存
     from src.chat.services.context_service_test import initialize_context_service_test
 

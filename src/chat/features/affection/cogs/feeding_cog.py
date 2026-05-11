@@ -1,6 +1,8 @@
 import discord
 import json
 import io
+import re
+import time
 from discord import app_commands
 from discord.ext import commands
 
@@ -11,6 +13,7 @@ from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.event_service import event_service
+from src.chat.services.gpt_image_service import gpt_image_service
 from src.chat.config.chat_config import (
     FEEDING_CONFIG,
     PROMPT_CONFIG,
@@ -19,6 +22,7 @@ from src.chat.config.chat_config import (
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
+from src.chat.utils.database import chat_db_manager
 from src.config import DEVELOPER_USER_IDS
 from src.chat.features.affection.utils.interaction_checks import (
     check_command_availability,
@@ -30,19 +34,77 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_TAG_PATTERN = re.compile(r"`?\s*<([^>]*:[^>]*;[^>]*)>\s*`?", re.DOTALL)
+
+
+def _parse_feeding_response(response_text: str):
+    matches = _TAG_PATTERN.findall(response_text)
+    if not matches:
+        return None
+
+    tag_content = matches[-1]
+
+    start = response_text.rfind(f"<{tag_content}>")
+    if start == -1:
+        start = response_text.rfind(f"<{tag_content}")
+    evaluation = response_text[:start].strip()
+
+    fields = {}
+    for pair in tag_content.split(";"):
+        pair = pair.strip()
+        if ":" in pair:
+            key, value = pair.split(":", 1)
+            fields[key.strip().lower()] = value.strip()
+
+    try:
+        affection_gain = int(fields.get("affection", "1"))
+    except ValueError:
+        affection_gain = 1
+    try:
+        coin_gain = int(fields.get("coins", "10"))
+    except ValueError:
+        coin_gain = 10
+
+    is_food = fields.get("is_food", None)
+    if is_food is None:
+        coin_val = 0
+        try:
+            coin_val = int(fields.get("coins", "0"))
+        except ValueError:
+            pass
+        is_food = coin_val >= 50
+    else:
+        is_food = is_food == "是"
+
+    food_desc = fields.get("food_desc", "").strip()
+    if food_desc in ("", "无"):
+        food_desc = ""
+
+    scene_desc = fields.get("scene_desc", "").strip()
+    if scene_desc in ("", "无"):
+        scene_desc = ""
+
+    return {
+        "evaluation": evaluation,
+        "affection_gain": affection_gain,
+        "coin_gain": coin_gain,
+        "is_food": is_food,
+        "food_desc": food_desc,
+        "scene_desc": scene_desc,
+    }
+
 
 class FeedingCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.affection_service = AffectionService()
         self.coin_service = CoinService()
-        self.ai_service = ai_service  # 使用全局实例
+        self.ai_service = ai_service
         self.feeding_service = feeding_service
 
     @app_commands.command(name="投喂", description="在吃饭?给类脑娘来一口怎么样")
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
-        # --- 综合可用性检查（频道 + 帖子拥有者的命令设置）---
         is_allowed, error_message = await check_command_availability(
             interaction, "投喂"
         )
@@ -53,9 +115,7 @@ class FeedingCog(commands.Cog):
         user_id_int = interaction.user.id
         user_id_str = str(user_id_int)
 
-        # 检查用户是否为开发者，如果是，则绕过冷却时间检查
         if user_id_int not in DEVELOPER_USER_IDS:
-            # 使用 FeedingService 检查是否可以投喂
             can_feed, message = await self.feeding_service.can_feed(user_id_str)
             if not can_feed:
                 await interaction.response.send_message(message, ephemeral=False)
@@ -72,15 +132,11 @@ class FeedingCog(commands.Cog):
         try:
             image_bytes = await image.read()
 
-            # 构建包含类脑娘人设的提示词
             system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
             persona_part = extract_persona_prompt(system_prompt)
             base_prompt = PROMPT_CONFIG.get("feeding_prompt", "")
             prompt = f"{persona_part}\n\n{base_prompt}"
 
-            # 构建 messages 格式（带图片）
-            # 注意：AIService 会自动检测 Provider 是否支持视觉
-            # 如果不支持，会使用 Ollama Vision 将图片转换为文字描述
             messages = [
                 {
                     "role": "user",
@@ -102,11 +158,8 @@ class FeedingCog(commands.Cog):
                 ),
             )
 
-            # 获取用户配置的 AI 模型
             model_id = await chat_settings_service.get_current_ai_model()
 
-            # 启用视觉转译（投喂功能需要识别图片内容）
-            # 即使 Provider 不支持视觉，也会使用 Ollama Vision 进行转换
             result = await ai_service.generate(
                 messages=messages, config=config, model=model_id, enable_vision=True
             )
@@ -118,45 +171,45 @@ class FeedingCog(commands.Cog):
                 )
                 return
 
-            # 使用正则表达式解析返回的文本
-            import re
+            parsed = _parse_feeding_response(response_text)
 
-            pattern = re.compile(
-                r"(.*?)`?\s*<affection:\s*([+-]?\d+)\s*;\s*coins:\s*([+-]?\d+)\s*>\s*`?",
-                re.DOTALL | re.IGNORECASE,
-            )
-            match = pattern.search(response_text)
-
-            if not match:
+            if not parsed:
                 logger.error(f"解析投喂评价失败。原始文本: '{response_text}'")
-                # 如果解析失败，直接将 AI 的回复作为评价，并给予默认奖励
                 evaluation = response_text
                 affection_gain = 1
                 coin_gain = 10
+                is_food = False
+                food_desc = ""
+                scene_desc = ""
             else:
-                evaluation = match.group(1).strip()
-                affection_gain = int(match.group(2))
-                coin_gain = int(match.group(3))
+                evaluation = parsed["evaluation"]
+                affection_gain = parsed["affection_gain"]
+                coin_gain = parsed["coin_gain"]
+                is_food = parsed["is_food"]
+                food_desc = parsed["food_desc"]
+                scene_desc = parsed["scene_desc"]
+
+            logger.info(
+                f"投喂解析结果: is_food={is_food}, food_desc='{food_desc}', "
+                f"coins={coin_gain}, affection={affection_gain}, "
+                f"原始回复前80字: '{response_text[:80]}'"
+            )
 
             await self.affection_service.add_affection_points(
                 user_id_int, affection_gain
             )
 
-            # 只有当 coin_gain 是正数时才增加类脑币
             if coin_gain > 0:
                 await self.coin_service.add_coins(
                     user_id_int, coin_gain, reason="投喂奖励"
                 )
 
-            # 替换表情并添加奖励消息
             evaluation_with_emojis = replace_emojis(evaluation)
 
-            # 格式化系统提示，仅在获得奖励时显示
             system_message = ""
             if coin_gain > 0:
                 system_message = f"> 你获得了 {coin_gain} 枚类脑币！"
 
-            # 创建 Embed
             embed_description = evaluation_with_emojis
             if system_message:
                 embed_description += f"\n\n{system_message}"
@@ -166,30 +219,64 @@ class FeedingCog(commands.Cog):
 
             embed = discord.Embed(
                 description=embed_description,
-                color=discord.Color.pink(),  # 你可以自定义颜色
+                color=discord.Color.pink(),
             )
 
-            # 设置作者信息
             embed.set_author(
                 name=interaction.user.display_name,
                 icon_url=interaction.user.display_avatar.url,
             )
 
-            # 从配置中获取图片 URL
-            # --- 动态获取图片 ---
-
-            # 将用户上传的图片作为缩略图
             file = discord.File(fp=io.BytesIO(image_bytes), filename=image.filename)
             embed.set_thumbnail(url=f"attachment://{image.filename}")
 
-            # 检查是否在豁免频道，如果是，则显示大图
             is_unrestricted = (
                 interaction.channel
                 and interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
                 or isinstance(interaction.channel, discord.Thread)
             )
-            if is_unrestricted:
-                # 首先尝试使用派系专属图片
+
+            attachments = [file]
+
+            generated_image_bytes = None
+            if is_food and is_unrestricted and gpt_image_service.is_available:
+                feeding_image_value = await chat_db_manager.get_global_setting(
+                    "feeding_image_enabled"
+                )
+                feeding_image_enabled = (
+                    feeding_image_value.lower() in ("true", "1", "yes", "on")
+                    if feeding_image_value is not None
+                    else True
+                )
+                if feeding_image_enabled:
+                    gen_start = time.time()
+                    try:
+                        generated_image_bytes = await gpt_image_service.generate_feeding_image(
+                            food_image_bytes=image_bytes,
+                            food_mime_type=image.content_type,
+                            food_description=food_desc,
+                            scene_description=scene_desc,
+                        )
+                    except Exception as e:
+                        gen_elapsed = time.time() - gen_start
+                        logger.warning(
+                            f"GPT Image 生图异常, 耗时 {gen_elapsed:.2f}s: {e}"
+                        )
+                    else:
+                        gen_elapsed = time.time() - gen_start
+                        if generated_image_bytes:
+                            logger.info(
+                                f"GPT Image 生图成功, 耗时 {gen_elapsed:.2f}s, "
+                                f"大小 {len(generated_image_bytes)} bytes"
+                            )
+
+            if generated_image_bytes:
+                gen_file = discord.File(
+                    io.BytesIO(generated_image_bytes), filename="feeding_generated.png"
+                )
+                embed.set_image(url="attachment://feeding_generated.png")
+                attachments.append(gen_file)
+            elif is_unrestricted:
                 sticker_url = None
                 selected_faction_id = event_service.get_selected_faction()
                 if selected_faction_id:
@@ -202,21 +289,18 @@ class FeedingCog(commands.Cog):
                                 )
                                 break
 
-                # 如果没有找到派系图片，使用默认配置
                 if not sticker_url:
                     sticker_url = FEEDING_CONFIG.get("RESPONSE_IMAGE_URL")
 
                 if sticker_url:
                     embed.set_image(url=sticker_url)
 
-            # 添加页脚用于上下文识别
             embed.set_footer(text="类脑娘对你的投喂做出回应...")
 
-            # 记录投喂事件
             await self.feeding_service.record_feeding(user_id_str)
 
             await interaction.edit_original_response(
-                content=None, embed=embed, attachments=[file]
+                content=None, embed=embed, attachments=attachments
             )
 
         except json.JSONDecodeError:

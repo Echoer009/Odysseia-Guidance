@@ -96,6 +96,18 @@ class ChatSettingsView(View):
             )
         )
 
+        feeding_image_enabled = self.settings.get("global", {}).get(
+            "feeding_image_enabled", True
+        )
+        self.add_item(
+            Button(
+                label=f"投喂生图: {'开' if feeding_image_enabled else '关'}",
+                style=ButtonStyle.green if feeding_image_enabled else ButtonStyle.red,
+                custom_id="feeding_image_toggle",
+                row=0,
+            )
+        )
+
         # 活动派系选择器 (第 1 行)
         if self.factions:
             faction_options = [
@@ -224,6 +236,8 @@ class ChatSettingsView(View):
             await self.on_warm_up_toggle(interaction)
         elif custom_id == "api_fallback_toggle":
             await self.on_api_fallback_toggle(interaction)
+        elif custom_id == "feeding_image_toggle":
+            await self.on_feeding_image_toggle(interaction)
         elif custom_id == "cooldown_settings":
             await self.on_cooldown_settings(interaction)
         elif custom_id == "warm_up_settings":
@@ -274,6 +288,16 @@ class ChatSettingsView(View):
         # 更新全局设置
         await self.service.db_manager.set_global_setting(
             "api_fallback_enabled", str(new_state)
+        )
+        await self._update_view(interaction)
+
+    async def on_feeding_image_toggle(self, interaction: Interaction):
+        current_state = self.settings.get("global", {}).get(
+            "feeding_image_enabled", True
+        )
+        new_state = not current_state
+        await self.service.db_manager.set_global_setting(
+            "feeding_image_enabled", str(new_state)
         )
         await self._update_view(interaction)
 

@@ -54,6 +54,15 @@ class ChatSettingsService:
             else True
         )
 
+        feeding_image_value = await self.db_manager.get_global_setting(
+            "feeding_image_enabled"
+        )
+        feeding_image_enabled = (
+            feeding_image_value.lower() in ("true", "1", "yes", "on")
+            if feeding_image_value is not None
+            else True
+        )
+
         settings = {
             "global": {
                 "chat_enabled": global_config_row["chat_enabled"]
@@ -63,6 +72,7 @@ class ChatSettingsService:
                 if global_config_row
                 else True,
                 "api_fallback_enabled": api_fallback_enabled,
+                "feeding_image_enabled": feeding_image_enabled,
             },
             "channels": {
                 config["entity_id"]: {
