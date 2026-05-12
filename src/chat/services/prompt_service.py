@@ -1349,6 +1349,7 @@ class PromptService:
 
             # 检测是否为JSON格式并分别处理
             is_json = False
+            json_data: Any = None
             try:
                 # 尝试解析JSON
                 json_data = json.loads(content_str)

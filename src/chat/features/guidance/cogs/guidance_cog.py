@@ -143,17 +143,20 @@ class GuidanceCog(commands.Cog):
             return
 
         channel = self.bot.get_channel(GUIDANCE_CHANNEL_ID)
-        if not channel:
+        if not channel or not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
             try:
                 channel = await self.bot.fetch_channel(GUIDANCE_CHANNEL_ID)
             except Exception as e:
                 log.error(f"Cannot fetch guidance channel {GUIDANCE_CHANNEL_ID}: {e}")
                 return
 
+        if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
+            return
+
         if self._guidance_message_id:
             try:
                 old_msg = await channel.fetch_message(self._guidance_message_id)
-                if old_msg and old_msg.author.id == self.bot.user.id:
+                if old_msg and self.bot.user and old_msg.author.id == self.bot.user.id:
                     if old_msg.channel.id == GUIDANCE_CHANNEL_ID:
                         log.info(
                             f"Guidance channel message {self._guidance_message_id} exists in current channel, skipping."
@@ -176,7 +179,7 @@ class GuidanceCog(commands.Cog):
         from src.chat.utils.database import chat_db_manager
 
         guidance_url = (
-            f"https://discord.com/channels/{msg.guild.id}/{msg.channel.id}/{msg.id}"
+            f"https://discord.com/channels/{msg.guild.id if msg.guild else GUILD_ID}/{msg.channel.id}/{msg.id}"
         )
         await chat_db_manager.set_global_setting("guidance_message_id", str(msg.id))
         await chat_db_manager.set_global_setting("guidance_url", guidance_url)

@@ -27,7 +27,7 @@ class ThreadCommentorCog(commands.Cog):
         由中央事件处理器调用的公共方法，用于对新帖子进行暖贴评价。
         """
         # 检查发帖人是否为机器人本身，避免自我循环
-        if thread.owner_id == self.bot.user.id:
+        if self.bot.user and thread.owner_id == self.bot.user.id:
             log.info(
                 f"[ThreadCommentorCog] 帖子 '{thread.name}' 由机器人自己创建，跳过。"
             )

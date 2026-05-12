@@ -876,6 +876,8 @@ class ConversationBlocksView(BaseTableView):
         try:
             cursor = db_services.get_cursor(conn)
 
+            total_rows = 0
+
             if self.search_mode:
                 # 搜索模式
                 start_idx = self.current_page * self.items_per_page

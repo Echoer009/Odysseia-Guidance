@@ -300,7 +300,7 @@ class ProviderManagementView(View):
             await save_interaction.response.send_message(
                 f"✅ Provider `{data['name']}` 添加成功！", ephemeral=True
             )
-            await self._refresh(save_interaction)
+            await self._do_refresh(save_interaction)
 
         modal = AddProviderModal(on_save)
         await interaction.response.send_modal(modal)
@@ -331,13 +331,14 @@ class ProviderManagementView(View):
                 }
                 if data.get("api_key"):
                     kwargs["api_key"] = data["api_key"]
+                assert self.selected_provider_id is not None
                 await ai_config_service.update_provider(
                     session, self.selected_provider_id, **kwargs
                 )
             await save_interaction.response.send_message(
                 f"✅ Provider `{data['provider_name']}` 已更新！", ephemeral=True
             )
-            await self._refresh(save_interaction)
+            await self._do_refresh(save_interaction)
 
         modal = EditProviderModal(
             provider_name=provider.name,
@@ -365,7 +366,7 @@ class ProviderManagementView(View):
                 )
 
         await interaction.response.defer()
-        await self._refresh(interaction)
+        await self._do_refresh(interaction)
 
     async def _on_delete(self, interaction: Interaction):
         if not self.selected_provider_id:
@@ -376,13 +377,13 @@ class ProviderManagementView(View):
         self.selected_provider_id = None
 
         await interaction.response.defer()
-        await self._refresh(interaction)
+        await self._do_refresh(interaction)
 
     async def _on_back(self, interaction: Interaction):
         self.stop()
         await self.on_back_callback(interaction)
 
-    async def _refresh(self, interaction: Interaction):
+    async def _do_refresh(self, interaction: Interaction):
         async with AsyncSessionLocal() as session:
             self.providers = await ai_config_service.get_all_providers(session)
         self._build_view()

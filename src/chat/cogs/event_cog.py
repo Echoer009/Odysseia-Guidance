@@ -17,7 +17,7 @@ class EventCog(commands.Cog):
         self.faction_service = faction_service
         self.check_event_status.start()
 
-    def cog_unload(self):
+    async def cog_unload(self):
         self.check_event_status.cancel()
 
     @tasks.loop(minutes=1)

@@ -20,7 +20,7 @@ class AffectionCog(commands.Cog):
         # 每天凌晨 00:05 执行
         self.daily_task.start()
 
-    def cog_unload(self):
+    async def cog_unload(self):
         self.daily_task.cancel()
 
     @tasks.loop(time=time(0, 5, tzinfo=timezone(timedelta(hours=8))))

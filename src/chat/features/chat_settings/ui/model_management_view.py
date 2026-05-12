@@ -449,7 +449,7 @@ class ModelManagementView(View):
             await save_interaction.response.send_message(
                 f"✅ Model `{data['model_name']}` 添加成功！", ephemeral=True
             )
-            await self._refresh(save_interaction)
+            await self._do_refresh(save_interaction)
 
         modal = AddModelModal(self.providers, on_save)
         await interaction.response.send_modal(modal)
@@ -495,7 +495,7 @@ class ModelManagementView(View):
             await save_interaction.response.send_message(
                 f"✅ Model `{data['model_name']}` 已更新！", ephemeral=True
             )
-            await self._refresh(save_interaction)
+            await self._do_refresh(save_interaction)
 
         modal = EditModelModal(
             model_name=model.model_name,
@@ -529,7 +529,7 @@ class ModelManagementView(View):
                 )
 
         await interaction.response.defer()
-        await self._refresh(interaction)
+        await self._do_refresh(interaction)
 
     async def _on_delete(self, interaction: Interaction):
         if not self.selected_model_id:
@@ -540,13 +540,13 @@ class ModelManagementView(View):
         self.selected_model_id = None
 
         await interaction.response.defer()
-        await self._refresh(interaction)
+        await self._do_refresh(interaction)
 
     async def _on_back(self, interaction: Interaction):
         self.stop()
         await self.on_back_callback(interaction)
 
-    async def _refresh(self, interaction: Interaction):
+    async def _do_refresh(self, interaction: Interaction):
         async with AsyncSessionLocal() as session:
             self.models = await ai_config_service.get_all_models(session)
             self.providers = await ai_config_service.get_all_providers(session)

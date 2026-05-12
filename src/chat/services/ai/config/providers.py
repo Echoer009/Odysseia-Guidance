@@ -95,9 +95,12 @@ async def get_provider_configs_from_db() -> Dict[str, ProviderConfig]:
                     provider_type = "custom"
                     extra["original_provider"] = "gemini"
 
+                from typing import cast as _cast
+                valid_types = ("gemini", "deepseek", "openai_compatible", "custom")
+                ptype = provider_type if provider_type in valid_types else "custom"
                 configs[provider.name] = ProviderConfig(
                     name=provider.name,
-                    type=provider_type,
+                    type=_cast(Literal["gemini", "deepseek", "openai_compatible", "custom"], ptype),
                     api_key=api_key,
                     base_url=provider.base_url,
                     models=model_names,

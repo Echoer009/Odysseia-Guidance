@@ -129,11 +129,11 @@ class EventPanelView(discord.ui.View):
         return embed
 
     async def back_to_shop_callback(self, interaction: discord.Interaction):
-        """点击“返回商店”按钮的回调。"""
+        """点击"返回商店"按钮的回调。"""
         embeds_to_send = []
         event_promo_embed = await self.create_event_embed()
         embeds_to_send.append(event_promo_embed)
-        shop_embed = self.main_shop_view.create_shop_embed()
+        shop_embed = self.main_shop_view.create_shop_embed()  # type: ignore[attr-defined]
         embeds_to_send.append(shop_embed)
         await interaction.response.edit_message(
             embeds=embeds_to_send, view=self.main_shop_view
@@ -161,9 +161,11 @@ class FactionSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.selected_faction_id = self.values[0]
-        self.view.selected_item_id = None  # Reset item
-        await self.view.update_view(interaction)
+        view = self.view
+        assert isinstance(view, EventPanelView)
+        view.selected_faction_id = self.values[0]
+        view.selected_item_id = None  # Reset item
+        await view.update_view(interaction)
 
 
 class EventItemSelect(discord.ui.Select):
@@ -213,8 +215,10 @@ class EventItemSelect(discord.ui.Select):
             )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.selected_item_id = self.values[0]
-        await self.view.update_view(interaction)
+        view = self.view
+        assert isinstance(view, EventPanelView)
+        view.selected_item_id = self.values[0]
+        await view.update_view(interaction)
 
 
 class EventPurchaseButton(discord.ui.Button):
@@ -230,6 +234,7 @@ class EventPurchaseButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         view = self.view
+        assert isinstance(view, EventPanelView)
         if not all(
             [
                 view.selected_faction_id,
@@ -286,6 +291,7 @@ class EventPurchaseButton(discord.ui.Button):
 
         # 3. Add points to the faction
         try:
+            assert view.selected_faction_id is not None
             await view.faction_service.add_points_to_faction(
                 user_id=interaction.user.id,
                 item_id=selected_item["item_id"],

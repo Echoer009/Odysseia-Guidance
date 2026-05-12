@@ -906,9 +906,9 @@ class AIService:
             log.info(
                 "[AIService] 检测到图片内容，Provider 不支持视觉，使用 Ollama Vision 转换"
             )
-            # 延迟导入避免循环依赖
-            from src.chat.services.ollama_vision_service import ollama_vision_service
+            from src.chat.services.ollama_vision_service import ollama_vision_service as _ollama_vision_service
         else:
+            _ollama_vision_service = None
             log.info(
                 "[AIService] 检测到图片内容，Provider 不支持视觉，使用占位符替换（节省内存）"
             )
@@ -933,6 +933,7 @@ class AIService:
                             source = part.get("source", "unknown")
 
                             if enable_vision:
+                                assert _ollama_vision_service is not None
                                 image_bytes = part.get("image_bytes")
                                 mime_type = part.get("mime_type", "image/png")
 
@@ -941,11 +942,11 @@ class AIService:
                                     vision_prompt = kwargs.get("vision_prompt")
                                     try:
                                         if vision_prompt:
-                                            description = await ollama_vision_service.describe_image(
+                                            description = await _ollama_vision_service.describe_image(
                                                 image_bytes, vision_prompt, mime_type
                                             )
                                         else:
-                                            description = await ollama_vision_service.describe_image(
+                                            description = await _ollama_vision_service.describe_image(
                                                 image_bytes,
                                                 "请用中文描述这张图片的内容。",
                                                 mime_type,
@@ -986,6 +987,7 @@ class AIService:
                             source = part.get("source", "unknown")
 
                             if enable_vision:
+                                assert _ollama_vision_service is not None
                                 import base64
 
                                 image_url_data = part.get("image_url", {})
@@ -1010,11 +1012,11 @@ class AIService:
                                         # 获取自定义提示词或使用默认
                                         vision_prompt = kwargs.get("vision_prompt")
                                         if vision_prompt:
-                                            description = await ollama_vision_service.describe_image(
+                                            description = await _ollama_vision_service.describe_image(
                                                 image_bytes, vision_prompt, mime_type
                                             )
                                         else:
-                                            description = await ollama_vision_service.describe_image(
+                                            description = await _ollama_vision_service.describe_image(
                                                 image_bytes,
                                                 "请用中文描述这张图片的内容。",
                                                 mime_type,

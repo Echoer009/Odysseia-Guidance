@@ -2,6 +2,7 @@ import logging
 from typing import Optional, List, Dict, Any
 import json
 import os
+import psycopg2
 
 import asyncio
 
@@ -161,17 +162,16 @@ class WorldBookService:
         # 直接使用 RAG 服务的数据库连接
         conn = incremental_rag_service._get_parade_connection()
         if not conn:
-            log.error("ParadeDB 连接不可用，无法添加知识条目。")
             return False
 
+        cursor = None
         try:
             from psycopg2.extras import DictCursor
 
             cursor = conn.cursor(cursor_factory=DictCursor)
 
             # 1. 检查或创建类别 (假设 category_id=5 存在)
-            # 在 ParadeDB 中，我们暂时不处理动态类别创建，简化逻辑
-            category_id = 5  # 假设 "通用知识" 类别 ID 为 5
+            category_id = 5
             log.debug(f"使用固定的类别 ID: {category_id}")
 
             # 2. 准备内容数据
@@ -215,7 +215,6 @@ class WorldBookService:
             conn.commit()
             log.info(f"成功添加知识条目: ID={new_id} ({title})")
 
-            # 异步调用增量RAG服务，使用正确的整数 ID
             log.info(f"正在为新知识条目 ID={new_id} 创建异步向量化任务...")
             asyncio.create_task(
                 incremental_rag_service.process_general_knowledge(str(new_id))
@@ -229,9 +228,8 @@ class WorldBookService:
                 conn.rollback()
             return False
         finally:
-            if "cursor" in locals() and cursor:
+            if cursor:
                 cursor.close()
-            # 注意：不在这里关闭连接，因为连接由 RAG 服务管理
 
     async def get_profile_by_discord_id(
         self, discord_id: int
@@ -254,7 +252,6 @@ class WorldBookService:
         try:
             # 使用异步游标
             from psycopg2.extras import RealDictCursor
-            import psycopg2
 
             # 创建一个新的游标
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:

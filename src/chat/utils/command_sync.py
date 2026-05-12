@@ -36,6 +36,9 @@ async def sync_commands(
     # 2. 获取服务器上所有的全局命令
     try:
         logger.info("正在从 Discord 获取所有全局命令...")
+        if not bot.application_id:
+            logger.error("Bot application_id 未设置，无法获取全局命令。")
+            return
         remote_payload = await bot.http.get_global_commands(bot.application_id)
         logger.info(f"从 Discord 成功获取 {len(remote_payload)} 个命令。")
     except discord.HTTPException as e:
@@ -72,8 +75,11 @@ async def sync_commands(
     # 6. 执行批量更新
     try:
         logger.info(f"正在向 Discord 推送 {len(final_payload)} 个命令进行同步...")
+        if not bot.application_id:
+            logger.error("Bot application_id 未设置，无法同步命令。")
+            return
         await bot.http.bulk_upsert_global_commands(
-            bot.application_id, payload=final_payload
+            bot.application_id, payload=final_payload  # type: ignore[arg-type]
         )
         final_names = [p["name"] for p in final_payload]
         logger.info(f"命令同步成功! 当前服务器命令: {final_names}")

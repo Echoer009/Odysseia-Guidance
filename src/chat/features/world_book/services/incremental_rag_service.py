@@ -323,11 +323,11 @@ class IncrementalRAGService:
         return success
 
     def _get_community_member_data(self, member_id: str) -> Dict[str, Any] | None:
-        """从 Parade DB 获取社区成员数据"""
         conn = self._get_parade_connection()
         if not conn:
             return None
 
+        cursor = None
         try:
             cursor = conn.cursor(cursor_factory=DictCursor)
             cursor.execute(
@@ -465,8 +465,9 @@ class IncrementalRAGService:
             log.warning(f"Gemini 服务尚未准备就绪，无法处理条目 {entry.get('id')}")
             return False
 
+        entry_id = entry.get("id", "未知ID")
+
         try:
-            entry_id = entry.get("id", "未知ID")
             log.debug(f"开始处理单个条目到 Parade DB: {entry_id}")
 
             # 构建文档文本
@@ -722,11 +723,11 @@ class IncrementalRAGService:
         return success
 
     def _get_general_knowledge_data(self, entry_id: str) -> Dict[str, Any] | None:
-        """从 Parade DB 获取通用知识条目数据"""
         conn = self._get_parade_connection()
         if not conn:
             return None
 
+        cursor = None
         try:
             cursor = conn.cursor(cursor_factory=DictCursor)
             cursor.execute(
@@ -746,9 +747,9 @@ class IncrementalRAGService:
 
                 # 解析 full_text 字段
                 full_text = entry_dict.get("full_text", "")
+                cleaned_full_text = full_text.strip() if full_text else ""
                 if full_text:
                     try:
-                        cleaned_full_text = full_text.strip()
                         if cleaned_full_text.startswith("{"):
                             content_data = json.loads(cleaned_full_text)
                         else:

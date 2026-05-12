@@ -464,6 +464,8 @@ class ReviewService:
             new_entry_id = None
 
             parade_conn = None
+            embed_title = "✅ 已通过审核"
+            embed_description = "条目已成功通过审核。"
             try:
                 parade_conn = get_parade_db_connection()
                 if not parade_conn:

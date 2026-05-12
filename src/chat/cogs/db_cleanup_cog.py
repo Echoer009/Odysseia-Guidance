@@ -17,7 +17,7 @@ class DBCleanupCog(commands.Cog):
         self.bot = bot
         self.cleanup_timestamps.start()
 
-    def cog_unload(self):
+    async def cog_unload(self):
         self.cleanup_timestamps.cancel()
 
     @tasks.loop(time=time(hour=4, minute=0, tzinfo=timezone(timedelta(hours=8))))

@@ -10,9 +10,9 @@ log = logging.getLogger(__name__)
 class SellBodySubmissionModal(discord.ui.Modal, title="拉皮条！"):
     """用于用户提交自定义卖屁股事件的模态窗口"""
 
-    def __init__(self, purchase_info: Dict[str, Any] = None):
+    def __init__(self, purchase_info: Dict[str, Any] | None = None):
         super().__init__()
-        self.purchase_info = purchase_info
+        self.purchase_info = purchase_info or {}
 
         self.event_name_input = discord.ui.TextInput(
             label="服务项目",

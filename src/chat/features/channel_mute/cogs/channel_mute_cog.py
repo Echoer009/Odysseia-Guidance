@@ -28,6 +28,8 @@ class ChannelMuteCog(commands.Cog):
         发起一个投票，如果票数足够，机器人将在当前频道被禁言。
         """
         channel_id = interaction.channel_id
+        if channel_id is None:
+            return
 
         # 0. 检查是否在豁免频道
         # 检查是否在豁免频道，或当前频道是否为帖子
@@ -42,7 +44,7 @@ class ChannelMuteCog(commands.Cog):
             return
 
         # 1. 检查频道是否已经被禁言
-        if await chat_db_manager.is_channel_muted(channel_id):
+        if await chat_db_manager.is_channel_muted(int(channel_id)):
             await interaction.response.send_message(
                 "我已经在这个频道闭嘴了哦。", ephemeral=True
             )
@@ -93,7 +95,7 @@ class ChannelMuteCog(commands.Cog):
             return
 
         # 3. 忽略机器人自己的反应
-        if payload.user_id == self.bot.user.id:
+        if self.bot.user is None or payload.user_id == self.bot.user.id:
             return
 
         # 4. 检查是否是 ✅ 反应
@@ -102,7 +104,7 @@ class ChannelMuteCog(commands.Cog):
 
         channel_id = vote_info["channel_id"]
         channel = self.bot.get_channel(channel_id)
-        if not channel:
+        if not channel or not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
             return
 
         try:

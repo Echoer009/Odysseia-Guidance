@@ -78,7 +78,8 @@ class TransactionHistoryView(discord.ui.View):
         """根据当前页面更新视图和Embed"""
         embed = await self._build_embed()
         self._update_buttons()
-        await self.message.edit(embed=embed, view=self)
+        if self.message:
+            await self.message.edit(embed=embed, view=self)
 
     def _update_buttons(self):
         """更新分页按钮的状态"""

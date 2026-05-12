@@ -25,9 +25,7 @@ class WorldBookCog(commands.Cog):
         # 定时任务已移至 ReviewService
         # self.check_expired_entries.start()
 
-    def cog_unload(self):
-        # 定时任务已移至 ReviewService
-        # self.check_expired_entries.cancel()
+    async def cog_unload(self):
         pass
 
     @commands.Cog.listener("on_raw_reaction_add")
@@ -36,7 +34,7 @@ class WorldBookCog(commands.Cog):
         监听对审核消息的反应，并将其转发给 ReviewService。
         """
         # 步骤 1: 忽略机器人自己的反应
-        if payload.user_id == self.bot.user.id:
+        if self.bot.user is None or payload.user_id == self.bot.user.id:
             return
 
         # 步骤 2: 检查是否是有效的投票表情

@@ -129,6 +129,7 @@ class FeedingCog(commands.Cog):
             )
             return
 
+        response_text = ""
         try:
             image_bytes = await image.read()
 
