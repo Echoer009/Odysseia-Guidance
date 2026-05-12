@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import base64
 import random
 import time
@@ -158,14 +159,38 @@ class GPTImageService:
             "response_format": "b64_json",
         }
 
-        response = await client.post("/images/edits", files=files, data=data)
-        response.raise_for_status()
-        return self._extract_image(response.json())
+        max_retries = 2
+        last_exception = None
+        for attempt in range(1 + max_retries):
+            try:
+                response = await client.post(
+                    "/images/edits", files=files, data=data, timeout=180.0
+                )
+                response.raise_for_status()
+                return self._extract_image(response.json())
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries:
+                    wait = 2 * (attempt + 1)
+                    log.warning(
+                        f"GPTImageService: [EDIT] 第 {attempt + 1}/{1 + max_retries} 次失败 ({e}), "
+                        f"{wait}s 后重试..."
+                    )
+                    await asyncio.sleep(wait)
+
+        log.warning(f"GPTImageService: [EDIT] 重试 {max_retries} 次后全部失败")
+        raise last_exception  # type: ignore[misc]
 
     async def _try_generate(self, prompt_text: str) -> Optional[bytes]:
         client = self._get_client()
 
-        prompt = prompt_text or "一个可爱的动漫少女正在开心地吃着美味的食物，表情愉悦。温暖柔和的插画风格。"
+        character_desc = (
+            "1girl, solo, (chibi only:0.9), "
+            "brown hair, gradient hair, braid, right_single_braid, right_side_braid, "
+            "asymmetrical_hair, left_sidelocks, long hair, "
+            "white shirt, collared shirt, sweater vest, brown vest, black necktie, "
+        )
+        prompt = character_desc + (prompt_text or "一个可爱的动漫少女正在开心地吃着美味的食物，表情愉悦。温暖柔和的插画风格。")
 
         body = {
             "model": self._model,
