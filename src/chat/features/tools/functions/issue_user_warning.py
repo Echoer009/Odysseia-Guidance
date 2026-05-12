@@ -29,7 +29,14 @@ class WarningParams(BaseModel):
     )
 
 
-    VALID_REASON_PREFIXES = ["身份操控", "复读骚扰", "人身攻击", "中国政治敏感", "过界亲密", "针对类脑娘的暴力行为"]
+VALID_REASON_PREFIXES = [
+    "身份操控",
+    "复读骚扰",
+    "人身攻击",
+    "中国政治敏感",
+    "过界亲密",
+    "针对类脑娘的暴力行为",
+]
 
 
 async def _send_warning_dm(
