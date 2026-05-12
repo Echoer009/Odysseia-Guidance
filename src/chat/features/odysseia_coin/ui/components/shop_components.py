@@ -25,6 +25,7 @@ from src.chat.features.odysseia_coin.service.coin_service import (
 from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettingsModal
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
+import src.config as config
 from src.chat.features.odysseia_coin.service.shop_service import shop_service
 from src.chat.features.tools.tool_metadata import (
     get_all_tools_metadata,
@@ -1367,3 +1368,71 @@ class CommandToggleSelect(discord.ui.Select):
         view.add_components()
         embed = await view.create_embed()
         await interaction.response.edit_message(embed=embed, view=view)
+
+
+# --- 反馈UI组件 ---
+
+
+class FeedbackModal(discord.ui.Modal, title="📝 提交反馈"):
+    """用户提交反馈的模态框，包含标题和内容两个字段。"""
+
+    title_input = discord.ui.TextInput(
+        label="反馈标题",
+        placeholder="简要描述你的反馈",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=100,
+    )
+    content_input = discord.ui.TextInput(
+        label="反馈内容",
+        placeholder="详细写下你的想法、建议或遇到的问题…",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1500,
+    )
+
+    def __init__(self, bot: commands.Bot):
+        super().__init__(timeout=180)
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # 构建反馈 Embed
+        user = interaction.user
+        embed = discord.Embed(
+            title=f"💬 新反馈 — {self.title_input.value}",
+            description=self.content_input.value,
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_author(
+            name=f"{user.display_name} ({user.name})",
+            icon_url=user.display_avatar.url if user.display_avatar else None,
+        )
+        embed.add_field(name="用户 ID", value=str(user.id), inline=True)
+
+        # 发送私信给所有开发者
+        for dev_id in config.DEVELOPER_USER_IDS:
+            try:
+                dev_user = await self.bot.fetch_user(dev_id)
+                await dev_user.send(embed=embed)
+            except discord.Forbidden:
+                log.warning(f"无法向开发者 {dev_id} 发送反馈私信（权限被拒绝）。")
+            except Exception as e:
+                log.error(f"向开发者 {dev_id} 发送反馈私信时出错: {e}")
+
+        await interaction.response.send_message(
+            "✅ 感谢你的反馈！已成功提交。", ephemeral=True
+        )
+
+
+class FeedbackButton(ShopButton["SimpleShopView"]):
+    """打开反馈模态框的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="反馈", style=discord.ButtonStyle.primary, emoji="💬"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        modal = FeedbackModal(bot=self.view.bot)
+        await interaction.response.send_modal(modal)

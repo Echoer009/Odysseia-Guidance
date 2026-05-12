@@ -23,6 +23,7 @@ from .components.shop_components import (
     KnowledgeBaseButton,
     DailyReportButton,
     ToolListButton,
+    FeedbackButton,
 )
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,9 @@ class SimpleShopView(discord.ui.View):
 
         # 添加类脑娘的工作清单按钮（包含工具设置和命令设置）
         self.add_item(ToolListButton())
+
+        # 添加反馈按钮
+        self.add_item(FeedbackButton())
 
     async def on_timeout(self):
         for item in self.children:
