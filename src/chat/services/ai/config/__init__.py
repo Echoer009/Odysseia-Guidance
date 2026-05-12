@@ -15,12 +15,7 @@ from .models import (
     get_generation_config,
     get_prompt_config,
     get_supported_params_for_provider,
-    save_model_config,
-    save_all_model_configs,
     reload_model_configs,
-    reset_model_to_original,
-    update_model_generation_config,
-    update_model_prompt_config,
     FALLBACK_PRIORITY,
 )
 
@@ -37,11 +32,6 @@ __all__ = [
     "get_generation_config",
     "get_prompt_config",
     "get_supported_params_for_provider",
-    "save_model_config",
-    "save_all_model_configs",
     "reload_model_configs",
-    "reset_model_to_original",
-    "update_model_generation_config",
-    "update_model_prompt_config",
     "FALLBACK_PRIORITY",
 ]

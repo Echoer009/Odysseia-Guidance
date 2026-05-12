@@ -1,3 +1,5 @@
+import logging
+
 import discord
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timedelta, timezone
@@ -7,6 +9,8 @@ from src.chat.features.odysseia_coin.service.coin_service import coin_service
 
 if TYPE_CHECKING:
     from src.chat.services.ai.config.models import ModelConfig
+
+log = logging.getLogger(__name__)
 
 
 class ChatSettingsService:
@@ -630,7 +634,7 @@ class ChatSettingsService:
         use_cache_optimized_build: Optional[bool] = None,
     ) -> None:
         """
-        设置指定模型的参数配置。
+        设置指定模型的参数配置（写入数据库）。
 
         Args:
             model_name: 模型名称
@@ -648,32 +652,77 @@ class ChatSettingsService:
             provider: 模型提供商 (deepseek/gemini/openai/anthropic/default) - 已废弃，从配置读取
             use_cache_optimized_build: 是否使用缓存优化的 prompt 构建顺序
         """
+        from src.database.database import AsyncSessionLocal
+        from src.database.services.ai_config_service import ai_config_service
         from src.chat.services.ai.config.models import (
-            update_model_generation_config,
-            update_model_prompt_config,
+            get_model_config,
+            reload_model_configs_async,
         )
 
-        # 更新生成参数
-        update_model_generation_config(
-            model_name=model_name,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            max_output_tokens=max_output_tokens,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            thinking_budget_tokens=thinking_budget_tokens,
+        db_model = await ai_config_service.get_model_by_name(
+            AsyncSessionLocal(), model_name
         )
+        if db_model is None:
+            log.warning(f"模型 {model_name} 不存在于数据库中，无法更新参数")
+            return
 
-        # 更新提示词配置
-        update_model_prompt_config(
-            model_name=model_name,
-            system_prompt=system_prompt,
-            jailbreak_user_prompt=jailbreak_user_prompt,
-            jailbreak_model_response=jailbreak_model_response,
-            jailbreak_final_instruction=jailbreak_final_instruction,
-            use_cache_optimized_build=use_cache_optimized_build,
-        )
+        current_config = get_model_config(model_name)
+        current_gen = current_config.generation_config if current_config else None
+
+        gen_updates = {}
+        if temperature is not None:
+            gen_updates["temperature"] = temperature
+        elif current_gen:
+            gen_updates["temperature"] = current_gen.temperature
+        if top_p is not None:
+            gen_updates["top_p"] = top_p
+        elif current_gen:
+            gen_updates["top_p"] = current_gen.top_p
+        if top_k is not None:
+            gen_updates["top_k"] = top_k
+        elif current_gen and current_gen.top_k is not None:
+            gen_updates["top_k"] = current_gen.top_k
+        if max_output_tokens is not None:
+            gen_updates["max_output_tokens"] = max_output_tokens
+        elif current_gen:
+            gen_updates["max_output_tokens"] = current_gen.max_output_tokens
+        if presence_penalty is not None:
+            gen_updates["presence_penalty"] = presence_penalty
+        elif current_gen and current_gen.presence_penalty is not None:
+            gen_updates["presence_penalty"] = current_gen.presence_penalty
+        if frequency_penalty is not None:
+            gen_updates["frequency_penalty"] = frequency_penalty
+        elif current_gen and current_gen.frequency_penalty is not None:
+            gen_updates["frequency_penalty"] = current_gen.frequency_penalty
+        if thinking_budget_tokens is not None:
+            gen_updates["thinking_budget_tokens"] = thinking_budget_tokens
+        elif current_gen and current_gen.thinking_budget_tokens is not None:
+            gen_updates["thinking_budget_tokens"] = current_gen.thinking_budget_tokens
+
+        prompt_updates = {}
+        current_prompt = current_config.prompt_config if current_config else None
+        if system_prompt is not None:
+            prompt_updates["system_prompt"] = system_prompt
+        if jailbreak_user_prompt is not None:
+            prompt_updates["jailbreak_user_prompt"] = jailbreak_user_prompt
+        if jailbreak_model_response is not None:
+            prompt_updates["jailbreak_model_response"] = jailbreak_model_response
+        if jailbreak_final_instruction is not None:
+            prompt_updates["jailbreak_final_instruction"] = jailbreak_final_instruction
+        if use_cache_optimized_build is not None:
+            prompt_updates["use_cache_optimized_build"] = use_cache_optimized_build
+
+        update_kwargs = {}
+        if gen_updates:
+            update_kwargs["generation_config"] = gen_updates
+        if prompt_updates:
+            update_kwargs["prompt_config"] = prompt_updates
+
+        if update_kwargs:
+            await ai_config_service.update_model(
+                AsyncSessionLocal(), db_model.id, **update_kwargs
+            )
+            await reload_model_configs_async()
 
     async def get_all_model_params(self) -> Dict[str, "ModelConfig"]:
         """
@@ -688,7 +737,7 @@ class ChatSettingsService:
 
     async def reset_model_params(self, model_name: str) -> bool:
         """
-        重置指定模型的参数为原始配置值。
+        重置指定模型的参数为默认值（清空数据库中的自定义参数）。
 
         Args:
             model_name: 模型名称
@@ -696,9 +745,24 @@ class ChatSettingsService:
         Returns:
             bool: 是否成功重置
         """
-        from src.chat.services.ai.config.models import reset_model_to_original
+        from src.database.database import AsyncSessionLocal
+        from src.database.services.ai_config_service import ai_config_service
+        from src.chat.services.ai.config.models import reload_model_configs_async
 
-        return reset_model_to_original(model_name)
+        db_model = await ai_config_service.get_model_by_name(
+            AsyncSessionLocal(), model_name
+        )
+        if db_model is None:
+            return False
+
+        await ai_config_service.update_model(
+            AsyncSessionLocal(),
+            db_model.id,
+            generation_config=None,
+            prompt_config=None,
+        )
+        await reload_model_configs_async()
+        return True
 
 
 # 单例实例

@@ -340,7 +340,7 @@ class ChatService:
                     user_id_for_settings=user_id_for_settings,
                 )
 
-            # 创建生成配置（从统一的 models_config.json 获取模型参数）
+            # 创建生成配置（从数据库获取模型参数）
             from src.chat.services.ai.config.models import get_generation_config
 
             gen_params = get_generation_config(current_model)

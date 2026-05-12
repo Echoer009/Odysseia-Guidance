@@ -7,10 +7,9 @@ AI Provider 配置模块
 """
 
 import os
-import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Literal, Any
+from typing import Optional, Dict, List, Literal, Any, cast
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +85,10 @@ async def get_provider_configs_from_db() -> Dict[str, ProviderConfig]:
                 else:
                     default_model = model_names[0]
 
-                provider_type = provider.provider_type
+                provider_type = cast(
+                    Literal["gemini", "deepseek", "openai_compatible", "custom"],
+                    provider.provider_type,
+                )
                 extra = dict(provider.extra) if provider.extra else {}
 
                 if provider_type == "gemini_custom":
@@ -155,21 +157,22 @@ def _parse_custom_gemini_endpoints() -> Dict[str, ProviderConfig]:
 
 def _get_models_for_provider(provider_name: str) -> List[str]:
     """
-    从 models_config.json 获取指定 provider 的所有模型（回退用）
+    从数据库缓存获取指定 provider 的所有模型（回退用）。
+    缓存未初始化时返回空列表，由调用方自行处理默认值。
     """
     try:
         from .models import get_model_configs
 
         model_configs = get_model_configs()
-        models = []
 
+        models = []
         for model_name, config in model_configs.items():
             if config.provider == provider_name:
                 models.append(model_name)
 
         return models
     except Exception as e:
-        log.warning(f"读取 models_config.json 中的 {provider_name} 模型失败: {e}")
+        log.warning(f"获取 {provider_name} 的模型列表失败: {e}")
         return []
 
 
