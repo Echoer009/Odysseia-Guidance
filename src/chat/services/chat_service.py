@@ -28,6 +28,7 @@ from src.chat.features.chat_settings.services.chat_settings_service import (
 )
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.ai.providers.provider_format import ProviderFormat, MessageFormat
+from src.chat.services.persona_preference_service import persona_preference_service
 
 log = logging.getLogger(__name__)
 
@@ -243,6 +244,7 @@ class ChatService:
 
             # --- 新增：集中获取所有上下文数据 ---
             affection_status = await affection_service.get_affection_status(author.id)
+            persona_style = await persona_preference_service.get_persona_style(str(author.id))
 
             # 3. --- 好感度与奖励更新（前置） ---
             try:
@@ -311,6 +313,7 @@ class ChatService:
                 conversation_memory=conversation_memory_text,
                 latest_block=latest_block_content,
                 output_format=output_format,
+                persona_style=persona_style,
             )
 
             # 获取工具列表（根据 Provider 类型返回对应格式）

@@ -10,7 +10,7 @@ import json
 import re
 import discord
 
-from src.chat.config.prompts import PROMPT_CONFIG
+from src.chat.config.prompts import PROMPT_CONFIG, PERSONA_VARIANTS
 from src.chat.config import chat_config
 from src.chat.services.ai.config.models import get_model_config, get_prompt_config
 from src.chat.services.event_service import event_service
@@ -104,6 +104,24 @@ class PromptService:
         image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
         return image_base64, mime_type
+
+    def _get_persona_system_prompt(
+        self, persona_style: str, model_name: Optional[str]
+    ) -> Optional[str]:
+        """
+        获取人设风格变体的 SYSTEM_PROMPT。
+        查找顺序: PERSONA_VARIANTS[style][model_name] → PERSONA_VARIANTS[style]["default"] → None
+        """
+        if persona_style == "default" or persona_style not in PERSONA_VARIANTS:
+            return None
+
+        style_variants = PERSONA_VARIANTS[persona_style]
+        if model_name and model_name in style_variants:
+            return style_variants[model_name].get("SYSTEM_PROMPT")
+        default_variant = style_variants.get("default")
+        if default_variant:
+            return default_variant.get("SYSTEM_PROMPT")
+        return None
 
     def _get_model_specific_prompt(
         self, model_name: Optional[str], prompt_name: str
@@ -234,6 +252,7 @@ class PromptService:
         conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
         latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
         output_format: str = "gemini",  # "gemini" | "openai" - 输出格式
+        persona_style: str = "default",  # 人设风格: "default" | "gentle"
     ) -> List[Dict[str, Any]]:
         """
         构建用于AI聊天的分层对话历史。
@@ -266,6 +285,7 @@ class PromptService:
                 conversation_memory=conversation_memory,
                 latest_block=latest_block,
                 output_format=output_format,
+                persona_style=persona_style,
             )
         else:
             return await self._build_chat_prompt_default(
@@ -285,6 +305,7 @@ class PromptService:
                 conversation_memory=conversation_memory,
                 latest_block=latest_block,
                 output_format=output_format,
+                persona_style=persona_style,
             )
 
     async def _build_chat_prompt_default(
@@ -305,6 +326,7 @@ class PromptService:
         conversation_memory: Optional[str] = None,
         latest_block: Optional[Dict[str, Any]] = None,
         output_format: str = "gemini",
+        persona_style: str = "default",
     ) -> List[Dict[str, Any]]:
         """
         默认的对话历史构建方法。
@@ -385,6 +407,11 @@ class PromptService:
         current_beijing_time = datetime.now(beijing_tz).strftime("%Y年%m月%d日 %H:%M")
         # 动态知识块（世界之书、个人记忆）将作为独立消息注入，无需在此处处理占位符
         core_prompt_template = self.get_prompt("SYSTEM_PROMPT", model_name=model_name)
+
+        # 如果用户选择了非默认人设风格，尝试用人设变体覆盖 SYSTEM_PROMPT
+        persona_prompt = self._get_persona_system_prompt(persona_style, model_name)
+        if persona_prompt:
+            core_prompt_template = persona_prompt
 
         # 填充核心提示词
         core_prompt = core_prompt_template
@@ -769,6 +796,7 @@ class PromptService:
         conversation_memory: Optional[str] = None,
         latest_block: Optional[Dict[str, Any]] = None,
         output_format: str = "gemini",
+        persona_style: str = "default",
     ) -> List[Dict[str, Any]]:
         """
         针对上下文缓存优化的对话历史构建方法。
@@ -860,6 +888,9 @@ class PromptService:
 
         # 2. 核心人设
         core_prompt_template = self.get_prompt("SYSTEM_PROMPT", model_name=model_name)
+        persona_prompt = self._get_persona_system_prompt(persona_style, model_name)
+        if persona_prompt:
+            core_prompt_template = persona_prompt
         final_conversation.append({"role": "user", "parts": [core_prompt_template]})
         final_conversation.append({"role": "model", "parts": ["我在线啦，随时开聊！"]})
 

@@ -1121,17 +1121,17 @@ class ToolListButton(ShopButton["SimpleShopView"]):
 
 
 class ToolSettingsView(discord.ui.View):
-    """管理用户工具设置和命令设置的视图。"""
+    """管理用户工具设置、命令设置和人设风格的视图。"""
 
-    # 模式常量
     MODE_TOOLS = "tools"
     MODE_COMMANDS = "commands"
+    MODE_PERSONA = "persona"
 
     def __init__(self, main_view: "SimpleShopView"):
         super().__init__(timeout=300)
         self.main_view = main_view
         self.user: discord.User | discord.Member | None = None
-        self.current_mode: str = self.MODE_TOOLS  # 默认显示工具设置
+        self.current_mode: str = self.MODE_TOOLS
 
         # 工具设置相关
         self.user_tool_settings: Dict[str, Any] | None = None
@@ -1141,6 +1141,9 @@ class ToolSettingsView(discord.ui.View):
         # 命令设置相关
         self.user_command_settings: Dict[str, Any] | None = None
         self.all_commands: Dict[str, Dict[str, str]] = {}
+
+        # 人设风格相关
+        self.persona_style: str = "default"
 
         self.confirmation_message: str | None = None
 
@@ -1169,6 +1172,15 @@ class ToolSettingsView(discord.ui.View):
         )
         self.all_commands = user_command_settings_service.get_configurable_commands()
 
+        # 初始化人设风格
+        from src.chat.services.persona_preference_service import (
+            persona_preference_service,
+        )
+
+        self.persona_style = await persona_preference_service.get_persona_style(
+            str(user.id)
+        )
+
         self.add_components()
 
     def add_components(self):
@@ -1181,16 +1193,23 @@ class ToolSettingsView(discord.ui.View):
                     self.all_tools, self.user_tool_settings, self.protected_tools
                 )
             )
-        else:
+        elif self.current_mode == self.MODE_COMMANDS:
             self.add_item(
                 CommandToggleSelect(self.all_commands, self.user_command_settings)
             )
+        elif self.current_mode == self.MODE_PERSONA:
+            self.add_item(PersonaButtonDefault(self.persona_style))
+            self.add_item(PersonaButtonGentle(self.persona_style))
 
         # 添加模式切换按钮
+        mode_labels = {
+            self.MODE_TOOLS: ("切换到命令设置", self.MODE_COMMANDS),
+            self.MODE_COMMANDS: ("切换到人设风格", self.MODE_PERSONA),
+            self.MODE_PERSONA: ("切换到工具设置", self.MODE_TOOLS),
+        }
+        label, _ = mode_labels[self.current_mode]
         switch_button = discord.ui.Button(
-            label="切换到命令设置"
-            if self.current_mode == self.MODE_TOOLS
-            else "切换到工具设置",
+            label=label,
             style=discord.ButtonStyle.primary,
             emoji="🔄",
             row=1,
@@ -1205,11 +1224,13 @@ class ToolSettingsView(discord.ui.View):
         self.add_item(back_button)
 
     async def switch_mode_callback(self, interaction: discord.Interaction):
-        """切换工具/命令设置模式。"""
-        if self.current_mode == self.MODE_TOOLS:
-            self.current_mode = self.MODE_COMMANDS
-        else:
-            self.current_mode = self.MODE_TOOLS
+        """切换工具/命令/人设模式。"""
+        mode_cycle = {
+            self.MODE_TOOLS: self.MODE_COMMANDS,
+            self.MODE_COMMANDS: self.MODE_PERSONA,
+            self.MODE_PERSONA: self.MODE_TOOLS,
+        }
+        self.current_mode = mode_cycle[self.current_mode]
 
         self.add_components()
         embed = await self.create_embed()
@@ -1220,25 +1241,36 @@ class ToolSettingsView(discord.ui.View):
         if self.current_mode == self.MODE_TOOLS:
             title = "🗒️ 类脑娘的工作清单 - 工具设置"
             description = "在这里可以设置类脑娘在你的帖子里能使用哪些工具哦～\n默认情况下所有工具都是开启的。"
-        else:
+            color = discord.Color.blue()
+        elif self.current_mode == self.MODE_COMMANDS:
             title = "🗒️ 类脑娘的工作清单 - 命令设置"
             description = (
                 "在这里可以设置其他人在你的帖子里能使用哪些命令哦～\n"
                 "默认情况下所有命令都是开启的。\n"
                 "⚠️ 注意：这些设置只影响**你的帖子**中别人使用的命令，不影响你自己使用命令。"
             )
+            color = discord.Color.purple()
+        else:
+            title = "🗒️ 类脑娘的工作清单 - 你希望类脑娘是?"
+            style_display = {"default": "这样就好", "gentle": "更温柔些"}.get(
+                self.persona_style, self.persona_style
+            )
+            description = (
+                f"当前选择: **{style_display}**\n\n"
+                "选择你喜欢的类脑娘风格吧～\n"
+                "• **这样就好** — 保持类脑娘原本的性格\n"
+                "• **更温柔些** — 类脑娘会变得更加温柔体贴"
+            )
+            color = discord.Color.green()
 
         if self.confirmation_message:
             description = f"✅ {self.confirmation_message}\n\n{description}"
-            # 重置消息，以便下次更新时不显示
             self.confirmation_message = None
 
         embed = discord.Embed(
             title=title,
             description=description,
-            color=discord.Color.blue()
-            if self.current_mode == self.MODE_TOOLS
-            else discord.Color.purple(),
+            color=color,
         )
         return embed
 
@@ -1246,6 +1278,62 @@ class ToolSettingsView(discord.ui.View):
         """返回主商店视图。"""
         embeds = await self.main_view.create_shop_embeds()
         await interaction.response.edit_message(embeds=embeds, view=self.main_view)
+
+
+class PersonaButtonDefault(discord.ui.Button):
+    """选择默认人设风格的按钮。"""
+
+    def __init__(self, current_style: str):
+        is_current = current_style == "default"
+        super().__init__(
+            label="✅ 这样就好" if is_current else "这样就好",
+            style=discord.ButtonStyle.success if is_current else discord.ButtonStyle.secondary,
+            emoji="😊",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        from src.chat.services.persona_preference_service import (
+            persona_preference_service,
+        )
+
+        view = cast(ToolSettingsView, self.view)
+        await persona_preference_service.set_persona_style(
+            str(interaction.user.id), "default"
+        )
+        view.persona_style = "default"
+        view.confirmation_message = "已设置为默认风格～"
+        view.add_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class PersonaButtonGentle(discord.ui.Button):
+    """选择温柔人设风格的按钮。"""
+
+    def __init__(self, current_style: str):
+        is_current = current_style == "gentle"
+        super().__init__(
+            label="✅ 更温柔些" if is_current else "更温柔些",
+            style=discord.ButtonStyle.success if is_current else discord.ButtonStyle.secondary,
+            emoji="🌸",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        from src.chat.services.persona_preference_service import (
+            persona_preference_service,
+        )
+
+        view = cast(ToolSettingsView, self.view)
+        await persona_preference_service.set_persona_style(
+            str(interaction.user.id), "gentle"
+        )
+        view.persona_style = "gentle"
+        view.confirmation_message = "已设置为温柔风格～"
+        view.add_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 class ToolToggleSelect(discord.ui.Select):

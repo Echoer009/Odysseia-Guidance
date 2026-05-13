@@ -433,6 +433,36 @@ class UserCommandSettings(Base):
         return f"<UserCommandSettings(user_id='{self.user_id}')>"
 
 
+class UserPersonaPreference(Base):
+    """
+    存储每个用户对类脑娘人设风格的偏好。
+    用户可以选择类脑娘的对话风格，如默认风格或温柔风格。
+    """
+
+    __tablename__ = "user_persona_preference"
+    __table_args__ = {"schema": USER_SCHEMA}
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), unique=True, nullable=False, comment="用户的Discord ID"
+    )
+    persona_style: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="default",
+        comment="人设风格: default(默认) | gentle(温柔)",
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<UserPersonaPreference(user_id='{self.user_id}', style='{self.persona_style}')>"
+
+
 # --- 商店商品模型 (PostgreSQL) ---
 
 

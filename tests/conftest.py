@@ -38,6 +38,7 @@ ECONOMY_TABLES = [
 USER_TABLES = [
     "user.user_affection",
     "user.user_warnings",
+    "user.user_persona_preference",
 ]
 
 _ALL_TABLES = ECONOMY_TABLES + USER_TABLES
