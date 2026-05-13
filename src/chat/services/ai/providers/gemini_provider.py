@@ -135,7 +135,7 @@ class GeminiProvider(BaseProvider):
         Returns:
             genai.Client: Gemini 客户端
         """
-        REQUEST_TIMEOUT_MS = 40000
+        REQUEST_TIMEOUT_MS = 120000
         if self.base_url:
             http_options = genai_types.HttpOptions(
                 base_url=self.base_url, timeout=REQUEST_TIMEOUT_MS
