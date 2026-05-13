@@ -16,7 +16,7 @@ from src.database.models import UserPersonaPreference
 
 log = logging.getLogger(__name__)
 
-VALID_STYLES = {"default", "gentle"}
+VALID_STYLES = {"default", "gentle", "frank"}
 
 
 class PersonaPreferenceService:

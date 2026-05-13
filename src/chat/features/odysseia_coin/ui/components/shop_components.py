@@ -1200,6 +1200,7 @@ class ToolSettingsView(discord.ui.View):
         elif self.current_mode == self.MODE_PERSONA:
             self.add_item(PersonaButtonDefault(self.persona_style))
             self.add_item(PersonaButtonGentle(self.persona_style))
+            self.add_item(PersonaButtonFrank(self.persona_style))
 
         # 添加模式切换按钮
         mode_labels = {
@@ -1252,14 +1253,17 @@ class ToolSettingsView(discord.ui.View):
             color = discord.Color.purple()
         else:
             title = "🗒️ 类脑娘的工作清单 - 你希望类脑娘是?"
-            style_display = {"default": "这样就好", "gentle": "更温柔些"}.get(
-                self.persona_style, self.persona_style
-            )
+            style_display = {
+                "default": "这样就好",
+                "gentle": "更温柔些",
+                "frank": "坦率一点",
+            }.get(self.persona_style, self.persona_style)
             description = (
                 f"当前选择: **{style_display}**\n\n"
                 "选择你喜欢的类脑娘风格吧～\n"
                 "• **这样就好** — 保持类脑娘原本的性格\n"
-                "• **更温柔些** — 类脑娘会变得更加温柔体贴"
+                "• **更温柔些** — 类脑娘会变得更加温柔体贴\n"
+                "• **坦率一点** — 类脑娘会变得更坦率直接"
             )
             color = discord.Color.green()
 
@@ -1331,6 +1335,34 @@ class PersonaButtonGentle(discord.ui.Button):
         )
         view.persona_style = "gentle"
         view.confirmation_message = "已设置为温柔风格～"
+        view.add_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class PersonaButtonFrank(discord.ui.Button):
+    """选择坦率人设风格的按钮。"""
+
+    def __init__(self, current_style: str):
+        is_current = current_style == "frank"
+        super().__init__(
+            label="✅ 坦率一点" if is_current else "坦率一点",
+            style=discord.ButtonStyle.success if is_current else discord.ButtonStyle.secondary,
+            emoji="😏",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        from src.chat.services.persona_preference_service import (
+            persona_preference_service,
+        )
+
+        view = cast(ToolSettingsView, self.view)
+        await persona_preference_service.set_persona_style(
+            str(interaction.user.id), "frank"
+        )
+        view.persona_style = "frank"
+        view.confirmation_message = "已设置为坦率风格～"
         view.add_components()
         embed = await view.create_embed()
         await interaction.response.edit_message(embed=embed, view=view)
