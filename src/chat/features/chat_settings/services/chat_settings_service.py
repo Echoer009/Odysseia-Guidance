@@ -67,11 +67,16 @@ class ChatSettingsService:
             else True
         )
 
+        chat_enabled_value = await self.db_manager.get_global_setting("chat_enabled")
+        chat_enabled = (
+            chat_enabled_value.lower() in ("true", "1", "yes", "on")
+            if chat_enabled_value is not None
+            else True
+        )
+
         settings = {
             "global": {
-                "chat_enabled": global_config_row["chat_enabled"]
-                if global_config_row
-                else True,
+                "chat_enabled": chat_enabled,
                 "warm_up_enabled": global_config_row["warm_up_enabled"]
                 if global_config_row
                 else True,
@@ -93,9 +98,11 @@ class ChatSettingsService:
         return settings
 
     async def is_chat_globally_enabled(self, guild_id: int) -> bool:
-        """检查聊天功能是否在服务器内全局开启。"""
-        config = await self.db_manager.get_global_chat_config(guild_id)
-        return config["chat_enabled"] if config else True
+        """检查聊天功能是否全局开启（所有服务器共享）。"""
+        value = await self.db_manager.get_global_setting("chat_enabled")
+        if value is not None:
+            return value.lower() in ("true", "1", "yes", "on")
+        return True
 
     async def is_warm_up_enabled(self, guild_id: int) -> bool:
         """检查暖贴功能是否开启。"""

@@ -262,10 +262,8 @@ class ChatSettingsView(View):
     async def on_global_toggle(self, interaction: Interaction):
         current_state = self.settings.get("global", {}).get("chat_enabled", True)
         new_state = not current_state
-        if not self.guild:
-            return
-        await self.service.db_manager.update_global_chat_config(
-            self.guild.id, chat_enabled=new_state
+        await self.service.db_manager.set_global_setting(
+            "chat_enabled", str(new_state)
         )
         await self._update_view(interaction)
 

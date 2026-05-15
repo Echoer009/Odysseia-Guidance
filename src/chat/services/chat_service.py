@@ -398,13 +398,19 @@ class ChatService:
             # 在获得AI回复后，记录这次对话并根据需要触发总结
             # 传递 current_model 使总结逻辑跟随主模型
             if user_profile_data:
-                await personal_memory_service.update_and_conditionally_summarize_memory(
-                    user_id=author.id,
-                    user_name=author.display_name,
-                    user_content=user_content,
-                    ai_response=ai_response,
-                    current_model=current_model,
-                )
+                try:
+                    await personal_memory_service.update_and_conditionally_summarize_memory(
+                        user_id=author.id,
+                        user_name=author.display_name,
+                        user_content=user_content,
+                        ai_response=ai_response,
+                        current_model=current_model,
+                    )
+                except Exception as mem_e:
+                    log.error(
+                        f"[ChatService] 用户 {author.id} 对话块总结失败，跳过: {mem_e}",
+                        exc_info=True,
+                    )
 
             # 5. --- 后处理与格式化 ---
             final_response = self._format_ai_response(ai_response)
