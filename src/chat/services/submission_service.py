@@ -40,6 +40,16 @@ class SubmissionService:
         将提交的数据作为待审核条目存入数据库。
         这是所有提交类型的通用内部方法。
         """
+        guild_id = interaction.guild_id
+        channel_id = interaction.channel_id
+        if guild_id is None:
+            log.warning(
+                f"[_create_pending_entry] guild_id 为 None! "
+                f"type={entry_type}, user={interaction.user.id}, "
+                f"channel_id={channel_id}, channel_type={interaction.channel.type if interaction.channel else 'N/A'}, "
+                f"guild={interaction.guild}"
+            )
+
         conn = self._get_db_connection()
         if not conn:
             return None
@@ -76,7 +86,7 @@ class SubmissionService:
                     entry_type,
                     data_json,
                     interaction.channel_id,
-                    interaction.guild_id,
+                    interaction.guild_id or 0,
                     interaction.user.id,
                     expires_at.isoformat(),
                     -1,  # 临时 message_id，将在审核服务中更新
