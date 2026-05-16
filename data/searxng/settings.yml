@@ -18,6 +18,12 @@ server:
 ui:
   static_use_hash: true
 
+hostnames:
+  remove:
+    - '(.*\.)?dzmm\.[a-z]+$'
+    - '(.*\.)?aifengyue\.[a-z]+$'
+    - '(.*\.)?fengyueai\.[a-z]+$'
+
 engines:
   - name: google
     engine: google
