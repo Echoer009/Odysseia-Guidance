@@ -226,8 +226,16 @@ class UserConversationBlocksView(discord.ui.View):
             select = self._create_block_select()
             self.add_item(select)
 
-        # 删除所有对话块按钮
         if self.current_list_items:
+            batch_delete_button = discord.ui.Button(
+                label="批量删除最近N个",
+                emoji="✂️",
+                style=discord.ButtonStyle.danger,
+                row=2,
+            )
+            batch_delete_button.callback = self.open_batch_delete_modal
+            self.add_item(batch_delete_button)
+
             delete_all_blocks_button = discord.ui.Button(
                 label="删除所有对话块",
                 emoji="🗑️",
@@ -237,8 +245,6 @@ class UserConversationBlocksView(discord.ui.View):
             delete_all_blocks_button.callback = self.confirm_delete_all_blocks
             self.add_item(delete_all_blocks_button)
 
-        # 删除所有对话块并清除个人印象按钮
-        if self.current_list_items:
             delete_all_button = discord.ui.Button(
                 label="删除所有记忆",
                 emoji="💥",
@@ -248,7 +254,6 @@ class UserConversationBlocksView(discord.ui.View):
             delete_all_button.callback = self.confirm_delete_all
             self.add_item(delete_all_button)
 
-        # 仅清除个人印象按钮
         clear_impression_button = discord.ui.Button(
             label="仅清除个人印象",
             emoji="🧹",
@@ -258,7 +263,6 @@ class UserConversationBlocksView(discord.ui.View):
         clear_impression_button.callback = self.confirm_clear_impression
         self.add_item(clear_impression_button)
 
-        # 完成按钮
         done_button = discord.ui.Button(
             label="完成", emoji="✅", style=discord.ButtonStyle.success, row=3
         )
@@ -627,6 +631,76 @@ class UserConversationBlocksView(discord.ui.View):
             ephemeral=True,
         )
 
+    async def open_batch_delete_modal(self, interaction: discord.Interaction):
+        total = len(self.current_list_items)
+        if total == 0:
+            await interaction.response.send_message("你没有对话记忆可删除。", ephemeral=True)
+            return
+
+        modal = BatchDeleteModal(self, total)
+        await interaction.response.send_modal(modal)
+
+    async def execute_batch_delete(self, interaction: discord.Interaction, count: int):
+        total = len(self.current_list_items)
+        actual_count = min(count, total)
+
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(confirm_interaction: discord.Interaction):
+            await confirm_interaction.response.defer()
+            try:
+                deleted_count = await conversation_block_service.delete_recent_blocks(
+                    self.user_id, actual_count
+                )
+
+                from src.chat.features.personal_memory.services.personal_memory_service import (
+                    personal_memory_service,
+                )
+
+                await personal_memory_service.delete_conversation_history(
+                    int(self.user_id)
+                )
+
+                log.info(
+                    f"用户 {self.user_id} 批量删除了 {deleted_count} 个最近的对话块"
+                )
+                await confirm_interaction.followup.send(
+                    f"✅ 已成功删除最近的 {deleted_count} 个对话记忆。",
+                    ephemeral=True,
+                )
+
+                await self._load_user_blocks()
+                self.view_mode = "list"
+                self.current_page = 0
+                self._initialize_components()
+                await self.update_view()
+
+            except Exception as e:
+                log.error(f"批量删除对话块失败: {e}", exc_info=True)
+                await confirm_interaction.followup.send(f"❌ 删除失败: {e}", ephemeral=True)
+
+        async def cancel_callback(cancel_interaction: discord.Interaction):
+            await cancel_interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(
+            label=f"确认删除最近{actual_count}个", style=discord.ButtonStyle.danger
+        )
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(
+            label="取消", style=discord.ButtonStyle.secondary
+        )
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.followup.send(
+            f"**⚠️ 确认操作**\n"
+            f"你确定要永久删除最近的 **{actual_count}** 个对话记忆吗？\n"
+            f"（你目前共有 {total} 个对话块）\n此操作无法撤销。",
+            view=confirm_view,
+            ephemeral=True,
+        )
+
     async def back_to_list(self, interaction: discord.Interaction):
         """返回列表视图"""
         await interaction.response.defer()
@@ -675,3 +749,38 @@ class UserConversationBlocksView(discord.ui.View):
             await self.message.edit(embed=embed, view=self)
         except Exception as e:
             log.debug(f"超时处理失败: {e}")
+
+
+class BatchDeleteModal(discord.ui.Modal, title="批量删除最近的对话记忆"):
+    def __init__(self, parent_view: UserConversationBlocksView, total_blocks: int):
+        super().__init__()
+        self.parent_view = parent_view
+        self.total_blocks = total_blocks
+        self.count_input.placeholder = f"输入一个数字（你目前有{total_blocks}个对话块）"
+
+    count_input = discord.ui.TextInput(
+        label="要删除的对话块数量",
+        placeholder=f"输入一个数字（你目前有对话块，最多全部删除）",
+        min_length=1,
+        max_length=4,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            count = int(self.count_input.value)
+            if count <= 0:
+                await interaction.response.send_message(
+                    "❌ 请输入一个大于0的数字。", ephemeral=True
+                )
+                return
+
+            if count > self.total_blocks:
+                count = self.total_blocks
+
+            await interaction.response.defer(ephemeral=True)
+            await self.parent_view.execute_batch_delete(interaction, count)
+
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ 请输入一个有效的数字。", ephemeral=True
+            )
