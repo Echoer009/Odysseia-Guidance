@@ -22,7 +22,7 @@ services:
     # 优点: 快速、简单、无需本地构建。使用此方式时，请注释掉上面的 'build' 部分，并取消下方 'image' 行的注释。
     image: echoni0n/braingirl:latest
 
-    container_name: Odysseia_Guidance
+    container_name: ${INSTANCE_NAME:-odysseia}_guidance
     volumes:
       - .:/app
       - ./data:/app/data
@@ -43,7 +43,7 @@ services:
 
   searxng:
     image: searxng/searxng:latest
-    container_name: odysseia_searxng
+    container_name: ${INSTANCE_NAME:-odysseia}_searxng
     restart: unless-stopped
     expose:
       - "8080"
@@ -59,7 +59,7 @@ services:
     #   context: .
     #   dockerfile: .devcontainer/Dockerfile
     image: echoni0n/braingirl:latest
-    container_name: blackjack_web
+    container_name: ${INSTANCE_NAME:-odysseia}_blackjack
     restart: unless-stopped
     env_file:
       - .env
@@ -81,7 +81,7 @@ services:
 
   lobby_web:
     image: echoni0n/braingirl:latest
-    container_name: lobby_web
+    container_name: ${INSTANCE_NAME:-odysseia}_lobby
     restart: unless-stopped
     env_file:
       - .env
@@ -100,7 +100,7 @@ services:
 
   guidance_web:
     image: echoni0n/braingirl:latest
-    container_name: guidance_web
+    container_name: ${INSTANCE_NAME:-odysseia}_web_guidance
     restart: unless-stopped
     env_file:
       - .env
@@ -120,7 +120,7 @@ services:
   # Caddy 反向代理 - 提供 HTTPS
   caddy:
     image: caddy:latest
-    container_name: caddy_proxy
+    container_name: ${INSTANCE_NAME:-odysseia}_caddy
     restart: unless-stopped
     ports:
       - "80:80" # HTTP (用于证书验证)
@@ -159,7 +159,7 @@ services:
   db:
     # 使用官方打包好的 ParadeDB 镜像，它基于 PG16
     image: paradedb/paradedb:latest-pg16
-    container_name: odysseia_pg_db # 保持与项目其余部分一致的命名
+    container_name: ${INSTANCE_NAME:-odysseia}_db
     restart: unless-stopped # 保持与项目其余部分一致的重启策略
     environment:
       # 沿用 .env 文件中的变量，更加灵活和安全
@@ -187,7 +187,7 @@ services:
     # 仅在 VECTOR_MODE=local 时需要启动此服务
     # 使用 --profile ollama 来启动此服务
     image: ollama/ollama:latest
-    container_name: odysseia_ollama
+    container_name: ${INSTANCE_NAME:-odysseia}_ollama
     restart: unless-stopped
     expose:
       - "11434"

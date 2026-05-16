@@ -268,9 +268,9 @@ class IncrementalRAGService:
         if self.parade_conn is None:
             try:
                 if os.getenv("RUNNING_IN_DOCKER"):
-                    db_host = "odysseia_pg_db"
+                    db_host = os.getenv("DB_HOST", "db")
                 else:
-                    db_host = "localhost"
+                    db_host = os.getenv("DB_HOST", "localhost")
 
                 self.parade_conn = psycopg2.connect(
                     dbname=os.getenv("POSTGRES_DB", "braingirl_db"),

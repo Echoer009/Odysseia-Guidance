@@ -19,7 +19,7 @@ if not _TEST_DATABASE_URL:
     _db_password = os.getenv("POSTGRES_PASSWORD", "password")
     _db_name = os.getenv("POSTGRES_DB", "braingirl_db")
     _db_port = os.getenv("DB_PORT", "5432")
-    _db_host = "odysseia_pg_db" if os.getenv("RUNNING_IN_DOCKER") else "localhost"
+    _db_host = os.getenv("DB_HOST", "db") if os.getenv("RUNNING_IN_DOCKER") else os.getenv("DB_HOST", "localhost")
     _TEST_DATABASE_URL = (
         f"postgresql+asyncpg://{_db_user}:{_db_password}"
         f"@{_db_host}:{_db_port}/{_db_name}"

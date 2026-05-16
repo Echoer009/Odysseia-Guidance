@@ -95,6 +95,24 @@ ask_question() {
     fi
 }
 
+configure_instance() {
+    echo ""
+    say_wait "实例名称配置～"
+    echo "────────────────────────────────────────"
+    say_hello "如果你需要在一台服务器上运行多个类脑娘实例，每个实例需要不同的名称"
+    say_wait "实例名称用于区分不同实例的 Docker 容器和网络"
+    say_warning "注意：实例名称只能包含小写英文字母、数字和下划线"
+    echo ""
+    while true; do
+        INSTANCE_NAME=$(ask_question "实例名称" "odysseia" "false")
+        if echo "$INSTANCE_NAME" | grep -qE '^[a-z0-9_]+$'; then
+            break
+        fi
+        say_oops "实例名称只能包含小写英文字母、数字和下划线哦～"
+    done
+    say_success "实例名称设置为: $INSTANCE_NAME"
+}
+
 configure_required() {
     say_wait "首先来配置一些必要的信息～"
     echo "────────────────────────────────────────"
@@ -294,6 +312,11 @@ generate_env_file() {
     cat > .env << EOF
 # Odysseia 环境配置文件
 # 由 setup.sh 自动生成
+
+# --- 实例配置 ---
+# 用于在一台服务器上运行多个类脑娘实例时区分不同实例
+INSTANCE_NAME=$INSTANCE_NAME
+DB_HOST=db
 
 # --- Discord ---
 DISCORD_TOKEN="$DISCORD_TOKEN"
@@ -505,7 +528,9 @@ main() {
     VECTOR_MODE="none"
     OLLAMA_MODEL=""
     OLLAMA_VISION_MODEL=""
+    INSTANCE_NAME="odysseia"
 
+    configure_instance
     configure_required
     configure_vector_mode
     configure_database

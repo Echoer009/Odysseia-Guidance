@@ -16,9 +16,9 @@ def get_parade_db_connection() -> Optional[psycopg2.extensions.connection]:
     """
     try:
         if os.getenv("RUNNING_IN_DOCKER"):
-            db_host = "odysseia_pg_db"
+            db_host = os.getenv("DB_HOST", "db")
         else:
-            db_host = "localhost"
+            db_host = os.getenv("DB_HOST", "localhost")
 
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB", "braingirl_db"),

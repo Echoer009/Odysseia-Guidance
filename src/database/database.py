@@ -23,11 +23,11 @@ if not DATABASE_URL:
     # In docker-compose, the hostname is the service name ('db').
     # For local scripts connecting to the Docker container, it's 'localhost'.
     if os.getenv("RUNNING_IN_DOCKER"):
-        db_host = "odysseia_pg_db"
-        log.info("Running inside Docker, connecting to 'db' host.")
+        db_host = os.getenv("DB_HOST", "db")
+        log.info("Running inside Docker, connecting to '%s' host.", db_host)
     else:
-        db_host = "localhost"
-        log.info("Running on host machine, connecting to 'localhost'.")
+        db_host = os.getenv("DB_HOST", "localhost")
+        log.info("Running on host machine, connecting to '%s'.", db_host)
 
     DATABASE_URL = (
         f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
