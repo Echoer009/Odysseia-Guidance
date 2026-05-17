@@ -758,9 +758,10 @@ class AIService:
                 # 会返回默认工具集（只应用全局设置，不过滤用户特定设置）
                 if tool_executor and self._tool_service:
                     try:
+                        fallback_provider_type = provider.provider_type
                         fallback_tools = (
                             await self._tool_service.get_dynamic_tools_for_context(
-                                user_id_for_settings, provider_type=fallback_name
+                                user_id_for_settings, provider_type=fallback_provider_type
                             )
                         )
                         log.info(

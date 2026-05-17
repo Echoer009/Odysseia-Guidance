@@ -280,17 +280,18 @@ class ChatService:
                 log.info("消息不在帖子中，将使用默认工具集。")
             # --- [结束] ---
 
-            # 获取当前模型对应的 Provider 类型
+            # 获取当前模型对应的 Provider
             provider_name = ai_service._model_to_provider.get(current_model)
-            # 调试日志：打印模型到 Provider 的映射
+            provider_instance = ai_service.get_provider(provider_name) if provider_name else None
+            provider_type = provider_instance.provider_type if provider_instance else ""
             log.info(
                 f"[Provider 映射调试] current_model={repr(current_model)}, "
                 f"provider_name={repr(provider_name)}, "
-                f"_model_to_provider={ai_service._model_to_provider}"
+                f"provider_type={repr(provider_type)}"
             )
 
-            # 根据 Provider 类型确定输出格式（使用统一的格式判断工具）
-            message_format = ProviderFormat.get_message_format(provider_name or "")
+            # 根据 Provider 类型确定输出格式
+            message_format = ProviderFormat.get_message_format(provider_type)
             output_format = (
                 "openai" if message_format == MessageFormat.OPENAI else "gemini"
             )
@@ -318,7 +319,7 @@ class ChatService:
 
             # 获取工具列表（根据 Provider 类型返回对应格式）
             tools = await ai_service.tool_service.get_dynamic_tools_for_context(
-                user_id_for_settings, provider_type=provider_name
+                user_id_for_settings, provider_type=provider_type
             )
 
             # 定义工具执行器（使用闭包追踪本次请求中调用的工具）
