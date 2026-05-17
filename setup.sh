@@ -443,6 +443,20 @@ start_service() {
             ;;
     esac
 
+    local skip_caddy=""
+    if docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE ':(80|443)->'; then
+        echo ""
+        say_warning "检测到 80/443 端口已被占用，可能已有其他反向代理（Caddy/Nginx）在运行"
+        say_hello "建议跳过本实例的 Caddy 服务，共用已有的反向代理"
+        local caddy_reply=""
+        printf "跳过 Caddy 反向代理？(Y/n): "
+        read -r caddy_reply < /dev/tty
+        if [[ ! "$caddy_reply" =~ ^[Nn]$ ]]; then
+            skip_caddy=true
+            say_success "将跳过 Caddy 服务，使用已有的反向代理"
+        fi
+    fi
+
     echo ""
     say_wait "选择部署方式："
     echo -e "  ${CYAN}1) 公共镜像${NC} - 直接拉取 Docker Hub 镜像（快速，推荐）"
@@ -472,7 +486,14 @@ start_service() {
     esac
 
     say_wait "让类脑娘住进来..."
-    local compose_cmd="docker compose $compose_profile up -d"
+    local compose_cmd
+    if [ "$skip_caddy" = true ]; then
+        local all_services
+        all_services=$(docker compose config --services | grep -v caddy)
+        compose_cmd="docker compose $compose_profile up -d $all_services"
+    else
+        compose_cmd="docker compose $compose_profile up -d"
+    fi
     if eval "$compose_cmd"; then
         say_success "类脑娘已经住进来了～"
     else
