@@ -316,6 +316,7 @@ generate_env_file() {
 # --- 实例配置 ---
 # 用于在一台服务器上运行多个类脑娘实例时区分不同实例
 INSTANCE_NAME=$INSTANCE_NAME
+COMPOSE_PROJECT_NAME=$INSTANCE_NAME
 DB_HOST=db
 
 # --- Discord ---
