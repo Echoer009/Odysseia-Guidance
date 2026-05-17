@@ -489,7 +489,7 @@ start_service() {
     local compose_cmd
     if [ "$skip_caddy" = true ]; then
         local all_services
-        all_services=$(docker compose config --services | grep -v caddy)
+        all_services=$(docker compose config --services | grep -v caddy | tr '\n' ' ')
         compose_cmd="docker compose $compose_profile up -d $all_services"
     else
         compose_cmd="docker compose $compose_profile up -d"
