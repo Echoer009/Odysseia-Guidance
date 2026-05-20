@@ -5,7 +5,6 @@ import re
 import time
 from discord import app_commands
 from discord.ext import commands
-from PIL import Image
 
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.feeding_service import feeding_service
@@ -20,6 +19,7 @@ from src.chat.config.chat_config import (
     PROMPT_CONFIG,
     GEMINI_FEEDING_GEN_CONFIG,
 )
+from src.chat.services.message_processor import message_processor
 from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
@@ -37,22 +37,9 @@ logger = logging.getLogger(__name__)
 
 _TAG_PATTERN = re.compile(r"`?\s*<([^>]*:[^>]*;[^>]*)>\s*`?", re.DOTALL)
 
-_COMPRESS_MAX_DIMENSION = 1024
-_COMPRESS_QUALITY = 75
-
 
 def _compress_image(image_bytes: bytes) -> tuple[bytes, str]:
-    buf = io.BytesIO(image_bytes)
-    with Image.open(buf) as img:
-        img.thumbnail(
-            (_COMPRESS_MAX_DIMENSION, _COMPRESS_MAX_DIMENSION),
-            Image.Resampling.LANCZOS,
-        )
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        out = io.BytesIO()
-        img.save(out, format="JPEG", quality=_COMPRESS_QUALITY)
-        return out.getvalue(), "image/jpeg"
+    return message_processor._compress_image_bytes(image_bytes)
 
 
 def _parse_feeding_response(response_text: str):

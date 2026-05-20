@@ -6,10 +6,16 @@ from typing import List, Dict, Any, Optional, Tuple
 import re
 import asyncio
 import aiohttp
+import io
+from PIL import Image
 
 from src import config
 from src.chat.config import chat_config
 from src.chat.utils.database import chat_db_manager
+
+_ATTACHMENT_IMAGE_MAX_BYTES = 1 * 1024 * 1024
+_ATTACHMENT_COMPRESS_MAX_DIMENSION = 1024
+_ATTACHMENT_COMPRESS_QUALITY = 75
 
 log = logging.getLogger(__name__)
 
@@ -422,26 +428,52 @@ class MessageProcessor:
     async def _extract_images_from_attachments(
         self, attachments: List[discord.Attachment]
     ) -> List[Dict[str, Any]]:
-        """从附件列表中提取图片数据。"""
+        """从附件列表中提取图片数据，超过阈值的自动压缩。"""
         image_data_list = []
         for attachment in attachments:
             if attachment.content_type and attachment.content_type.startswith("image/"):
                 try:
                     image_bytes = await attachment.read()
-                    if image_bytes:
-                        image_data_list.append(
-                            {
-                                "mime_type": attachment.content_type,
-                                "data": image_bytes,
-                                "source": "attachment",
-                            }
+                    if not image_bytes:
+                        continue
+
+                    if len(image_bytes) > _ATTACHMENT_IMAGE_MAX_BYTES:
+                        log.info(
+                            f"附件图片 {attachment.filename} 过大 ({len(image_bytes)} bytes)，"
+                            f"开始压缩..."
                         )
-                        log.debug(
-                            f"成功读取图片附件: {attachment.filename}, 大小: {len(image_bytes)} 字节"
+                        image_bytes, _ = self._compress_image_bytes(image_bytes)
+                        log.info(
+                            f"附件图片压缩完成: {len(image_bytes)} bytes"
                         )
+
+                    image_data_list.append(
+                        {
+                            "mime_type": attachment.content_type,
+                            "data": image_bytes,
+                            "source": "attachment",
+                        }
+                    )
+                    log.debug(
+                        f"成功读取图片附件: {attachment.filename}, 大小: {len(image_bytes)} 字节"
+                    )
                 except Exception as e:
                     log.error(f"读取图片附件 {attachment.filename} 时出错: {e}")
         return image_data_list
+
+    @staticmethod
+    def _compress_image_bytes(image_bytes: bytes) -> tuple[bytes, str]:
+        buf = io.BytesIO(image_bytes)
+        with Image.open(buf) as img:
+            img.thumbnail(
+                (_ATTACHMENT_COMPRESS_MAX_DIMENSION, _ATTACHMENT_COMPRESS_MAX_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=_ATTACHMENT_COMPRESS_QUALITY)
+            return out.getvalue(), "image/jpeg"
 
     def _clean_message_content(
         self,
