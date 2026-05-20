@@ -131,9 +131,19 @@ async def issue_user_warning(
             )
         }
 
-    try:
-        target_id = int(user_id_str)
+    target_id = int(user_id_str)
 
+    if await chat_db_manager.is_user_blacklisted(target_id, guild_id):
+        log.info(
+            f"用户 {target_id} 已在黑名单中，跳过重复警告。"
+        )
+        return {
+            "status": "already_blacklisted",
+            "user_id": str(target_id),
+            "message": "该用户已被封禁中，无需重复警告。",
+        }
+
+    try:
         await chat_db_manager.increment_issue_user_warning_count()
 
         min_d, max_d = chat_config.BLACKLIST_BAN_DURATION_MINUTES
