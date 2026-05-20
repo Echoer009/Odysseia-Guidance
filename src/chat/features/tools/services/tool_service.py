@@ -315,11 +315,16 @@ class ToolService:
                 log.info("已注入 'bot' 实例。")
 
             if user_id is not None:
-                # 优先注入通用的 user_id
-                # 统一将 user_id 转为字符串类型再注入，以适配工具函数的类型期望
                 user_id_str = str(user_id)
-                # 核心修复：只有当模型没有提供 user_id 时，才注入当前用户的 id 作为默认值。
-                if "user_id" not in tool_args:
+                SECURITY_SENSITIVE_TOOLS = {"issue_user_warning"}
+                if tool_name in SECURITY_SENSITIVE_TOOLS:
+                    if "user_id" in tool_args and str(tool_args["user_id"]) != user_id_str:
+                        log.warning(
+                            f"安全敏感工具 '{tool_name}'：模型提供的 user_id={tool_args['user_id']} "
+                            f"已被系统覆盖为当前用户 {user_id_str}"
+                        )
+                    tool_args["user_id"] = user_id_str
+                elif "user_id" not in tool_args:
                     tool_args["user_id"] = user_id_str
                     if log_detailed:
                         log.info(
