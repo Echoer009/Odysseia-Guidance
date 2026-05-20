@@ -5,6 +5,7 @@ import re
 import time
 from discord import app_commands
 from discord.ext import commands
+from PIL import Image
 
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.feeding_service import feeding_service
@@ -35,6 +36,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 _TAG_PATTERN = re.compile(r"`?\s*<([^>]*:[^>]*;[^>]*)>\s*`?", re.DOTALL)
+
+_COMPRESS_MAX_DIMENSION = 1024
+_COMPRESS_QUALITY = 75
+
+
+def _compress_image(image_bytes: bytes) -> tuple[bytes, str]:
+    buf = io.BytesIO(image_bytes)
+    with Image.open(buf) as img:
+        img.thumbnail(
+            (_COMPRESS_MAX_DIMENSION, _COMPRESS_MAX_DIMENSION),
+            Image.Resampling.LANCZOS,
+        )
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=_COMPRESS_QUALITY)
+        return out.getvalue(), "image/jpeg"
 
 
 def _parse_feeding_response(response_text: str):
@@ -102,6 +120,61 @@ class FeedingCog(commands.Cog):
         self.ai_service = ai_service
         self.feeding_service = feeding_service
 
+    async def _call_feeding_ai(
+        self,
+        prompt: str,
+        image_bytes: bytes,
+        mime_type: str,
+        config: GenerationConfig,
+        model_id: str,
+    ) -> str:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image",
+                        "image_bytes": image_bytes,
+                        "mime_type": mime_type,
+                    },
+                ],
+            }
+        ]
+        result = await ai_service.generate(
+            messages=messages, config=config, model=model_id, enable_vision=True
+        )
+        return result.content
+
+    async def _generate_feeding_with_retry(
+        self,
+        prompt: str,
+        image_bytes: bytes,
+        mime_type: str,
+        config: GenerationConfig,
+        model_id: str,
+    ) -> str:
+        try:
+            return await self._call_feeding_ai(
+                prompt, image_bytes, mime_type, config, model_id
+            )
+        except Exception as first_err:
+            err_str = str(first_err)
+            is_413 = "413" in err_str or "Payload Too Large" in err_str
+            if not is_413:
+                raise
+            logger.info(
+                f"投喂原图生成失败(413)，原图 {len(image_bytes)} bytes，"
+                f"尝试压缩后重试..."
+            )
+            compressed_bytes, compressed_mime = _compress_image(image_bytes)
+            logger.info(
+                f"图片压缩完成: {len(image_bytes)} -> {len(compressed_bytes)} bytes"
+            )
+            return await self._call_feeding_ai(
+                prompt, compressed_bytes, compressed_mime, config, model_id
+            )
+
     @app_commands.command(name="投喂", description="在吃饭?给类脑娘来一口怎么样")
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
@@ -138,20 +211,6 @@ class FeedingCog(commands.Cog):
             base_prompt = PROMPT_CONFIG.get("feeding_prompt", "")
             prompt = f"{persona_part}\n\n{base_prompt}"
 
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image",
-                            "image_bytes": image_bytes,
-                            "mime_type": image.content_type,
-                        },
-                    ],
-                }
-            ]
-
             config = GenerationConfig(
                 temperature=GEMINI_FEEDING_GEN_CONFIG.get("temperature", 1.0),
                 max_output_tokens=GEMINI_FEEDING_GEN_CONFIG.get(
@@ -161,10 +220,14 @@ class FeedingCog(commands.Cog):
 
             model_id = await chat_settings_service.get_current_ai_model()
 
-            result = await ai_service.generate(
-                messages=messages, config=config, model=model_id, enable_vision=True
+            result = await self._generate_feeding_with_retry(
+                prompt=prompt,
+                image_bytes=image_bytes,
+                mime_type=image.content_type,
+                config=config,
+                model_id=model_id,
             )
-            response_text = result.content
+            response_text = result
 
             if not response_text:
                 await interaction.edit_original_response(
