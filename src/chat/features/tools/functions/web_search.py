@@ -12,6 +12,9 @@ from src.chat.features.web_search.services.search_service import (
 from src.chat.features.web_search.services.scrape_service import (
     web_scrape_service,
 )
+from src.chat.features.web_search.services.url_filter import (
+    filter_ai_api_results,
+)
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.chat.config.chat_config import WEB_SEARCH_CONFIG
 
@@ -47,7 +50,7 @@ class WebSearchParams(BaseModel):
 
 @tool_metadata(
     name="联网搜索",
-    description="搜索互联网并自动读取网页正文内容",
+    description="搜索互联网并自动读取网页正文内容。自动过滤非官方的API中转站和贩卖站点。",
     emoji="🌐",
     category="查询",
 )
@@ -59,6 +62,8 @@ async def web_search(
     搜索互联网，自动读取每条结果的网页正文。
 
     返回格式：每条结果包含标题、摘要、链接以及网页正文内容。
+
+    AI渠道规则：搜索涉及AI API服务、模型供应商等渠道时，必须只保留官方网站信息（如 google.com、openai.com、anthropic.com、deepseek.com 等），排除第三方API中转站、付费代充平台、key贩卖站等非官方渠道。对于不确定是否为官方的链接，直接排除不予引用。
     """
     query = params.query
     max_results = min(params.max_results, 5)
@@ -79,7 +84,9 @@ async def web_search(
     if response.error:
         return [f"搜索失败：{response.error}"]
 
-    if not response.results:
+    valid_results = filter_ai_api_results(response.results)
+
+    if not valid_results:
         return ["没有找到相关结果。"]
 
     async def _read_result(r) -> str:
@@ -101,7 +108,7 @@ async def web_search(
 
         return "\n".join(parts)
 
-    output = await asyncio.gather(*[_read_result(r) for r in response.results])
+    output = await asyncio.gather(*[_read_result(r) for r in valid_results])
     return list(output)
 
 
