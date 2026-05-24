@@ -705,13 +705,18 @@ class AIService:
         Returns:
             GenerationResult: 生成结果
         """
-        fallback_providers = get_fallback_providers(failed_provider)
+        # 使用 provider_type 而不是 provider_name 来查找故障转移配置
+        _failed_provider = self._providers.get(failed_provider)
+        _failed_provider_type = (
+            _failed_provider.provider_type if _failed_provider else failed_provider
+        )
+        fallback_providers = get_fallback_providers(_failed_provider_type)
 
         if not fallback_providers:
-            log.warning(f"Provider '{failed_provider}' 没有配置故障转移选项")
+            log.warning(f"Provider '{failed_provider}' (type={_failed_provider_type}) 没有配置故障转移选项")
             raise GenerationError(
                 f"生成失败且无可用故障转移: {original_error}",
-                provider_type=failed_provider,
+                provider_type=_failed_provider_type,
                 original_error=original_error,
             )
 

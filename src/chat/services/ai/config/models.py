@@ -432,8 +432,14 @@ def get_fallback_providers(provider_type: str) -> List[str]:
     """
     normalized = provider_type.lower()
 
-    if normalized.startswith("gemini_custom") or "custom" in normalized:
+    if normalized in FALLBACK_PRIORITY:
+        return FALLBACK_PRIORITY[normalized]
+
+    if "custom" in normalized or normalized.startswith("gemini_custom"):
         return FALLBACK_PRIORITY.get("gemini_custom", [])
+
+    if normalized.startswith("gemini"):
+        return FALLBACK_PRIORITY.get("gemini_official", [])
 
     return FALLBACK_PRIORITY.get(normalized, [])
 
