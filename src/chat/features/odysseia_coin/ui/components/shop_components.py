@@ -33,6 +33,9 @@ from src.chat.features.tools.tool_metadata import (
 from src.chat.features.tools.services.user_tool_settings_service import (
     user_tool_settings_service,
 )
+from src.database.database import AsyncSessionLocal
+from src.database.models import CommunityMemberProfile
+from sqlalchemy.future import select
 
 
 if TYPE_CHECKING:
@@ -1126,6 +1129,7 @@ class ToolSettingsView(discord.ui.View):
     MODE_TOOLS = "tools"
     MODE_COMMANDS = "commands"
     MODE_PERSONA = "persona"
+    MODE_PROFILE_CARD = "profile_card"
 
     def __init__(self, main_view: "SimpleShopView"):
         super().__init__(timeout=300)
@@ -1136,7 +1140,6 @@ class ToolSettingsView(discord.ui.View):
         # 工具设置相关
         self.user_tool_settings: Dict[str, Any] | None = None
         self.all_tools: Dict[str, Dict[str, Any]] = {}
-        self.protected_tools: List[str] = []
 
         # 命令设置相关
         self.user_command_settings: Dict[str, Any] | None = None
@@ -1144,6 +1147,9 @@ class ToolSettingsView(discord.ui.View):
 
         # 人设风格相关
         self.persona_style: str = "default"
+
+        # 名片相关
+        self.profile_data: Dict[str, Any] | None = None
 
         self.confirmation_message: str | None = None
 
@@ -1181,6 +1187,21 @@ class ToolSettingsView(discord.ui.View):
             str(user.id)
         )
 
+        async with AsyncSessionLocal() as session:
+            stmt = select(CommunityMemberProfile).where(
+                CommunityMemberProfile.discord_id == str(user.id)
+            )
+            result = await session.execute(stmt)
+            profile = result.scalars().first()
+            if profile:
+                self.profile_data = {
+                    "title": profile.title,
+                    "source_metadata": profile.source_metadata,
+                    "personal_summary": profile.personal_summary,
+                    "created_at": profile.created_at,
+                    "updated_at": profile.updated_at,
+                }
+
         self.add_components()
 
     def add_components(self):
@@ -1202,27 +1223,47 @@ class ToolSettingsView(discord.ui.View):
             self.add_item(PersonaButtonGentle(self.persona_style))
             self.add_item(PersonaButtonFrank(self.persona_style))
 
-        # 添加模式切换按钮
-        mode_labels = {
-            self.MODE_TOOLS: ("切换到命令设置", self.MODE_COMMANDS),
-            self.MODE_COMMANDS: ("切换到人设风格", self.MODE_PERSONA),
-            self.MODE_PERSONA: ("切换到工具设置", self.MODE_TOOLS),
-        }
-        label, _ = mode_labels[self.current_mode]
-        switch_button = discord.ui.Button(
-            label=label,
-            style=discord.ButtonStyle.primary,
-            emoji="🔄",
-            row=1,
-        )
-        switch_button.callback = self.switch_mode_callback
-        self.add_item(switch_button)
+        if self.current_mode == self.MODE_PROFILE_CARD:
+            back_button = discord.ui.Button(
+                label="返回工作清单",
+                style=discord.ButtonStyle.secondary,
+                emoji="⬅️",
+                row=0,
+            )
+            back_button.callback = self._back_to_tool_list_callback
+            self.add_item(back_button)
 
-        back_button = discord.ui.Button(
-            label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1
-        )
-        back_button.callback = self.back_callback
-        self.add_item(back_button)
+            return_to_shop = discord.ui.Button(
+                label="返回商店",
+                style=discord.ButtonStyle.secondary,
+                emoji="🏠",
+                row=0,
+            )
+            return_to_shop.callback = self.back_callback
+            self.add_item(return_to_shop)
+        else:
+            mode_labels = {
+                self.MODE_TOOLS: ("切换到命令设置", self.MODE_COMMANDS),
+                self.MODE_COMMANDS: ("切换到人设风格", self.MODE_PERSONA),
+                self.MODE_PERSONA: ("切换到工具设置", self.MODE_TOOLS),
+            }
+            label, _ = mode_labels[self.current_mode]
+            switch_button = discord.ui.Button(
+                label=label,
+                style=discord.ButtonStyle.primary,
+                emoji="🔄",
+                row=1,
+            )
+            switch_button.callback = self.switch_mode_callback
+            self.add_item(switch_button)
+
+            back_button = discord.ui.Button(
+                label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1
+            )
+            back_button.callback = self.back_callback
+            self.add_item(back_button)
+
+            self.add_item(ViewProfileCardButton())
 
     async def switch_mode_callback(self, interaction: discord.Interaction):
         """切换工具/命令/人设模式。"""
@@ -1239,6 +1280,9 @@ class ToolSettingsView(discord.ui.View):
 
     async def create_embed(self) -> discord.Embed:
         """根据当前模式创建嵌入消息。"""
+        if self.current_mode == self.MODE_PROFILE_CARD:
+            return self._create_profile_card_embed()
+
         if self.current_mode == self.MODE_TOOLS:
             title = "🗒️ 类脑娘的工作清单 - 工具设置"
             description = "在这里可以设置类脑娘在你的帖子里能使用哪些工具哦～\n默认情况下所有工具都是开启的。"
@@ -1278,10 +1322,74 @@ class ToolSettingsView(discord.ui.View):
         )
         return embed
 
+    def _create_profile_card_embed(self) -> discord.Embed:
+        """创建名片嵌入消息。"""
+        if not self.profile_data:
+            return discord.Embed(
+                title="🪪 我的名片",
+                description="类脑娘还不认识你\n\n如果你想让类脑娘记住你，可以在商店购买**名片**哦～",
+                color=discord.Color.dark_grey(),
+            )
+
+        metadata = self.profile_data.get("source_metadata") or {}
+        name = metadata.get("name") or self.profile_data.get("title") or "未知"
+        personality = metadata.get("personality", "")
+        background = metadata.get("background", "")
+        preferences = metadata.get("preferences", "")
+        personal_summary = self.profile_data.get("personal_summary")
+
+        embed = discord.Embed(
+            title="🪪 我的名片",
+            description=f"**{name}** 交给类脑娘的名片",
+            color=discord.Color.gold(),
+        )
+
+        if personality:
+            embed.add_field(name="性格特点", value=personality, inline=False)
+        if background:
+            embed.add_field(name="背景信息", value=background, inline=False)
+        if preferences:
+            embed.add_field(name="喜好偏好", value=preferences, inline=False)
+        if personal_summary:
+            embed.add_field(
+                name="类脑娘对你的印象",
+                value=personal_summary,
+                inline=False,
+            )
+
+        updated_at = self.profile_data.get("updated_at")
+        if updated_at:
+            embed.set_footer(text=f"最后更新: {updated_at.strftime('%Y-%m-%d %H:%M')}")
+
+        return embed
+
     async def back_callback(self, interaction: discord.Interaction):
         """返回主商店视图。"""
         embeds = await self.main_view.create_shop_embeds()
         await interaction.response.edit_message(embeds=embeds, view=self.main_view)
+
+    async def _back_to_tool_list_callback(self, interaction: discord.Interaction):
+        """从名片视图返回工作清单。"""
+        self.current_mode = self.MODE_TOOLS
+        self.add_components()
+        embed = await self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+class ViewProfileCardButton(discord.ui.Button):
+    """查看自己名片的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="我的名片", style=discord.ButtonStyle.secondary, emoji="🪪", row=2
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        view = cast(ToolSettingsView, self.view)
+        view.current_mode = ToolSettingsView.MODE_PROFILE_CARD
+        view.add_components()
+        embed = await view.create_embed()
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 class PersonaButtonDefault(discord.ui.Button):

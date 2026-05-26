@@ -7,7 +7,7 @@ import io
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import discord
@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.chat.utils.time_utils import BEIJING_TZ
 
 log = logging.getLogger(__name__)
 
@@ -26,13 +27,17 @@ class SummarizeChannelParams(BaseModel):
         default=200,
         description="要获取的消息数量，默认200条。",
     )
+    hours_ago: Optional[int] = Field(
+        None,
+        description="获取最近多少小时的消息，设置后优先于 start_date",
+    )
     start_date: Optional[str] = Field(
         None,
-        description="开始日期 (格式: YYYY-MM-DD)",
+        description="开始日期或时间 (格式: YYYY-MM-DD 或 YYYY-MM-DD HH:MM)，时间为北京时间",
     )
     end_date: Optional[str] = Field(
         None,
-        description="结束日期 (格式: YYYY-MM-DD)",
+        description="结束日期或时间 (格式: YYYY-MM-DD 或 YYYY-MM-DD HH:MM)，时间为北京时间",
     )
 
 
@@ -57,18 +62,40 @@ async def summarize_channel(
     limit = min(params.limit, 500)
 
     after = None
-    if params.start_date:
+    if params.hours_ago:
+        after = datetime.now(timezone.utc) - timedelta(hours=params.hours_ago)
+    elif params.start_date:
         try:
-            after = datetime.strptime(params.start_date, "%Y-%m-%d")
-        except ValueError:
-            return "错误: `start_date` 格式不正确，请使用 YYYY-MM-DD 格式。"
+            for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    naive = datetime.strptime(params.start_date, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return "错误: `start_date` 格式不正确，请使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式。"
+            after = naive.replace(tzinfo=BEIJING_TZ).astimezone(timezone.utc)
+        except Exception:
+            return "错误: `start_date` 格式不正确，请使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式。"
 
     before = None
     if params.end_date:
         try:
-            before = datetime.strptime(params.end_date, "%Y-%m-%d")
-        except ValueError:
-            return "错误: `end_date` 格式不正确，请使用 YYYY-MM-DD 格式。"
+            parsed_fmt = None
+            for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    naive = datetime.strptime(params.end_date, fmt)
+                    parsed_fmt = fmt
+                    break
+                except ValueError:
+                    continue
+            else:
+                return "错误: `end_date` 格式不正确，请使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式。"
+            if parsed_fmt == "%Y-%m-%d":
+                naive = naive + timedelta(days=1)
+            before = naive.replace(tzinfo=BEIJING_TZ).astimezone(timezone.utc)
+        except Exception:
+            return "错误: `end_date` 格式不正确，请使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式。"
 
     channel_id = getattr(channel, "id", "未知")
     log.info(
