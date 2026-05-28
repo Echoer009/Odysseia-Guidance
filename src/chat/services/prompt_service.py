@@ -427,61 +427,7 @@ class PromptService:
             log.info("已将帖子首楼内容注入到人设之后")
             delattr(self, "_thread_first_post_to_inject")
 
-        # --- 2. 动态知识注入 ---
-        # 注入世界之书 (RAG) 内容
-        world_book_formatted_content = self._format_world_book_entries(
-            world_book_entries, user_name
-        )
-        if world_book_formatted_content:
-            final_conversation.append(
-                {"role": "user", "parts": [world_book_formatted_content]}
-            )
-            final_conversation.append({"role": "model", "parts": ["我想起来了。"]})
-
-        # --- 三层记忆注入（合并到一个 part 中）---
-        # 第一层：类脑的印象（personal_summary）
-        # 第二层：RAG 检索的相关对话块（conversation_memory）
-        # 第三层：最新的对话块（latest_block）
-        memory_parts = []
-
-        # 第一层：个人印象
-        if personal_summary:
-            memory_parts.append(
-                f"<personal_memory>\n这是关于 {user_name} ,你对ta的印象：\n{personal_summary}\n</personal_memory>"
-            )
-
-        # 第二层：RAG 对话记忆
-        if conversation_memory:
-            memory_parts.append(
-                f"<conversation_memory>\n以下是你与 {user_name} 之前的一些对话片段：\n{conversation_memory}\n</conversation_memory>"
-            )
-
-        # 第三层：最新对话块
-        if latest_block:
-            time_desc = latest_block.get("time_description", "最近")
-            conversation_text = latest_block.get("conversation_text", "")
-            memory_parts.append(
-                f"<latest_conversation>\n以下是你与 {user_name} 在 {time_desc} 的对话记录：\n{conversation_text}\n</latest_conversation>"
-            )
-
-        # 合并三层记忆到一个 part 中
-        if memory_parts:
-            combined_memory_content = "\n\n".join(memory_parts)
-            final_conversation.append(
-                {"role": "user", "parts": [combined_memory_content]}
-            )
-            final_conversation.append({"role": "model", "parts": ["嗯，我记得这些。"]})
-            log.debug(
-                f"已注入三层记忆: 印象={bool(personal_summary)}, RAG={bool(conversation_memory)}, 最新块={bool(latest_block)}"
-            )
-
-        # --- 新增：注入好感度和用户档案 ---
-        affection_prompt = (
-            affection_status.get("prompt", "").replace("用户", user_name)
-            if affection_status
-            else ""
-        )
-
+        # --- 用户画像注入（不包含好感度） ---
         user_profile_prompt = ""
         if user_profile_data:
             # 1. 优雅地合并数据源：优先使用顶层数据，然后是嵌套的JSON数据
@@ -529,19 +475,12 @@ class PromptService:
             if profile_details:
                 user_profile_prompt = "\n" + "\n".join(profile_details)
 
-        if affection_prompt or user_profile_prompt:
-            # 如果存在好感度信息，为其添加“态度”标签并换行；否则为空字符串
-            attitude_part = f"态度: {affection_prompt}\n" if affection_prompt else ""
-
-            # 将带标签的好感度部分和用户档案部分（移除前导空白）结合起来
-            combined_prompt = f"{attitude_part}{user_profile_prompt.lstrip()}".strip()
-
-            # 更新外部标题，使其更具包容性
+        if user_profile_prompt:
             final_conversation.append(
                 {
                     "role": "user",
                     "parts": [
-                        f'<attitude_and_background user="{user_name}">\n这是关于 {user_name} 的一些背景信息，你在与ta互动时应该了解这些，除非涉及,不要在对话中直接引用这些信息\n{combined_prompt}\n</attitude_and_background>'
+                        f'<background user="{user_name}">\n这是关于 {user_name} 的一些背景信息，你在与ta互动时应该了解这些\n{user_profile_prompt.lstrip()}\n</background>'
                     ],
                 }
             )
@@ -551,6 +490,23 @@ class PromptService:
         if channel_context:
             final_conversation.extend(channel_context)
             log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
+
+        # --- 好感度注入（频道历史之后） ---
+        affection_prompt = (
+            affection_status.get("prompt", "").replace("用户", user_name)
+            if affection_status
+            else ""
+        )
+        if affection_prompt:
+            final_conversation.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        f'<attitude user="{user_name}">\n态度: {affection_prompt}\n</attitude>'
+                    ],
+                }
+            )
+            final_conversation.append({"role": "model", "parts": ["收到"]})
 
         # --- 4. 回复上下文注入 (后置) ---
         if replied_message:
@@ -904,13 +860,7 @@ class PromptService:
         # 第二层：几乎不变的内容（用户相关）
         # ============================================
 
-        # 4. 好感度+用户档案
-        affection_prompt = (
-            affection_status.get("prompt", "").replace("用户", user_name)
-            if affection_status
-            else ""
-        )
-
+        # 4. 用户档案（仅画像，不包含好感度）
         user_profile_prompt = ""
         if user_profile_data:
             source_data = {}
@@ -948,27 +898,16 @@ class PromptService:
             if profile_details:
                 user_profile_prompt = "\n" + "\n".join(profile_details)
 
-        if affection_prompt or user_profile_prompt:
-            attitude_part = f"态度: {affection_prompt}\n" if affection_prompt else ""
-            combined_prompt = f"{attitude_part}{user_profile_prompt.lstrip()}".strip()
+        if user_profile_prompt:
             final_conversation.append(
                 {
                     "role": "user",
                     "parts": [
-                        f'<attitude_and_background user="{user_name}">\n这是关于 {user_name} 的一些背景信息，你在与ta互动时应该了解这些，除非涉及,不要在对话中直接引用这些信息\n{combined_prompt}\n</attitude_and_background>'
+                        f'<background user="{user_name}">\n这是关于 {user_name} 的一些背景信息，你在与ta互动时应该了解这些\n{user_profile_prompt.lstrip()}\n</background>'
                     ],
                 }
             )
             final_conversation.append({"role": "model", "parts": ["这事我知道了"]})
-
-        # 5. 个人印象（单独注入）
-        if personal_summary:
-            personal_memory_content = f"<personal_memory>\n这是关于 {user_name} ,你对ta的印象：\n{personal_summary}\n</personal_memory>"
-            final_conversation.append(
-                {"role": "user", "parts": [personal_memory_content]}
-            )
-            final_conversation.append({"role": "model", "parts": ["我记得ta。"]})
-            log.debug("已注入个人印象（缓存优化位置）")
 
         # ============================================
         # 第三层：相对稳定的内容（频道相关）
@@ -978,6 +917,23 @@ class PromptService:
         if channel_context:
             final_conversation.extend(channel_context)
             log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
+
+        # 好感度注入（频道历史之后）
+        affection_prompt = (
+            affection_status.get("prompt", "").replace("用户", user_name)
+            if affection_status
+            else ""
+        )
+        if affection_prompt:
+            final_conversation.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        f'<attitude user="{user_name}">\n态度: {affection_prompt}\n</attitude>'
+                    ],
+                }
+            )
+            final_conversation.append({"role": "model", "parts": ["收到"]})
 
         # 7. 回复上下文
         if replied_message:
@@ -989,47 +945,10 @@ class PromptService:
             log.debug("已在频道历史后注入回复消息上下文。")
 
         # ============================================
-        # 第四层：动态内容（每次不同）
+        # 第四层：最终指令 + 用户输入
         # ============================================
 
-        # 8. 世界之书 RAG
-        world_book_formatted_content = self._format_world_book_entries(
-            world_book_entries, user_name
-        )
-        if world_book_formatted_content:
-            final_conversation.append(
-                {"role": "user", "parts": [world_book_formatted_content]}
-            )
-            final_conversation.append({"role": "model", "parts": ["我想起来了。"]})
-
-        # 9. RAG对话记忆+最新对话块（合并注入）
-        dynamic_memory_parts = []
-        if conversation_memory:
-            dynamic_memory_parts.append(
-                f"<conversation_memory>\n以下是你与 {user_name} 之前的一些对话片段：\n{conversation_memory}\n</conversation_memory>"
-            )
-        if latest_block:
-            time_desc = latest_block.get("time_description", "最近")
-            conversation_text = latest_block.get("conversation_text", "")
-            dynamic_memory_parts.append(
-                f"<latest_conversation>\n以下是你与 {user_name} 在 {time_desc} 的对话记录：\n{conversation_text}\n</latest_conversation>"
-            )
-
-        if dynamic_memory_parts:
-            combined_dynamic_memory = "\n\n".join(dynamic_memory_parts)
-            final_conversation.append(
-                {"role": "user", "parts": [combined_dynamic_memory]}
-            )
-            final_conversation.append({"role": "model", "parts": ["嗯，我记得这些。"]})
-            log.debug(
-                f"已注入动态记忆: RAG={bool(conversation_memory)}, 最新块={bool(latest_block)}"
-            )
-
-        # ============================================
-        # 第五层：最终指令 + 用户输入
-        # ============================================
-
-        # 10. 最终指令注入（合并到最后一条 model 消息）
+        # 8. 最终指令注入（合并到最后一条 model 消息）
         last_model_message_index = -1
         for i in range(len(final_conversation) - 1, -1, -1):
             if final_conversation[i].get("role") == "model":

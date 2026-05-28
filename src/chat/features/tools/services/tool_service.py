@@ -215,6 +215,9 @@ class ToolService:
         user_id: Optional[int] = None,
         log_detailed: bool = False,
         user_id_for_settings: Optional[str] = None,
+        user_name: Optional[str] = None,
+        fallback_query: Optional[str] = None,
+        channel_context: Optional[List[Dict]] = None,
     ) -> types.Part:
         """
         执行单个工具调用，并以可发送回 Gemini 模型的格式返回结果。
@@ -353,6 +356,15 @@ class ToolService:
                     tool_args["thread_id"] = channel.id
                     if log_detailed:
                         log.info(f"检测到帖子上下文，已注入 'thread_id': {channel.id}")
+
+            if user_name is not None:
+                tool_args["user_name"] = user_name
+
+            if fallback_query is not None:
+                tool_args["fallback_query"] = fallback_query
+
+            if channel_context is not None:
+                tool_args["channel_context"] = channel_context
 
             # 步骤 4: 智能地传递 log_detailed 参数
             if "log_detailed" in sig.parameters:
