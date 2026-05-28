@@ -11,7 +11,6 @@
 from src.chat.features.odysseia_coin.service.coin_service import (
     PERSONAL_MEMORY_ITEM_EFFECT_ID,
     WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
-    COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
     DISABLE_THREAD_COMMENTOR_EFFECT_ID,
     BLOCK_THREAD_REPLIES_EFFECT_ID,
     ENABLE_THREAD_COMMENTOR_EFFECT_ID,
@@ -89,14 +88,7 @@ SHOP_ITEMS = [
         "self",
         WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
     ),
-    (
-        "社区成员档案上传",
-        "上传其他社区成员的档案信息，上传的信息将被正确识别为社区成员。",
-        100,
-        "物品-贡献",
-        "self",
-        COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
-    ),
+
     (
         "拉皮条",
         "给卖屁股的大家提供更多工作机会吧!",

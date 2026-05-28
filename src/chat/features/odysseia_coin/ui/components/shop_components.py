@@ -18,7 +18,6 @@ from src.chat.features.odysseia_coin.service.coin_service import (
     coin_service,
     PERSONAL_MEMORY_ITEM_EFFECT_ID,
     WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
-    COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
     ENABLE_THREAD_REPLIES_EFFECT_ID,
     SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
 )
@@ -474,7 +473,6 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
 
         modal_effects = [
             WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID,
-            COMMUNITY_MEMBER_UPLOAD_EFFECT_ID,
             SELL_BODY_EVENT_SUBMISSION_EFFECT_ID,
         ]
         if item_effect in modal_effects:
@@ -515,7 +513,6 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
 
         modal_map = {
             WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID: "src.chat.features.world_book.ui.contribution_modal.WorldBookContributionModal",
-            COMMUNITY_MEMBER_UPLOAD_EFFECT_ID: "src.chat.features.community_member.ui.community_member_modal.CommunityMemberUploadModal",
             SELL_BODY_EVENT_SUBMISSION_EFFECT_ID: "src.chat.features.work_game.ui.sell_body_submission_modal.SellBodySubmissionModal",
         }
         modal_path = modal_map.get(item["effect_id"])

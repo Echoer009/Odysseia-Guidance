@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 PERSONAL_MEMORY_ITEM_EFFECT_ID = "unlock_personal_memory"
 WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID = "contribute_to_world_book"
-COMMUNITY_MEMBER_UPLOAD_EFFECT_ID = "upload_community_member"
+COMMUNITY_MEMBER_UPLOAD_EFFECT_ID = "upload_community_member"  # deprecated, kept for DB compatibility
 DISABLE_THREAD_COMMENTOR_EFFECT_ID = "disable_thread_commentor"
 BLOCK_THREAD_REPLIES_EFFECT_ID = "block_thread_replies"
 ENABLE_THREAD_COMMENTOR_EFFECT_ID = "enable_thread_commentor"
@@ -368,15 +368,6 @@ class CoinService:
                         _select_random_cg_url(item.get("cg_url")),
                     )
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
-                return (
-                    True,
-                    f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
-                    new_balance,
-                    True,
-                    None,
-                    _select_random_cg_url(item.get("cg_url")),
-                )
-            elif item_effect == COMMUNITY_MEMBER_UPLOAD_EFFECT_ID:
                 return (
                     True,
                     f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
