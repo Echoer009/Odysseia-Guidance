@@ -12,7 +12,10 @@ from src.chat.config.chat_config import (
     CONVERSATION_MEMORY_CONFIG,
 )
 from src.chat.services.ai.service import ai_service
-from src.chat.services.ai.providers.base import GenerationConfig
+from src.chat.services.ai.providers.base import GenerationConfig, ModelNotSupportedError
+from src.chat.features.chat_settings.services.chat_settings_service import (
+    chat_settings_service,
+)
 from src.chat.features.personal_memory.services.conversation_block_service import (
     conversation_block_service,
 )
@@ -250,8 +253,9 @@ class PersonalMemoryService:
         # --- [MEMORY DEBUGGER] ---
 
         # 使用 ai_service.generate() 方法
-        # 始终使用配置的 SUMMARY_MODEL，而不是用户当前的聊天模型
-        model_to_use = SUMMARY_MODEL
+        # 优先使用设置中配置的总结模型，然后是硬编码默认值，最后回退
+        configured_summary_model = await chat_settings_service.get_summary_model()
+        model_to_use = configured_summary_model or SUMMARY_MODEL
         log.info(f"使用模型 {model_to_use} 进行印象总结")
 
         messages = [{"role": "user", "content": final_prompt}]
@@ -259,9 +263,18 @@ class PersonalMemoryService:
             temperature=GEMINI_SUMMARY_GEN_CONFIG.get("temperature", 0.7),
             max_output_tokens=GEMINI_SUMMARY_GEN_CONFIG.get("max_output_tokens", 2048),
         )
-        result = await ai_service.generate(
-            messages=messages, config=config, model=model_to_use
-        )
+        try:
+            result = await ai_service.generate(
+                messages=messages, config=config, model=model_to_use
+            )
+        except ModelNotSupportedError:
+            fallback = current_model or ai_service._get_default_model()
+            log.warning(
+                f"总结模型 {model_to_use} 不可用，回退到 {fallback}"
+            )
+            result = await ai_service.generate(
+                messages=messages, config=config, model=fallback
+            )
         new_summary = result.content
 
         # 保存新摘要并标记对话块为已总结

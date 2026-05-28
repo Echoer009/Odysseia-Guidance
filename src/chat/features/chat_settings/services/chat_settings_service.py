@@ -383,6 +383,17 @@ class ChatSettingsService:
         full_model_id = f"{provider_name}:{model_name}"
         await self.db_manager.set_global_setting("ai_model", full_model_id)
 
+    async def get_summary_model(self) -> Optional[str]:
+        """获取总结模型设置，未设置时返回 None。"""
+        return await self.db_manager.get_global_setting("summary_model")
+
+    async def set_summary_model(self, model: Optional[str]) -> None:
+        """设置总结模型。传入 None 或空字符串则清除设置。"""
+        if model:
+            await self.db_manager.set_global_setting("summary_model", model)
+        else:
+            await self.db_manager.set_global_setting("summary_model", "")
+
     # --- Embedding Model Settings ---
 
     def get_available_embedding_models(self) -> List[Dict[str, str]]:
