@@ -1498,7 +1498,7 @@ class ToolToggleSelect(discord.ui.Select):
                 discord.SelectOption(
                     label=meta["name"],
                     value=tool_name,
-                    description=meta["description"],
+                    description=meta["description"][:100] if meta["description"] else None,
                     emoji=meta["emoji"],
                     default=is_enabled,
                 )
@@ -1555,7 +1555,7 @@ class CommandToggleSelect(discord.ui.Select):
                 discord.SelectOption(
                     label=meta["name"],
                     value=cmd_name,
-                    description=meta["description"],
+                    description=meta["description"][:100] if meta["description"] else None,
                     emoji=meta.get("emoji"),
                     default=is_enabled,
                 )

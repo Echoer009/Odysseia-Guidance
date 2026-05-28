@@ -120,7 +120,7 @@ async def _gather_conversation_memory(**kwargs) -> Optional[str]:
 
 @tool_metadata(
     name="获取上下文",
-    description="每次回复前，你应该根据当前对话内容调用此工具，获取与本次对话相关的信息后再回复。可获取：你对用户的个人印象、你们最近的对话、世界书资料（角色卡、设定等）、历史对话记忆。根据对话需要选择合适的scope，不确定时用all。",
+    description="每次回复前，根据当前对话调用此工具获取相关信息。可获取：个人印象、最近对话、世界书资料、历史记忆等。",
     emoji="🧠",
     category="查询",
 )
