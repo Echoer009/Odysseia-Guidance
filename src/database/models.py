@@ -463,6 +463,41 @@ class UserPersonaPreference(Base):
         return f"<UserPersonaPreference(user_id='{self.user_id}', style='{self.persona_style}')>"
 
 
+class UserMemoryNote(Base):
+    """
+    存储AI对用户的结构化记忆笔记。
+    由AI通过 manage_memory 工具写入，自动注入到对话上下文中。
+    仅对持有名片（profile）的用户生效。
+    """
+
+    __tablename__ = "user_memory_notes"
+    __table_args__ = (
+        Index("ix_user_memory_notes_user_category", "user_id", "category"),
+        {"schema": USER_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True, comment="用户的Discord ID"
+    )
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False,
+        comment="记忆类别: emotion(情感) / status(状态) / preference(偏好) / positive_event(正面事件)",
+    )
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="记忆内容（单条不超过150字）"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<UserMemoryNote(id={self.id}, user_id='{self.user_id}', category='{self.category}')>"
+
+
 # --- 商店商品模型 (PostgreSQL) ---
 
 

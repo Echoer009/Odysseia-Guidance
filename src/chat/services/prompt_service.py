@@ -253,6 +253,7 @@ class PromptService:
         latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
         output_format: str = "gemini",  # "gemini" | "openai" - 输出格式
         persona_style: str = "default",  # 人设风格: "default" | "gentle"
+        memory_notes: Optional[str] = None,  # AI 结构化记忆笔记
     ) -> List[Dict[str, Any]]:
         """
         构建用于AI聊天的分层对话历史。
@@ -286,6 +287,7 @@ class PromptService:
                 latest_block=latest_block,
                 output_format=output_format,
                 persona_style=persona_style,
+                memory_notes=memory_notes,
             )
         else:
             return await self._build_chat_prompt_default(
@@ -306,6 +308,7 @@ class PromptService:
                 latest_block=latest_block,
                 output_format=output_format,
                 persona_style=persona_style,
+                memory_notes=memory_notes,
             )
 
     async def _build_chat_prompt_default(
@@ -327,6 +330,7 @@ class PromptService:
         latest_block: Optional[Dict[str, Any]] = None,
         output_format: str = "gemini",
         persona_style: str = "default",
+        memory_notes: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         默认的对话历史构建方法。
@@ -485,6 +489,18 @@ class PromptService:
                 }
             )
             final_conversation.append({"role": "model", "parts": ["这事我知道了"]})
+
+        # --- 2.5 记忆笔记注入（用户画像之后、频道历史之前） ---
+        if memory_notes:
+            final_conversation.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        f'<memory user="{user_name}">\n这是你记住的关于 {user_name} 的一些重要信息，请在互动时参考这些记忆\n{memory_notes}\n</memory>'
+                    ],
+                }
+            )
+            final_conversation.append({"role": "model", "parts": ["我记得了"]})
 
         # --- 3. 频道历史上下文注入 ---
         if channel_context:
@@ -753,6 +769,7 @@ class PromptService:
         latest_block: Optional[Dict[str, Any]] = None,
         output_format: str = "gemini",
         persona_style: str = "default",
+        memory_notes: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         针对上下文缓存优化的对话历史构建方法。
@@ -908,6 +925,18 @@ class PromptService:
                 }
             )
             final_conversation.append({"role": "model", "parts": ["这事我知道了"]})
+
+        # 5. 记忆笔记注入（用户画像之后、频道历史之前）
+        if memory_notes:
+            final_conversation.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        f'<memory user="{user_name}">\n这是你记住的关于 {user_name} 的一些重要信息，请在互动时参考这些记忆\n{memory_notes}\n</memory>'
+                    ],
+                }
+            )
+            final_conversation.append({"role": "model", "parts": ["我记得了"]})
 
         # ============================================
         # 第三层：相对稳定的内容（频道相关）

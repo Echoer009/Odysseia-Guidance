@@ -18,6 +18,10 @@ from ..modals.search_modals import SearchUserModal, SearchCommunityMemberModal
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.personal_memory.services.user_memory_note_service import (
+    user_memory_note_service,
+    CATEGORY_LABELS,
+)
 from src.chat.features.community_member.ui.community_member_modal import (
     CommunityMemberUploadModal,
 )
@@ -80,6 +84,12 @@ class CommunityMembersView(BaseTableView):
         )
         self.view_conversation_blocks_button.callback = self.view_conversation_blocks
         self.add_item(self.view_conversation_blocks_button)
+
+        self.view_memory_notes_button = discord.ui.Button(
+            label="记忆笔记", emoji="📝", style=discord.ButtonStyle.secondary, row=1
+        )
+        self.view_memory_notes_button.callback = self.view_memory_notes
+        self.add_item(self.view_memory_notes_button)
 
         # Row 2
         self.reset_memory_button = discord.ui.Button(
@@ -176,6 +186,65 @@ class CommunityMembersView(BaseTableView):
 
         except Exception as e:
             log.error(f"打开对话块管理视图时出错: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"处理请求时发生错误: {e}", ephemeral=True
+            )
+
+    async def view_memory_notes(self, interaction: discord.Interaction):
+        """显示该用户的记忆笔记"""
+        if not self.current_item_id:
+            return
+
+        current_item = self._get_item_by_id(self.current_item_id)
+        if not current_item or "discord_id" not in current_item.keys():
+            await interaction.response.send_message(
+                "无法获取该成员的 Discord ID。", ephemeral=True
+            )
+            return
+
+        discord_id = current_item["discord_id"]
+        if not discord_id:
+            await interaction.response.send_message(
+                "该成员未记录 Discord ID，无法查询记忆笔记。", ephemeral=True
+            )
+            return
+
+        try:
+            member_name = (
+                self._get_entry_title(dict(current_item)) or f"ID: {discord_id}"
+            ).replace("社区成员档案 - ", "")
+
+            notes = await user_memory_note_service.get_notes_for_user(str(discord_id))
+
+            embed = discord.Embed(
+                title=f"📝 记忆笔记 - {member_name}",
+                color=discord.Color.blue(),
+            )
+
+            if not notes:
+                embed.description = "该用户目前没有任何记忆笔记。"
+            else:
+                grouped: dict[str, list] = {}
+                for note in notes:
+                    label = CATEGORY_LABELS.get(note.category, note.category)
+                    grouped.setdefault(str(label), []).append(note)
+
+                lines = []
+                for label, group_notes in grouped.items():
+                    lines.append(f"**{label}**")
+                    for note in group_notes:
+                        lines.append(f"  `#{note.id}` {note.content}")
+                    lines.append("")
+
+                embed.description = "\n".join(lines)
+
+            embed.set_footer(text=f"共 {len(notes)} 条记忆笔记")
+
+            view = AdminMemoryNotesView(str(discord_id), notes)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+        except Exception as e:
+            log.error(f"查看记忆笔记时出错: {e}", exc_info=True)
             await interaction.response.send_message(
                 f"处理请求时发生错误: {e}", ephemeral=True
             )
@@ -427,10 +496,8 @@ class CommunityMembersView(BaseTableView):
             self.view_mode = "list"
             return await self._build_list_embed()
 
-        # 核心修复：调用新的格式化服务来获取规范化的数据
         formatted_data = format_member_profile(current_item)
 
-        # 使用格式化后的数据来构建 Embed
         title = formatted_data["source_metadata"].get("name") or self._get_entry_title(
             dict(current_item)
         )
@@ -440,7 +507,6 @@ class CommunityMembersView(BaseTableView):
             color=discord.Color.blue(),
         )
 
-        # 查询该成员的向量统计信息
         conn = self._get_db_connection()
         bge_count = 0
         qwen_count = 0
@@ -448,7 +514,6 @@ class CommunityMembersView(BaseTableView):
         if conn:
             try:
                 cursor = db_services.get_cursor(conn)
-                # 查询该成员的 chunks 总数
                 cursor.execute(
                     "SELECT COUNT(*) FROM community.member_chunks WHERE profile_id = %s",
                     (self.current_item_id,),
@@ -456,7 +521,6 @@ class CommunityMembersView(BaseTableView):
                 chunks_result = cursor.fetchone()
                 total_chunks = chunks_result["count"] if chunks_result else 0
 
-                # 查询该成员的 BGE embedding 数量
                 cursor.execute(
                     "SELECT COUNT(*) FROM community.member_chunks WHERE profile_id = %s AND bge_embedding IS NOT NULL",
                     (self.current_item_id,),
@@ -464,7 +528,6 @@ class CommunityMembersView(BaseTableView):
                 bge_result = cursor.fetchone()
                 bge_count = bge_result["count"] if bge_result else 0
 
-                # 查询该成员的 Qwen embedding 数量
                 cursor.execute(
                     "SELECT COUNT(*) FROM community.member_chunks WHERE profile_id = %s AND qwen_embedding IS NOT NULL",
                     (self.current_item_id,),
@@ -475,15 +538,12 @@ class CommunityMembersView(BaseTableView):
                 if conn:
                     conn.close()
 
-        # 添加 Embedding 统计信息到详情页
         embed.add_field(
             name="📊 Embedding 统计 (Chunks)",
             value=f"🟢 BGE: {bge_count}/{total_chunks} | 🔵 Qwen: {qwen_count}/{total_chunks}",
             inline=False,
         )
 
-        # 1. 显示格式化后的 Full Text
-        # 将格式化文本中的 "键: 值" 分割，并应用样式
         full_text_lines = formatted_data["full_text"].split("\n")
         styled_full_text_lines = []
         for line in full_text_lines:
@@ -499,7 +559,6 @@ class CommunityMembersView(BaseTableView):
             inline=False,
         )
 
-        # 2. 显示格式化后的 Source Metadata
         formatted_metadata_str = f"```json\n{json.dumps(formatted_data['source_metadata'], indent=2, ensure_ascii=False)}\n```"
         embed.add_field(
             name="Source Metadata",
@@ -507,7 +566,6 @@ class CommunityMembersView(BaseTableView):
             inline=False,
         )
 
-        # 3. 显示其他数据库原始元数据以供参考
         other_metadata_to_display = ["id", "external_id", "created_at", "updated_at"]
         for col in other_metadata_to_display:
             if col in current_item:
@@ -521,3 +579,111 @@ class CommunityMembersView(BaseTableView):
                 )
 
         return embed
+
+
+class AdminMemoryNotesView(discord.ui.View):
+    def __init__(self, user_id: str, notes: list):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.notes = notes
+
+        if notes:
+            options = []
+            for note in notes[:25]:
+                label = CATEGORY_LABELS.get(note.category, note.category)
+                preview = note.content if len(note.content) <= 80 else note.content[:77] + "..."
+                options.append(
+                    discord.SelectOption(
+                        label=f"#{note.id} [{label}]",
+                        value=str(note.id),
+                        description=preview,
+                    )
+                )
+
+            select = discord.ui.Select(
+                placeholder="选择要删除的记忆笔记...",
+                options=options,
+            )
+            select.callback = self._on_select
+            self.add_item(select)
+
+            delete_all_button = discord.ui.Button(
+                label="删除全部", emoji="🗑️", style=discord.ButtonStyle.danger, row=1
+            )
+            delete_all_button.callback = self._delete_all
+            self.add_item(delete_all_button)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        values = interaction.data.get("values", []) if interaction.data else []
+        if not values:
+            await interaction.response.defer()
+            return
+
+        note_id = int(values[0])
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                success, message = await user_memory_note_service.delete_note(
+                    self.user_id, note_id
+                )
+                if success:
+                    await interaction.followup.send(
+                        f"✅ 已删除记忆笔记 #{note_id}", ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"❌ 删除失败: {message}", ephemeral=True
+                    )
+            except Exception as e:
+                log.error(f"管理员删除记忆笔记失败: {e}", exc_info=True)
+                await interaction.followup.send(f"❌ 删除失败: {e}", ephemeral=True)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(label="确认删除", style=discord.ButtonStyle.danger)
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.secondary)
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        note = next((n for n in self.notes if n.id == note_id), None)
+        note_text = note.content if note else "未知"
+        await interaction.response.send_message(
+            f"**⚠️ 确认删除**\n> {note_text}\n此操作无法撤销。",
+            view=confirm_view,
+            ephemeral=True,
+        )
+
+    async def _delete_all(self, interaction: discord.Interaction):
+        confirm_view = discord.ui.View(timeout=60)
+
+        async def confirm_callback(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                count = await user_memory_note_service.delete_all_notes_for_user(self.user_id)
+                await interaction.followup.send(
+                    f"✅ 已删除全部 {count} 条记忆笔记。", ephemeral=True
+                )
+            except Exception as e:
+                log.error(f"管理员删除全部记忆笔记失败: {e}", exc_info=True)
+                await interaction.followup.send(f"❌ 删除失败: {e}", ephemeral=True)
+
+        async def cancel_callback(interaction: discord.Interaction):
+            await interaction.response.edit_message(content="操作已取消。", view=None)
+
+        confirm_button = discord.ui.Button(label="确认删除全部", style=discord.ButtonStyle.danger)
+        confirm_button.callback = confirm_callback
+        cancel_button = discord.ui.Button(label="取消", style=discord.ButtonStyle.secondary)
+        cancel_button.callback = cancel_callback
+        confirm_view.add_item(confirm_button)
+        confirm_view.add_item(cancel_button)
+
+        await interaction.response.send_message(
+            f"**⚠️ 确认操作**\n确定要删除该用户的全部 **{len(self.notes)}** 条记忆笔记吗？",
+            view=confirm_view,
+            ephemeral=True,
+        )

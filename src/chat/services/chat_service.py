@@ -18,6 +18,9 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.personal_memory.services.user_memory_note_service import (
+    user_memory_note_service,
+)
 from src.chat.config import chat_config
 from src.chat.config.chat_config import DEBUG_CONFIG
 from src.chat.features.chat_settings.services.chat_settings_service import (
@@ -178,6 +181,16 @@ class ChatService:
             affection_status = await affection_service.get_affection_status(author.id)
             persona_style = await persona_preference_service.get_persona_style(str(author.id))
 
+            # 获取记忆笔记（仅对有名片用户）
+            memory_notes_text = None
+            if user_profile_data:
+                try:
+                    memory_notes_text = await user_memory_note_service.get_notes_for_context(
+                        str(author.id)
+                    )
+                except Exception as mem_note_e:
+                    log.error(f"获取用户 {author.id} 记忆笔记失败: {mem_note_e}")
+
             # 3. --- 好感度与奖励更新（前置） ---
             try:
                 # 在生成回复前更新好感度，以确保日志顺序正确
@@ -247,6 +260,7 @@ class ChatService:
                 latest_block=None,
                 output_format=output_format,
                 persona_style=persona_style,
+                memory_notes=memory_notes_text,
             )
 
             # 获取工具列表（根据 Provider 类型返回对应格式）
