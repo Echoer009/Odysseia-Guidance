@@ -248,12 +248,13 @@ class PromptService:
         personal_summary: Optional[str] = None,
         user_profile_data: Optional[Dict[str, Any]] = None,
         model_name: Optional[str] = None,
-        channel: Optional[Any] = None,  # 新增 channel 参数
-        conversation_memory: Optional[str] = None,  # 第二层：对话记忆 RAG 内容
-        latest_block: Optional[Dict[str, Any]] = None,  # 第三层：最新对话块
-        output_format: str = "gemini",  # "gemini" | "openai" - 输出格式
-        persona_style: str = "default",  # 人设风格: "default" | "gentle"
-        memory_notes: Optional[str] = None,  # AI 结构化记忆笔记
+        channel: Optional[Any] = None,
+        conversation_memory: Optional[str] = None,
+        latest_block: Optional[Dict[str, Any]] = None,
+        output_format: str = "gemini",
+        persona_style: str = "default",
+        memory_notes: Optional[str] = None,
+        recent_chat_history: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         构建用于AI聊天的分层对话历史。
@@ -288,6 +289,7 @@ class PromptService:
                 output_format=output_format,
                 persona_style=persona_style,
                 memory_notes=memory_notes,
+                recent_chat_history=recent_chat_history,
             )
         else:
             return await self._build_chat_prompt_default(
@@ -309,7 +311,65 @@ class PromptService:
                 output_format=output_format,
                 persona_style=persona_style,
                 memory_notes=memory_notes,
+                recent_chat_history=recent_chat_history,
             )
+    def _format_recent_chat_history(
+        self,
+        history: List[Dict[str, Any]],
+        user_name: str,
+    ) -> Optional[str]:
+        """
+        将最近聊天历史格式化为 <recent_chat> 标签包裹的文本。
+
+        使用绝对时间 HH:MM（北京时间），确保同一条消息在不同请求中格式完全一致，
+        从而保证缓存命中。
+
+        Args:
+            history: 消息列表，每条包含 role, parts, timestamp
+            user_name: 用户显示名
+
+        Returns:
+            格式化后的文本，如果 history 为空则返回 None
+        """
+        if not history:
+            return None
+
+        beijing_tz = timezone(timedelta(hours=8))
+        lines = []
+
+        for msg in history:
+            role = msg.get("role", "unknown")
+            parts = msg.get("parts", [])
+            text = " ".join(p for p in parts if isinstance(p, str)) if isinstance(parts, list) else str(parts)
+            if not text.strip():
+                continue
+
+            ts = msg.get("timestamp")
+            time_str = ""
+            if ts:
+                try:
+                    if isinstance(ts, str):
+                        dt = datetime.fromisoformat(ts)
+                    else:
+                        dt = ts
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    time_str = f"[{dt.astimezone(beijing_tz).strftime('%H:%M')}] "
+                except (ValueError, TypeError):
+                    pass
+
+            speaker = user_name if role == "user" else "类脑娘"
+            lines.append(f"{time_str}{speaker}: {text}")
+
+        if not lines:
+            return None
+
+        return (
+            f'<recent_chat user="{user_name}">\n'
+            f"这是你和 {user_name} 最近的对话记录：\n"
+            + "\n".join(lines)
+            + "\n</recent_chat>"
+        )
 
     async def _build_chat_prompt_default(
         self,
@@ -331,6 +391,7 @@ class PromptService:
         output_format: str = "gemini",
         persona_style: str = "default",
         memory_notes: Optional[str] = None,
+        recent_chat_history: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         默认的对话历史构建方法。
@@ -502,12 +563,7 @@ class PromptService:
             )
             final_conversation.append({"role": "model", "parts": ["我记得了"]})
 
-        # --- 3. 频道历史上下文注入 ---
-        if channel_context:
-            final_conversation.extend(channel_context)
-            log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
-
-        # --- 好感度注入（频道历史之后） ---
+        # --- 好感度注入（记忆笔记之后、频道历史之前） ---
         affection_prompt = (
             affection_status.get("prompt", "").replace("用户", user_name)
             if affection_status
@@ -523,6 +579,22 @@ class PromptService:
                 }
             )
             final_conversation.append({"role": "model", "parts": ["收到"]})
+
+        # --- 最近聊天历史注入（好感度之后、频道历史之前） ---
+        if recent_chat_history:
+            recent_chat_text = self._format_recent_chat_history(
+                recent_chat_history, user_name
+            )
+            if recent_chat_text:
+                final_conversation.append(
+                    {"role": "user", "parts": [recent_chat_text]}
+                )
+                final_conversation.append({"role": "model", "parts": ["我记得了"]})
+
+        # --- 3. 频道历史上下文注入 ---
+        if channel_context:
+            final_conversation.extend(channel_context)
+            log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
 
         # --- 4. 回复上下文注入 (后置) ---
         if replied_message:
@@ -770,6 +842,7 @@ class PromptService:
         output_format: str = "gemini",
         persona_style: str = "default",
         memory_notes: Optional[str] = None,
+        recent_chat_history: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         针对上下文缓存优化的对话历史构建方法。
@@ -778,16 +851,16 @@ class PromptService:
         1. 越狱提示词（固定）← 缓存锚点
         2. 核心人设（固定）← 缓存锚点
         3. 帖子首楼（帖子内固定）
-        4. 好感度+用户档案（几乎不变）
-        5. 个人印象（很少变化）
-        6. 频道历史上下文（相对稳定，append-only）
-        7. 回复上下文（偶尔有）
-        8. 世界之书 RAG（每次不同）
-        9. RAG对话记忆+最新对话块（每次不同）
-        10. 最终指令（固定模板，在最后）
+        4. 用户档案（几乎不变）
+        5. 记忆笔记（很少变化）
+        6. 好感度（等级不变时固定）
+        7. 最近聊天历史（1-10条递增，前面的不变）
+        8. 频道历史上下文（每次不同，从这里开始缓存失效）
+        9. 回复上下文（偶尔有）
+        10. 最终指令（固定模板）
         11. 当前用户输入（每次不同）
 
-        这样前5层在同一用户对话时可以100%命中缓存。
+        这样前7层在同一用户同一等级对话时可以命中缓存。
         """
         final_conversation = []
 
@@ -938,16 +1011,7 @@ class PromptService:
             )
             final_conversation.append({"role": "model", "parts": ["我记得了"]})
 
-        # ============================================
-        # 第三层：相对稳定的内容（频道相关）
-        # ============================================
-
-        # 6. 频道历史上下文
-        if channel_context:
-            final_conversation.extend(channel_context)
-            log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
-
-        # 好感度注入（频道历史之后）
+        # 6. 好感度注入（记忆笔记之后、频道历史之前）
         affection_prompt = (
             affection_status.get("prompt", "").replace("用户", user_name)
             if affection_status
@@ -964,7 +1028,27 @@ class PromptService:
             )
             final_conversation.append({"role": "model", "parts": ["收到"]})
 
-        # 7. 回复上下文
+        # 7. 最近聊天历史注入（好感度之后、频道历史之前）
+        if recent_chat_history:
+            recent_chat_text = self._format_recent_chat_history(
+                recent_chat_history, user_name
+            )
+            if recent_chat_text:
+                final_conversation.append(
+                    {"role": "user", "parts": [recent_chat_text]}
+                )
+                final_conversation.append({"role": "model", "parts": ["我记得了"]})
+
+        # ============================================
+        # 第三层：每次都变的内容
+        # ============================================
+
+        # 8. 频道历史上下文（从这里开始缓存失效）
+        if channel_context:
+            final_conversation.extend(channel_context)
+            log.debug(f"已合并频道上下文，长度为: {len(channel_context)}")
+
+        # 9. 回复上下文
         if replied_message:
             reply_injection_prompt = f"上下文提示：{user_name} 正在进行回复操作。以下是ta正在回复的原始消息内容和作者：\n{replied_message}"
             final_conversation.append(
@@ -977,7 +1061,7 @@ class PromptService:
         # 第四层：最终指令 + 用户输入
         # ============================================
 
-        # 8. 最终指令注入（合并到最后一条 model 消息）
+        # 10. 最终指令注入（合并到最后一条 model 消息）
         last_model_message_index = -1
         for i in range(len(final_conversation) - 1, -1, -1):
             if final_conversation[i].get("role") == "model":

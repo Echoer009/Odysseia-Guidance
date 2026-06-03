@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 from sqlalchemy.future import select
 from sqlalchemy import update
 from src.database.database import AsyncSessionLocal
@@ -321,6 +321,35 @@ class PersonalMemoryService:
             else:
                 log.debug(f"在 ParadeDB 中未找到用户 {user_id} 的摘要。")
                 return "该用户当前没有个人记忆摘要。"
+
+    async def get_recent_chat_history(
+        self, user_id: int, limit: int = 10
+    ) -> List[Dict]:
+        """
+        获取用户最近的聊天历史（尚未打包成对话块的消息）。
+
+        这些消息从 profile.history 中读取，最多返回 limit 条。
+        返回的消息按时间顺序排列（从旧到新）。
+
+        Args:
+            user_id: 用户 Discord ID
+            limit: 最多返回的消息条数
+
+        Returns:
+            消息列表，每条包含 role, parts, timestamp
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = select(CommunityMemberProfile.history).where(
+                CommunityMemberProfile.discord_id == str(user_id)
+            )
+            result = await session.execute(stmt)
+            history = result.scalars().first()
+
+            if not history:
+                return []
+
+            history_list = list(history)
+            return history_list[-limit:] if len(history_list) > limit else history_list
 
     async def update_summary_manually(self, user_id: int, new_summary: str):
         """

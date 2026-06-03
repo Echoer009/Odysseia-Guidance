@@ -191,6 +191,16 @@ class ChatService:
                 except Exception as mem_note_e:
                     log.error(f"获取用户 {author.id} 记忆笔记失败: {mem_note_e}")
 
+            # 获取最近聊天历史（仅对有名片用户，1-10条递增）
+            recent_chat_history = None
+            if user_profile_data:
+                try:
+                    recent_chat_history = await personal_memory_service.get_recent_chat_history(
+                        author.id, limit=10
+                    )
+                except Exception as hist_e:
+                    log.error(f"获取用户 {author.id} 最近聊天历史失败: {hist_e}")
+
             # 3. --- 好感度与奖励更新（前置） ---
             try:
                 # 在生成回复前更新好感度，以确保日志顺序正确
@@ -261,6 +271,7 @@ class ChatService:
                 output_format=output_format,
                 persona_style=persona_style,
                 memory_notes=memory_notes_text,
+                recent_chat_history=recent_chat_history,
             )
 
             # 获取工具列表（根据 Provider 类型返回对应格式）
