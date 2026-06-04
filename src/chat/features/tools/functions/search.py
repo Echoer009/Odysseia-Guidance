@@ -63,59 +63,41 @@ CategoryName = Literal[
     "️其它工具区",
 ]
 
-TUTORIAL_KEYWORDS = [
-    "酒馆",
-    "sillytavern",
-    "教程",
-    "设置",
-    "安装",
-    "报错",
-    "类脑",
-    "公益站",
-    "配置",
-    "怎么用",
-    "如何使用",
-]
-
 
 class SearchParams(BaseModel):
     query: str = Field(
         ...,
         description="搜索关键词。",
     )
-    scope: Literal["auto", "forum", "channel", "tutorial", "world_book", "memory"] = Field(
-        default="auto",
+    scope: Literal["forum", "channel", "tutorial", "world_book", "memory"] = Field(
         description=(
             "搜索范围："
             "forum=论坛帖子, channel=服务器消息历史, tutorial=教程知识库, "
             "world_book=社区成员名片和社区知识, memory=与当前用户的历史对话记忆。"
-            "默认 auto 由系统自动判断最合适的数据源。"
+            "遇到不熟悉的名词、角色、设定或任何不确定的信息时，应优先使用 world_book 搜索。"
         ),
     )
     category_name: Optional[CategoryName] = Field(
         None,
-        description="论坛频道名称筛选（仅 scope 为 auto 或 forum 时生效）。",
+        description="论坛频道名称筛选（仅 scope 为 forum 时生效）。",
     )
     author_id: Optional[str] = Field(
         None,
-        description="作者的 Discord ID，纯数字（仅 scope 为 auto 或 forum 时生效）。",
+        description="作者的 Discord ID，纯数字（仅 scope 为 forum 时生效）。",
     )
     start_date: Optional[str] = Field(
         None,
-        description="开始日期，格式 YYYY-MM-DD（仅 scope 为 auto 或 forum 时生效）。",
+        description="开始日期，格式 YYYY-MM-DD（仅 scope 为 forum 时生效）。",
     )
     end_date: Optional[str] = Field(
         None,
-        description="结束日期，格式 YYYY-MM-DD（仅 scope 为 auto 或 forum 时生效）。",
+        description="结束日期，格式 YYYY-MM-DD（仅 scope 为 forum 时生效）。",
     )
     limit: int = Field(
         default=5,
         description="每个数据源返回结果的数量限制，最多20。",
     )
 
-
-def _auto_route(query: str) -> List[str]:
-    return ["forum", "channel", "tutorial"]
 
 
 def _format_channel_results(messages: List[Dict]) -> List[Dict[str, Any]]:
@@ -414,11 +396,10 @@ async def search(
     搜索社区内部资源和用户相关信息。
 
     scope 参数说明：
-    - "auto": 系统自动选择数据源（默认搜索论坛+频道，若关键词含教程相关词汇则额外搜索教程库）
     - "forum": 仅搜索论坛帖子
     - "channel": 仅搜索服务器消息历史
     - "tutorial": 仅搜索教程知识库
-    - "world_book": 搜索社区成员名片、其他用户资料和社区知识
+    - "world_book": 搜索社区成员名片、其他用户资料和社区知识。当你遇到任何不熟悉的名词、角色、设定或不确定的信息时，应优先搜索 world_book，它可能包含你需要的答案。
     - "memory": 搜索与当前用户的历史对话记忆
 
     返回格式：字典，每个数据源一个键，值为该源的搜索结果。
@@ -436,10 +417,7 @@ async def search(
     if not (query and query.strip()):
         return {"error": "需要提供搜索关键词。"}
 
-    if params.scope == "auto":
-        sources = _auto_route(query or "")
-    else:
-        sources = [params.scope]
+    sources = [params.scope]
 
     log.info(
         f"工具 'search' 被调用，查询: {query}, scope: {params.scope}, 实际数据源: {sources}"
