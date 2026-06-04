@@ -232,13 +232,13 @@ class ChatSettingsView(View):
             )
         )
 
-        # 第 5 行：文爱过滤
+        # 第 4 行：文爱过滤
         self.add_item(
             Button(
                 label="🛡️ 文爱过滤",
                 style=ButtonStyle.secondary,
                 custom_id="content_filter",
-                row=5,
+                row=4,
             )
         )
 
