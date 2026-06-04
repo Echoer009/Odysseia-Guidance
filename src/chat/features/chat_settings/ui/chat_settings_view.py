@@ -37,6 +37,7 @@ class ChatSettingsView(View):
         self.factions: Optional[List[Dict[str, Any]]] = None
         self.selected_faction: Optional[str] = None
         self.token_usage: Optional[TokenUsage] = None
+        self.interaction: Interaction = interaction
 
     async def _initialize(self):
         """异步获取设置并构建UI。"""
@@ -231,6 +232,16 @@ class ChatSettingsView(View):
             )
         )
 
+        # 第 5 行：文爱过滤
+        self.add_item(
+            Button(
+                label="🛡️ 文爱过滤",
+                style=ButtonStyle.secondary,
+                custom_id="content_filter",
+                row=5,
+            )
+        )
+
     async def _update_view(self, interaction: Interaction):
         """通过编辑附加的消息来刷新视图。"""
         await self._initialize()  # 重新获取所有数据，包括派系
@@ -267,6 +278,8 @@ class ChatSettingsView(View):
             await self.on_provider_management(interaction)
         elif custom_id == "model_management":
             await self.on_model_management(interaction)
+        elif custom_id == "content_filter":
+            await self.on_content_filter(interaction)
 
         return True
 
@@ -596,5 +609,32 @@ class ChatSettingsView(View):
         model_view.message = self.message
         await interaction.edit_original_response(
             content=None, embed=model_view._get_embed(), view=model_view
+        )
+        self.stop()
+
+    async def on_content_filter(self, interaction: Interaction):
+        """切换到文爱过滤关键词管理视图。"""
+        if not self.message:
+            await interaction.response.send_message(
+                "无法找到原始消息，请重新打开设置面板。", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+        from src.chat.features.content_filter.ui.keyword_management_view import (
+            KeywordManagementView,
+        )
+
+        async def back_callback(back_interaction: Interaction):
+            await back_interaction.response.defer()
+            main_view = await ChatSettingsView.create(back_interaction)
+            main_view.message = self.message
+            await back_interaction.edit_original_response(
+                content=None, embed=None, view=main_view
+            )
+
+        filter_view = await KeywordManagementView.create(back_callback, self.message)
+        await interaction.edit_original_response(
+            content=None, embed=filter_view._build_embed(), view=filter_view
         )
         self.stop()

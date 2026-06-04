@@ -5,6 +5,7 @@ from discord.ext import commands
 import logging
 import re
 import io
+import asyncio
 
 # 导入新的 Service
 from src.chat.services.chat_service import chat_service, ChatResult
@@ -20,6 +21,11 @@ from src.chat.config.chat_config import CHAT_ENABLED, MESSAGE_SETTINGS
 from src.chat.config import chat_config
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.utils.message_utils import safe_reply, safe_send
+from src.chat.features.content_filter.services.content_filter_service import (
+    get_all_keywords,
+    check_content,
+    send_developer_alert,
+)
 
 log = logging.getLogger(__name__)
 
@@ -64,9 +70,35 @@ class AIChatCog(commands.Cog):
 
         # 禁止私信回复，只响应服务器中的 @ 消息
         if is_dm or not is_mentioned:
+            if not is_dm:
+                # 检查用户输入是否触发文爱检测（即使不是@mention也检测）
+                keywords = await get_all_keywords()
+                is_flagged, matched = check_content(
+                    processed_data["user_content"], keywords
+                )
+                if is_flagged:
+                    asyncio.create_task(
+                        send_developer_alert(
+                            self.bot, message,
+                            processed_data["user_content"], matched, "用户输入"
+                        )
+                    )
             return
 
-        # 新增：检查是否在帖子中，以及帖子创建者是否禁用了回复
+        # 检查用户输入是否触发文爱检测（@mention消息）
+        keywords = await get_all_keywords()
+        is_flagged, matched = check_content(
+            processed_data["user_content"], keywords
+        )
+        if is_flagged:
+            asyncio.create_task(
+                send_developer_alert(
+                    self.bot, message,
+                    processed_data["user_content"], matched, "用户输入"
+                )
+            )
+
+        # 检查是否在帖子中，以及帖子创建者是否禁用了回复
         if isinstance(message.channel, discord.Thread):
             # 检查帖子的创建者
             thread_owner = message.channel.owner
@@ -96,6 +128,16 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if chat_result and chat_result.content:
             response_text = chat_result.content
+
+            # 检查AI输出是否触发文爱检测
+            keywords = await get_all_keywords()
+            is_flagged, matched = check_content(response_text, keywords)
+            if is_flagged:
+                asyncio.create_task(
+                    send_developer_alert(
+                        self.bot, message, response_text, matched, "AI输出"
+                    )
+                )
             try:
                 # --- 响应发送逻辑 ---
                 # 1. 如果调用了总结工具，总是转换为图片发送

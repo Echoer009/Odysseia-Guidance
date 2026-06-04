@@ -22,6 +22,7 @@ from .components.shop_components import (
     EventButton,
     KnowledgeBaseButton,
     DailyReportButton,
+    ChatGuidelinesButton,
     ToolListButton,
     FeedbackButton,
 )
@@ -90,6 +91,9 @@ class SimpleShopView(discord.ui.View):
 
         if self.shop_data.show_tutorial_button:
             self.add_item(KnowledgeBaseButton())
+
+        # 添加聊天须知按钮
+        self.add_item(ChatGuidelinesButton())
 
         # 添加类脑娘的工作清单按钮（包含工具设置和命令设置）
         self.add_item(ToolListButton())

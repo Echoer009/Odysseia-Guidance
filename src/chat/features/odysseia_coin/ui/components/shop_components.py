@@ -1661,3 +1661,76 @@ class FeedbackButton(ShopButton["SimpleShopView"]):
     async def callback(self, interaction: discord.Interaction):
         modal = FeedbackModal(bot=self.view.bot)
         await interaction.response.send_modal(modal)
+
+
+class ChatGuidelinesView(discord.ui.View):
+    """显示聊天须知的子视图。"""
+
+    def __init__(self, main_view: "SimpleShopView"):
+        super().__init__(timeout=180)
+        self.main_view = main_view
+
+        back_button = discord.ui.Button(
+            label="返回商店", style=discord.ButtonStyle.secondary, emoji="⬅️"
+        )
+        back_button.callback = self.back_callback
+        self.add_item(back_button)
+
+    async def create_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title="📜 聊天须知",
+            color=discord.Color.from_rgb(255, 182, 193),
+        )
+        embed.add_field(
+            name="🚫 禁止文爱",
+            value="类脑娘不会参与任何形式的色情角色扮演或文爱对话，包括暗示性内容。请尊重这条底线~",
+            inline=False,
+        )
+        embed.add_field(
+            name="🤝 平等相处",
+            value=(
+                '类脑娘和你是平等的朋友关系。'
+                '不接受"主人""爸爸""老公"等上位称呼，互相尊重是最好的相处方式~'
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🔒 隐私保护",
+            value=(
+                "类脑娘不会记录争吵、色情、过分要求等负面内容。"
+                "只记住值得纪念的美好瞬间。"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="⚖️ 不作恶",
+            value=(
+                "不会协助生成违法、有害、歧视性内容。"
+                "遇到这类请求会温柔但坚定地拒绝。"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="",
+            value="⚠️ **以上规则在公屏频道和子区均适用，违反可能会被封禁，届时将无法与类脑娘互动。**",
+            inline=False,
+        )
+        return embed
+
+    async def back_callback(self, interaction: discord.Interaction):
+        embeds = await self.main_view.create_shop_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=self.main_view)
+
+
+class ChatGuidelinesButton(ShopButton["SimpleShopView"]):
+    """打开聊天须知的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="聊天须知", style=discord.ButtonStyle.primary, emoji="📜"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        guidelines_view = ChatGuidelinesView(self.view)
+        embed = await guidelines_view.create_embed()
+        await interaction.response.edit_message(embeds=[embed], view=guidelines_view)
