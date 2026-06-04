@@ -293,7 +293,7 @@ class ChatService:
                     args = dict(call.args) if call.args else {}
                 _called_tools.append(name)
                 if name == "search":
-                    _search_scopes.append(args.get("scope", "auto"))
+                    _search_scopes.append(args.get("scope", ""))
                 return await ai_service.tool_service.execute_tool_call(
                     call,
                     channel=message.channel,
@@ -378,7 +378,7 @@ class ChatService:
 
             # --- 为特定工具调用添加后缀 ---
             if _search_scopes and any(
-                scope in ("tutorial", "auto") for scope in _search_scopes
+                scope == "tutorial" for scope in _search_scopes
             ):
                 final_response += chat_config.TUTORIAL_SEARCH_SUFFIX
 
