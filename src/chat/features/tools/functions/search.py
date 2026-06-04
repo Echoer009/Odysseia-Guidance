@@ -15,6 +15,13 @@ from src.chat.features.forum_search.services.forum_search_service import (
 from src.chat.features.tutorial_search.services.tutorial_search_service import (
     tutorial_search_service,
 )
+from src.chat.features.world_book.services.world_book_service import world_book_service
+from src.chat.features.personal_memory.services.conversation_block_service import (
+    conversation_block_service,
+)
+from src.chat.features.personal_memory.services.conversation_memory_search_service import (
+    conversation_memory_search_service,
+)
 from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.time_utils import BEIJING_TZ
@@ -72,14 +79,16 @@ TUTORIAL_KEYWORDS = [
 
 
 class SearchParams(BaseModel):
-    query: Optional[str] = Field(
-        None,
+    query: str = Field(
+        ...,
         description="搜索关键词。",
     )
-    scope: Literal["auto", "forum", "channel", "tutorial"] = Field(
+    scope: Literal["auto", "forum", "channel", "tutorial", "world_book", "memory"] = Field(
         default="auto",
         description=(
-            "搜索范围：forum=论坛帖子, channel=服务器消息历史, tutorial=教程知识库。"
+            "搜索范围："
+            "forum=论坛帖子, channel=服务器消息历史, tutorial=教程知识库, "
+            "world_book=社区成员名片和社区知识, memory=与当前用户的历史对话记忆。"
             "默认 auto 由系统自动判断最合适的数据源。"
         ),
     )
@@ -334,9 +343,66 @@ async def _search_tutorial(params: SearchParams, **kwargs) -> Dict[str, Any]:
     return {"results": formatted_context}
 
 
+async def _search_world_book(params: SearchParams, **kwargs) -> Dict[str, Any]:
+    query = params.query
+    if not query or not query.strip():
+        return {"results": [], "error": "社区知识搜索需要提供关键词。"}
+
+    user_id = kwargs.get("user_id")
+    guild_id = kwargs.get("guild_id")
+    if not user_id or not guild_id:
+        return {"results": [], "error": "缺少用户或服务器信息。"}
+
+    user_name = kwargs.get("user_name", "用户")
+    channel_context = kwargs.get("channel_context")
+
+    if not world_book_service.is_ready():
+        return {"results": [], "error": "社区知识搜索服务当前不可用，请稍后再试。"}
+
+    entries = await world_book_service.find_entries(
+        latest_query=query,
+        user_id=int(user_id),
+        guild_id=int(guild_id),
+        user_name=user_name,
+        conversation_history=channel_context,
+    )
+
+    if entries:
+        formatted = prompt_service._format_world_book_entries(entries, user_name)
+        return {"results": formatted}
+    return {"results": []}
+
+
+async def _search_memory(params: SearchParams, **kwargs) -> Dict[str, Any]:
+    query = params.query
+    if not query or not query.strip():
+        return {"results": [], "error": "历史记忆搜索需要提供关键词。"}
+
+    user_id = kwargs.get("user_id")
+    if not user_id:
+        return {"results": [], "error": "缺少用户信息。"}
+
+    user_id = str(user_id)
+
+    latest_block_id = await conversation_block_service.get_latest_block_id(user_id)
+    exclude_block_ids = [latest_block_id] if latest_block_id else None
+
+    blocks = await conversation_memory_search_service.search(
+        discord_id=user_id,
+        query=query,
+        exclude_block_ids=exclude_block_ids,
+    )
+
+    if blocks:
+        formatted = conversation_memory_search_service.format_blocks_for_context(blocks)
+        log.info(f"[search/memory] 检索到 {len(blocks)} 个相关对话记忆块")
+        return {"results": formatted}
+    return {"results": []}
+
+
 @tool_metadata(
-    name="内部搜索",
-    description="搜索社区论坛帖子、服务器消息历史和教程知识库",
+    name="搜索",
+    description="搜索社区论坛帖子、服务器消息历史、教程知识库、社区成员名片与知识、历史对话记忆",
     emoji="🔍",
     category="查询",
 )
@@ -345,25 +411,29 @@ async def search(
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    搜索社区内部资源：论坛帖子、频道消息历史、教程知识库。
+    搜索社区内部资源和用户相关信息。
 
     scope 参数说明：
     - "auto": 系统自动选择数据源（默认搜索论坛+频道，若关键词含教程相关词汇则额外搜索教程库）
     - "forum": 仅搜索论坛帖子
     - "channel": 仅搜索服务器消息历史
     - "tutorial": 仅搜索教程知识库
+    - "world_book": 搜索社区成员名片、其他用户资料和社区知识
+    - "memory": 搜索与当前用户的历史对话记忆
 
-    返回格式：字典，每个数据源一个键（forum/channel/tutorial），值为该源的搜索结果。
+    返回格式：字典，每个数据源一个键，值为该源的搜索结果。
 
     各数据源的结果格式：
     - forum: {"results": ["分类名 > 帖子链接", ...]}，每条结果为 "分类名 > URL" 格式的字符串。
       你在最终回复时，必须原样输出帖子链接和分类名，不要对链接进行任何再加工、转换或添加Markdown格式。
     - channel: {"results": [{"id": "...", "author": "...", "content": "...", "timestamp": "..."}]}
     - tutorial: {"results": "格式化后的教程文本"}
+    - world_book: {"results": "格式化后的社区知识内容"}
+    - memory: {"results": "格式化后的历史对话记忆"}
     """
     query = params.query
 
-    if not (query and query.strip()) and params.scope != "forum":
+    if not (query and query.strip()):
         return {"error": "需要提供搜索关键词。"}
 
     if params.scope == "auto":
@@ -382,6 +452,10 @@ async def search(
         tasks["channel"] = _search_channel(params, **kwargs)
     if "tutorial" in sources:
         tasks["tutorial"] = _search_tutorial(params, **kwargs)
+    if "world_book" in sources:
+        tasks["world_book"] = _search_world_book(params, **kwargs)
+    if "memory" in sources:
+        tasks["memory"] = _search_memory(params, **kwargs)
 
     if not tasks:
         return {"error": "没有可用的数据源。"}
