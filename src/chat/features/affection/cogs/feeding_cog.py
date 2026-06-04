@@ -129,7 +129,8 @@ class FeedingCog(commands.Cog):
             }
         ]
         result = await ai_service.generate(
-            messages=messages, config=config, model=model_id, enable_vision=True
+            messages=messages, config=config, model=model_id,
+            fallback=False, enable_vision=True,
         )
         return result.content
 
@@ -192,6 +193,13 @@ class FeedingCog(commands.Cog):
         response_text = ""
         try:
             image_bytes = await image.read()
+
+            original_size = len(image_bytes)
+            image_bytes, image.content_type = _compress_image(image_bytes)
+            if len(image_bytes) < original_size:
+                logger.info(
+                    f"投喂图片预压缩: {original_size} -> {len(image_bytes)} bytes"
+                )
 
             system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
             persona_part = extract_persona_prompt(system_prompt)

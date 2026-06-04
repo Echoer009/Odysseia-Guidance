@@ -907,17 +907,19 @@ class AIService:
         if not has_image:
             return messages
 
-        # 根据 enable_vision 参数决定处理方式
-        if enable_vision:
-            log.info(
-                "[AIService] 检测到图片内容，Provider 不支持视觉，使用 Ollama Vision 转换"
-            )
-            from src.chat.services.ollama_vision_service import ollama_vision_service as _ollama_vision_service
-        else:
-            _ollama_vision_service = None
-            log.info(
-                "[AIService] 检测到图片内容，Provider 不支持视觉，使用占位符替换（节省内存）"
-            )
+        # Ollama Vision 本地视觉模型已暂时禁用（CPU 性能不足，经常超时）
+        # 所有非视觉 Provider 统一使用占位符替换
+        # if enable_vision:
+        #     log.info(
+        #         "[AIService] 检测到图片内容，Provider 不支持视觉，使用 Ollama Vision 转换"
+        #     )
+        #     from src.chat.services.ollama_vision_service import ollama_vision_service as _ollama_vision_service
+        # else:
+        #     _ollama_vision_service = None
+        _ollama_vision_service = None
+        log.info(
+            "[AIService] 检测到图片内容，Provider 不支持视觉，使用占位符替换"
+        )
 
         # 处理每条消息
         processed_messages = []
@@ -935,130 +937,28 @@ class AIService:
                         if part.get("type") == "text":
                             text_parts.append(part.get("text", ""))
                         elif part.get("type") == "image":
-                            # 内部格式：直接使用 image_bytes
                             source = part.get("source", "unknown")
 
-                            if enable_vision:
-                                assert _ollama_vision_service is not None
-                                image_bytes = part.get("image_bytes")
-                                mime_type = part.get("mime_type", "image/png")
-
-                                if image_bytes:
-                                    # 获取自定义提示词或使用默认
-                                    vision_prompt = kwargs.get("vision_prompt")
-                                    try:
-                                        if vision_prompt:
-                                            description = await _ollama_vision_service.describe_image(
-                                                image_bytes, vision_prompt, mime_type
-                                            )
-                                        else:
-                                            description = await _ollama_vision_service.describe_image(
-                                                image_bytes,
-                                                "请用中文描述这张图片的内容。",
-                                                mime_type,
-                                            )
-
-                                        if description:
-                                            image_descriptions.append(
-                                                f"[图片内容: {description}]"
-                                            )
-                                            log.debug(
-                                                f"图片描述: {description[:100]}..."
-                                            )
-                                        else:
-                                            image_descriptions.append(
-                                                "[图片内容: 无法识别]"
-                                            )
-                                    except Exception as e:
-                                        log.error(f"Ollama Vision 处理图片失败: {e}")
-                                        image_descriptions.append(
-                                            "[图片内容: 处理失败]"
-                                        )
-                            else:
-                                # 不启用视觉转译时，根据 source 进行不同处理
-                                if source == "emoji":
-                                    # 表情包：直接过滤，不添加任何占位符
-                                    pass
-                                elif source == "sticker":
-                                    # 贴纸：直接过滤，不添加任何占位符
-                                    pass
-                                else:
-                                    # 附件图片：替换为占位符
-                                    image_descriptions.append(
-                                        "[图片: 当前类脑娘无法识别]"
-                                    )
+                            # Ollama Vision 本地视觉模型已暂时禁用
+                            # if enable_vision:
+                            #     ... (Ollama Vision 调用逻辑)
+                            # 统一使用占位符替换
+                            if source not in ("emoji", "sticker"):
+                                image_descriptions.append(
+                                    "[图片: 当前类脑娘无法识别]"
+                                )
 
                         elif part.get("type") == "image_url":
-                            # OpenAI 格式：从 data URL 中提取 base64 图片
                             source = part.get("source", "unknown")
 
-                            if enable_vision:
-                                assert _ollama_vision_service is not None
-                                import base64
-
-                                image_url_data = part.get("image_url", {})
-                                url = image_url_data.get("url", "")
-
-                                if url.startswith("data:"):
-                                    # 解析 data URL: data:image/png;base64,xxxxx
-                                    try:
-                                        # 提取 MIME 类型和 base64 数据
-                                        header, base64_data = url.split(",", 1)
-                                        # header 格式: data:image/png;base64
-                                        mime_match = header.split(":")[1].split(";")[0]
-                                        mime_type = (
-                                            mime_match
-                                            if mime_match.startswith("image/")
-                                            else "image/png"
-                                        )
-
-                                        # 解码 base64
-                                        image_bytes = base64.b64decode(base64_data)
-
-                                        # 获取自定义提示词或使用默认
-                                        vision_prompt = kwargs.get("vision_prompt")
-                                        if vision_prompt:
-                                            description = await _ollama_vision_service.describe_image(
-                                                image_bytes, vision_prompt, mime_type
-                                            )
-                                        else:
-                                            description = await _ollama_vision_service.describe_image(
-                                                image_bytes,
-                                                "请用中文描述这张图片的内容。",
-                                                mime_type,
-                                            )
-
-                                        if description:
-                                            image_descriptions.append(
-                                                f"[图片内容: {description}]"
-                                            )
-                                            log.debug(
-                                                f"图片描述: {description[:100]}..."
-                                            )
-                                        else:
-                                            image_descriptions.append(
-                                                "[图片内容: 无法识别]"
-                                            )
-                                    except Exception as e:
-                                        log.error(
-                                            f"解析或处理 OpenAI 格式图片失败: {e}"
-                                        )
-                                        image_descriptions.append(
-                                            "[图片内容: 处理失败]"
-                                        )
-                            else:
-                                # 不启用视觉转译时，根据 source 进行不同处理
-                                if source == "emoji":
-                                    # 表情包：直接过滤，不添加任何占位符
-                                    pass
-                                elif source == "sticker":
-                                    # 贴纸：直接过滤，不添加任何占位符
-                                    pass
-                                else:
-                                    # 附件图片：替换为占位符
-                                    image_descriptions.append(
-                                        "[图片: 当前类脑娘无法识别]"
-                                    )
+                            # Ollama Vision 本地视觉模型已暂时禁用
+                            # if enable_vision:
+                            #     ... (Ollama Vision 调用逻辑)
+                            # 统一使用占位符替换
+                            if source not in ("emoji", "sticker"):
+                                image_descriptions.append(
+                                    "[图片: 当前类脑娘无法识别]"
+                                )
 
                 # 合并文本和图片描述
                 final_text = "\n".join(text_parts)
