@@ -211,6 +211,7 @@ class GuidanceBot(commands.Bot):
             "command_prefix": "!",
             "intents": intents,
             "debug_guilds": self.debug_guild_ids,
+            "allowed_mentions": discord.AllowedMentions.none(),
         }
         if config.PROXY_URL:
             init_kwargs["proxy"] = config.PROXY_URL
