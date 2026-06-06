@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import List
 import random
 
 import discord
@@ -17,16 +18,26 @@ from src.chat.features.personal_memory.services.conversation_block_service impor
 from src.chat.features.personal_memory.services.personal_memory_service import (
     personal_memory_service,
 )
+from src.chat.features.content_filter.services.content_filter_service import (
+    ignore_keywords,
+)
 
 log = logging.getLogger(__name__)
 
 
 class FilterAlertView(View):
-    def __init__(self, user_id: int, guild_id: int, bot: discord.Client):
+    def __init__(
+        self,
+        user_id: int,
+        guild_id: int,
+        bot: discord.Client,
+        matched_keywords: List[str],
+    ):
         super().__init__(timeout=600)
         self.user_id = user_id
         self.guild_id = guild_id
         self.bot = bot
+        self.matched_keywords = matched_keywords
 
     async def _disable_all(self, interaction: Interaction, result_text: str):
         for item in self.children:
@@ -141,6 +152,18 @@ class FilterAlertView(View):
             log.error(f"清理对话历史失败: {e}", exc_info=True)
             await self._disable_all(interaction, f"操作失败: {e}")
 
+    async def _do_ignore_keywords(self, interaction: Interaction):
+        await interaction.response.defer()
+        try:
+            await ignore_keywords(self.matched_keywords)
+            kw_text = ", ".join(f"`{kw}`" for kw in self.matched_keywords)
+            result_text = f"已永久忽略关键词: {kw_text}"
+            log.info(result_text)
+            await self._disable_all(interaction, result_text)
+        except Exception as e:
+            log.error(f"忽略关键词失败: {e}", exc_info=True)
+            await self._disable_all(interaction, f"操作失败: {e}")
+
     @discord.ui.button(label="⚠️ 警告", style=ButtonStyle.secondary, row=0)
     async def warn_button(self, interaction: Interaction, button: Button):
         await self._do_warn(interaction)
@@ -156,3 +179,7 @@ class FilterAlertView(View):
     @discord.ui.button(label="🧹 清对话历史", style=ButtonStyle.secondary, row=1)
     async def clear_history_button(self, interaction: Interaction, button: Button):
         await self._do_clear_history(interaction)
+
+    @discord.ui.button(label="🔕 永久忽略", style=ButtonStyle.primary, row=2)
+    async def ignore_button(self, interaction: Interaction, button: Button):
+        await self._do_ignore_keywords(interaction)

@@ -1,53 +1,42 @@
 # -*- coding: utf-8 -*-
 
-import json
 import logging
 from typing import List, Tuple
 
 import discord
+from sqlalchemy import select, update as sa_update, delete as sa_delete
 
 from src.config import DEVELOPER_USER_IDS, EMBED_COLOR_ERROR
-from src.chat.config.chat_config import CONTENT_FILTER_BASE_KEYWORDS
-from src.chat.utils.database import chat_db_manager
+from src.database.database import AsyncSessionLocal
+from src.database.models import ContentFilterKeyword
 
 log = logging.getLogger(__name__)
 
-_CUSTOM_KEYWORDS_CACHE: List[str] = []
-_CUSTOM_KEYWORDS_LOADED = False
+_KEYWORDS_CACHE: List[str] = []
+_KEYWORDS_LOADED = False
 
 
-async def _load_custom_keywords() -> List[str]:
-    global _CUSTOM_KEYWORDS_CACHE, _CUSTOM_KEYWORDS_LOADED
-    if not _CUSTOM_KEYWORDS_LOADED:
-        raw = await chat_db_manager.get_global_setting("content_filter_keywords")
-        if raw:
-            try:
-                _CUSTOM_KEYWORDS_CACHE = json.loads(raw)
-            except json.JSONDecodeError:
-                _CUSTOM_KEYWORDS_CACHE = []
-                log.warning("自定义关键词 JSON 解析失败，已重置为空列表")
-        else:
-            _CUSTOM_KEYWORDS_CACHE = []
-        _CUSTOM_KEYWORDS_LOADED = True
-    return _CUSTOM_KEYWORDS_CACHE
+async def _load_active_keywords() -> List[str]:
+    global _KEYWORDS_CACHE, _KEYWORDS_LOADED
+    if not _KEYWORDS_LOADED:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ContentFilterKeyword.keyword).where(
+                    ContentFilterKeyword.is_ignored == 0
+                )
+            )
+            _KEYWORDS_CACHE = [row[0] for row in result.all()]
+        _KEYWORDS_LOADED = True
+    return _KEYWORDS_CACHE
 
 
 def _invalidate_cache():
-    global _CUSTOM_KEYWORDS_LOADED
-    _CUSTOM_KEYWORDS_LOADED = False
+    global _KEYWORDS_LOADED
+    _KEYWORDS_LOADED = False
 
 
 async def get_all_keywords() -> List[str]:
-    custom = await _load_custom_keywords()
-    merged = list(CONTENT_FILTER_BASE_KEYWORDS) + custom
-    seen = set()
-    result = []
-    for kw in merged:
-        key = kw.lower()
-        if key not in seen:
-            seen.add(key)
-            result.append(kw)
-    return result
+    return await _load_active_keywords()
 
 
 def check_content(text: str, keywords: List[str]) -> Tuple[bool, List[str]]:
@@ -59,6 +48,83 @@ def check_content(text: str, keywords: List[str]) -> Tuple[bool, List[str]]:
         if kw.lower() in text_lower:
             matched.append(kw)
     return bool(matched), matched
+
+
+async def add_keyword(keyword: str) -> bool:
+    kw = keyword.strip().lower()
+    if not kw:
+        return False
+    async with AsyncSessionLocal() as session:
+        exists = await session.execute(
+            select(ContentFilterKeyword).where(
+                ContentFilterKeyword.keyword == kw
+            )
+        )
+        if exists.scalar_one_or_none():
+            return False
+        session.add(ContentFilterKeyword(keyword=kw, is_ignored=0))
+        await session.commit()
+    _invalidate_cache()
+    log.info(f"已添加关键词: {kw}")
+    return True
+
+
+async def remove_keyword(keyword: str) -> bool:
+    kw = keyword.strip().lower()
+    async with AsyncSessionLocal() as session:
+        exists = await session.execute(
+            select(ContentFilterKeyword.keyword).where(
+                ContentFilterKeyword.keyword == kw
+            )
+        )
+        if not exists.scalar_one_or_none():
+            return False
+        await session.execute(
+            sa_delete(ContentFilterKeyword).where(
+                ContentFilterKeyword.keyword == kw
+            )
+        )
+        await session.commit()
+    _invalidate_cache()
+    log.info(f"已删除关键词: {kw}")
+    return True
+
+
+async def ignore_keywords(keywords: List[str]):
+    normalized = [kw.strip().lower() for kw in keywords]
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            sa_update(ContentFilterKeyword)
+            .where(ContentFilterKeyword.keyword.in_(normalized))
+            .values(is_ignored=1)
+        )
+        await session.commit()
+    _invalidate_cache()
+    log.info(f"已忽略关键词: {keywords}")
+
+
+async def unignore_keyword(keyword: str):
+    kw = keyword.strip().lower()
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            sa_update(ContentFilterKeyword)
+            .where(ContentFilterKeyword.keyword == kw)
+            .values(is_ignored=0)
+        )
+        await session.commit()
+    _invalidate_cache()
+    log.info(f"已恢复关键词: {kw}")
+
+
+async def get_all_keywords_with_status() -> List[Tuple[str, bool]]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(
+                ContentFilterKeyword.keyword,
+                ContentFilterKeyword.is_ignored,
+            ).order_by(ContentFilterKeyword.keyword)
+        )
+        return [(row[0], bool(row[1])) for row in result.all()]
 
 
 async def send_developer_alert(
@@ -97,6 +163,7 @@ async def send_developer_alert(
                         user_id=user_id_for_view,
                         guild_id=guild_id_for_view,
                         bot=bot,
+                        matched_keywords=matched_keywords,
                     )
                     await dev.send(embed=embed, view=view)
             except discord.Forbidden:

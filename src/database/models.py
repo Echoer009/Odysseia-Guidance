@@ -1016,3 +1016,31 @@ class AiModel(Base):
 
     def __repr__(self):
         return f"<AiModel(model_name='{self.model_name}', provider_id={self.provider_id})>"
+
+
+# --- 内容过滤关键词模型 (PostgreSQL) ---
+
+CONTENT_FILTER_SCHEMA = "content_filter"
+
+
+class ContentFilterKeyword(Base):
+    __tablename__ = "content_filter_keywords"
+    __table_args__ = (
+        Index("ix_cf_keyword_unique", "keyword", unique=True),
+        Index("ix_cf_keyword_ignored", "is_ignored"),
+        {"schema": CONTENT_FILTER_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    keyword: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )
+    is_ignored: Mapped[bool] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ContentFilterKeyword(keyword='{self.keyword}', is_ignored={self.is_ignored})>"
