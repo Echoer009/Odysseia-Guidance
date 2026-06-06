@@ -329,14 +329,24 @@ class CoinService:
                     _select_random_cg_url(item.get("cg_url")),
                 )
             elif item_effect == VIEW_PERSONAL_MEMORY_ITEM_EFFECT_ID:
-                from src.chat.features.personal_memory.services.personal_memory_service import (
-                    personal_memory_service,
+                from src.chat.features.personal_memory.services.user_memory_note_service import (
+                    user_memory_note_service,
                 )
 
-                summary = await personal_memory_service.get_memory_summary(user_id)
+                memory_notes = await user_memory_note_service.get_notes_for_context(
+                    str(user_id)
+                )
+                notes_text = memory_notes or "目前还没有记忆笔记。"
+                description = (
+                    "经过一次愉快的闲谈，她翻开了随身的记忆笔记：\n\n"
+                    f">>> {notes_text}"
+                )
+                if len(description) > 4000:
+                    description = description[:3997] + "..."
+
                 embed_data = {
                     "title": "午后闲谈",
-                    "description": f"经过一次愉快的闲谈，你得知了在她心中，你的印象是这样的：\n\n>>> {summary}",
+                    "description": description,
                 }
                 return (
                     True,
