@@ -7,18 +7,16 @@ from src.database.database import AsyncSessionLocal
 from src.database.models import CommunityMemberProfile, ConversationBlock
 from src.chat.config.chat_config import (
     PROMPT_CONFIG,
-    SUMMARY_MODEL,
-    GEMINI_SUMMARY_GEN_CONFIG,
     CONVERSATION_MEMORY_CONFIG,
-)
-from src.chat.services.ai.service import ai_service
-from src.chat.services.ai.providers.base import GenerationConfig, ModelNotSupportedError
-from src.chat.features.chat_settings.services.chat_settings_service import (
-    chat_settings_service,
 )
 from src.chat.features.personal_memory.services.conversation_block_service import (
     conversation_block_service,
 )
+# --- [DISABLED] 印象总结功能（flash模型）相关的导入 ---
+# from src.chat.config.chat_config import SUMMARY_MODEL, GEMINI_SUMMARY_GEN_CONFIG
+# from src.chat.services.ai.service import ai_service
+# from src.chat.services.ai.providers.base import GenerationConfig, ModelNotSupportedError
+# from src.chat.features.chat_settings.services.chat_settings_service import chat_settings_service
 
 log = logging.getLogger(__name__)
 
@@ -169,142 +167,98 @@ class PersonalMemoryService:
         # 注意：对话块的创建已移至 check_and_create_block_before_reply 方法，
         # 在AI回复前执行，确保最新对话可被RAG检索
 
-        # 方案E：检查是否有足够的未总结对话块
-        await self._check_and_summarize_blocks(user_id, current_model)
+        # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
+        # await self._check_and_summarize_blocks(user_id, current_model)
 
-    async def _check_and_summarize_blocks(
-        self, user_id: int, current_model: str | None = None
-    ):
-        """
-        方案E：检查是否有足够的未总结对话块，如果有2个则触发印象总结。
+    # --- [DISABLED] 印象总结功能（flash模型）已禁用 - 以下两个方法不再使用 ---
+    # async def _check_and_summarize_blocks(
+    #     self, user_id: int, current_model: str | None = None
+    # ):
+    #     """方案E：检查是否有足够的未总结对话块，如果有2个则触发印象总结。"""
+    #     (
+    #         blocks_to_summarize,
+    #         should_summarize,
+    #     ) = await conversation_block_service.get_blocks_for_summary(str(user_id))
+    #     if not should_summarize or not blocks_to_summarize:
+    #         return
+    #     log.info(
+    #         f"用户 {user_id} 有 {len(blocks_to_summarize)} 个未总结的对话块，"
+    #         f"开始生成印象总结。"
+    #     )
+    #     await self._summarize_blocks(user_id, blocks_to_summarize, current_model)
 
-        总结内容来自这2个对话块的文本，而非 profile.history。
-        """
-        (
-            blocks_to_summarize,
-            should_summarize,
-        ) = await conversation_block_service.get_blocks_for_summary(str(user_id))
-
-        if not should_summarize or not blocks_to_summarize:
-            return
-
-        log.info(
-            f"用户 {user_id} 有 {len(blocks_to_summarize)} 个未总结的对话块，"
-            f"开始生成印象总结。"
-        )
-
-        await self._summarize_blocks(user_id, blocks_to_summarize, current_model)
-
-    async def _summarize_blocks(
-        self,
-        user_id: int,
-        blocks: List[ConversationBlock],
-        current_model: str | None = None,
-    ):
-        """
-        方案E：从对话块生成印象总结。
-
-        Args:
-            user_id: 用户 Discord ID
-            blocks: 要总结的对话块列表（通常是2个）
-        """
-        log.info(f"开始为用户 {user_id} 从 {len(blocks)} 个对话块生成印象总结。")
-
-        # 获取旧摘要
-        async with AsyncSessionLocal() as session:
-            stmt = select(CommunityMemberProfile.personal_summary).where(
-                CommunityMemberProfile.discord_id == str(user_id)
-            )
-            result = await session.execute(stmt)
-            old_summary = result.scalars().first() or "无"
-
-        # 合并对话块文本
-        dialogue_text = "\n\n".join(
-            f"[对话块 {i + 1}]\n{block.conversation_text}"
-            for i, block in enumerate(blocks)
-        ).strip()
-
-        if not dialogue_text:
-            log.warning(f"用户 {user_id} 的对话块文本为空。")
-            return
-
-        # 构建 Prompt 并调用 AI 生成新摘要
-        prompt_template = PROMPT_CONFIG.get("personal_memory_summary")
-        if not prompt_template:
-            log.error("未找到 'personal_memory_summary' 的 prompt 模板。")
-            return
-
-        final_prompt = prompt_template.format(
-            old_summary=old_summary, dialogue_history=dialogue_text
-        )
-
-        # --- [MEMORY DEBUGGER] ---
-        def count_summary_lines(summary: str) -> int:
-            return len(
-                [line for line in summary.split("\n") if line.strip().startswith("-")]
-            )
-
-        old_summary_lines = count_summary_lines(old_summary)
-        log.info(f"---[MEMORY DEBUGGER - 方案E]--- 用户 {user_id} 开始总结 ---")
-        log.info(f"旧摘要行数: {old_summary_lines}")
-        log.info(f"完整的旧摘要:\n{old_summary}")
-        log.info(f"用于总结的对话块数量: {len(blocks)}")
-        log.info(f"对话块 ID: {[b.id for b in blocks]}")
-        # --- [MEMORY DEBUGGER] ---
-
-        # 使用 ai_service.generate() 方法
-        # 优先使用设置中配置的总结模型，然后是硬编码默认值，最后回退
-        configured_summary_model = await chat_settings_service.get_summary_model()
-        model_to_use = configured_summary_model or SUMMARY_MODEL
-        log.info(f"使用模型 {model_to_use} 进行印象总结")
-
-        messages = [{"role": "user", "content": final_prompt}]
-        config = GenerationConfig(
-            temperature=GEMINI_SUMMARY_GEN_CONFIG.get("temperature", 0.7),
-            max_output_tokens=GEMINI_SUMMARY_GEN_CONFIG.get("max_output_tokens", 2048),
-        )
-        try:
-            result = await ai_service.generate(
-                messages=messages, config=config, model=model_to_use
-            )
-        except ModelNotSupportedError:
-            fallback = current_model or ai_service._get_default_model()
-            log.warning(
-                f"总结模型 {model_to_use} 不可用，回退到 {fallback}"
-            )
-            result = await ai_service.generate(
-                messages=messages, config=config, model=fallback
-            )
-        new_summary = result.content
-
-        # 保存新摘要并标记对话块为已总结
-        if new_summary:
-            # --- [MEMORY DEBUGGER] ---
-            new_summary_lines = count_summary_lines(new_summary)
-            log.info(f"---[MEMORY DEBUGGER - 方案E]--- 用户 {user_id} 总结完毕 ---")
-            log.info(f"新摘要行数: {new_summary_lines} (Prompt要求 <= 30)")
-            if new_summary_lines > 30:
-                log.error("!!!!!!!! MEMORY EXPLOSION DETECTED !!!!!!!!")
-                log.error(
-                    f"用户 {user_id} 的新摘要行数 ({new_summary_lines}) 超过了30条的硬性限制！"
-                )
-                log.error(f"完整的失控摘要:\n{new_summary}")
-            else:
-                log.debug(f"完整的新摘要:\n{new_summary}")
-            # --- [MEMORY DEBUGGER] ---
-
-            # 更新摘要
-            await self.update_summary_manually(user_id, new_summary)
-
-            # 标记对话块为已总结
-            block_ids = [b.id for b in blocks]
-            await conversation_block_service.mark_blocks_as_summarized(block_ids)
-
-            log.info(
-                f"用户 {user_id} 印象总结完成，已标记 {len(block_ids)} 个对话块为已总结。"
-            )
-        else:
-            log.error(f"为用户 {user_id} 生成记忆摘要失败，AI 返回空。")
+    # async def _summarize_blocks(
+    #     self,
+    #     user_id: int,
+    #     blocks: List[ConversationBlock],
+    #     current_model: str | None = None,
+    # ):
+    #     """方案E：从对话块生成印象总结。"""
+    #     log.info(f"开始为用户 {user_id} 从 {len(blocks)} 个对话块生成印象总结。")
+    #     async with AsyncSessionLocal() as session:
+    #         stmt = select(CommunityMemberProfile.personal_summary).where(
+    #             CommunityMemberProfile.discord_id == str(user_id)
+    #         )
+    #         result = await session.execute(stmt)
+    #         old_summary = result.scalars().first() or "无"
+    #     dialogue_text = "\n\n".join(
+    #         f"[对话块 {i + 1}]\n{block.conversation_text}"
+    #         for i, block in enumerate(blocks)
+    #     ).strip()
+    #     if not dialogue_text:
+    #         log.warning(f"用户 {user_id} 的对话块文本为空。")
+    #         return
+    #     prompt_template = PROMPT_CONFIG.get("personal_memory_summary")
+    #     if not prompt_template:
+    #         log.error("未找到 'personal_memory_summary' 的 prompt 模板。")
+    #         return
+    #     final_prompt = prompt_template.format(
+    #         old_summary=old_summary, dialogue_history=dialogue_text
+    #     )
+    #     def count_summary_lines(summary: str) -> int:
+    #         return len([line for line in summary.split("\n") if line.strip().startswith("-")])
+    #     old_summary_lines = count_summary_lines(old_summary)
+    #     log.info(f"---[MEMORY DEBUGGER - 方案E]--- 用户 {user_id} 开始总结 ---")
+    #     log.info(f"旧摘要行数: {old_summary_lines}")
+    #     log.info(f"完整的旧摘要:\n{old_summary}")
+    #     log.info(f"用于总结的对话块数量: {len(blocks)}")
+    #     log.info(f"对话块 ID: {[b.id for b in blocks]}")
+    #     configured_summary_model = await chat_settings_service.get_summary_model()
+    #     model_to_use = configured_summary_model or SUMMARY_MODEL
+    #     log.info(f"使用模型 {model_to_use} 进行印象总结")
+    #     messages = [{"role": "user", "content": final_prompt}]
+    #     config = GenerationConfig(
+    #         temperature=GEMINI_SUMMARY_GEN_CONFIG.get("temperature", 0.7),
+    #         max_output_tokens=GEMINI_SUMMARY_GEN_CONFIG.get("max_output_tokens", 2048),
+    #     )
+    #     try:
+    #         result = await ai_service.generate(
+    #             messages=messages, config=config, model=model_to_use
+    #         )
+    #     except ModelNotSupportedError:
+    #         fallback = current_model or ai_service._get_default_model()
+    #         log.warning(f"总结模型 {model_to_use} 不可用，回退到 {fallback}")
+    #         result = await ai_service.generate(
+    #             messages=messages, config=config, model=fallback
+    #         )
+    #     new_summary = result.content
+    #     if new_summary:
+    #         new_summary_lines = count_summary_lines(new_summary)
+    #         log.info(f"---[MEMORY DEBUGGER - 方案E]--- 用户 {user_id} 总结完毕 ---")
+    #         log.info(f"新摘要行数: {new_summary_lines} (Prompt要求 <= 30)")
+    #         if new_summary_lines > 30:
+    #             log.error("!!!!!!!! MEMORY EXPLOSION DETECTED !!!!!!!!")
+    #             log.error(f"用户 {user_id} 的新摘要行数 ({new_summary_lines}) 超过了30条的硬性限制！")
+    #             log.error(f"完整的失控摘要:\n{new_summary}")
+    #         else:
+    #             log.debug(f"完整的新摘要:\n{new_summary}")
+    #         await self.update_summary_manually(user_id, new_summary)
+    #         block_ids = [b.id for b in blocks]
+    #         await conversation_block_service.mark_blocks_as_summarized(block_ids)
+    #         log.info(f"用户 {user_id} 印象总结完成，已标记 {len(block_ids)} 个对话块为已总结。")
+    #     else:
+    #         log.error(f"为用户 {user_id} 生成记忆摘要失败，AI 返回空。")
+    # --- [DISABLED END] ---
 
     async def get_memory_summary(self, user_id: int) -> str:
         """根据用户ID从 ParadeDB 获取其个人记忆摘要。"""

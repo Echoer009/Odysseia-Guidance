@@ -428,114 +428,74 @@ class ConversationBlockService:
                 "time_description": time_desc,
             }
 
-    async def get_unsummarized_blocks(
-        self, discord_id: str, session: Optional[AsyncSession] = None
-    ) -> List[ConversationBlock]:
-        """
-        获取用户未被总结的对话块。
+    # --- [DISABLED] 印象总结功能（flash模型）已禁用 - 以下三个方法不再使用 ---
+    # async def get_unsummarized_blocks(
+    #     self, discord_id: str, session: Optional[AsyncSession] = None
+    # ) -> List[ConversationBlock]:
+    #     """获取用户未被总结的对话块。用于方案E：每2个新块触发一次印象总结。"""
+    #     async def _get_blocks(sess: AsyncSession) -> List[ConversationBlock]:
+    #         result = await sess.execute(
+    #             select(ConversationBlock)
+    #             .where(
+    #                 ConversationBlock.discord_id == discord_id,
+    #                 ConversationBlock.summarized == 0,
+    #             )
+    #             .order_by(ConversationBlock.start_time.asc())
+    #         )
+    #         return list(result.scalars().all())
+    #     if session:
+    #         return await _get_blocks(session)
+    #     else:
+    #         async with AsyncSessionLocal() as sess:
+    #             return await _get_blocks(sess)
 
-        用于方案E：每2个新块触发一次印象总结。
+    # async def mark_blocks_as_summarized(
+    #     self,
+    #     block_ids: List[int],
+    #     session: Optional[AsyncSession] = None,
+    # ) -> int:
+    #     """将指定的对话块标记为已总结。"""
+    #     if not block_ids:
+    #         return 0
+    #     from sqlalchemy import update
+    #     async def _mark(sess: AsyncSession) -> int:
+    #         stmt = (
+    #             update(ConversationBlock)
+    #             .where(ConversationBlock.id.in_(block_ids))
+    #             .values(summarized=1)
+    #         )
+    #         await sess.execute(stmt)
+    #         log.info(f"已将 {len(block_ids)} 个对话块标记为已总结: {block_ids}")
+    #         return len(block_ids)
+    #     if session:
+    #         return await _mark(session)
+    #     else:
+    #         async with AsyncSessionLocal() as sess:
+    #             async with sess.begin():
+    #                 return await _mark(sess)
 
-        Args:
-            discord_id: 用户 Discord ID
-            session: 可选的数据库会话
-
-        Returns:
-            未被总结的对话块列表，按时间升序排列（最早的在前）
-        """
-
-        async def _get_blocks(sess: AsyncSession) -> List[ConversationBlock]:
-            result = await sess.execute(
-                select(ConversationBlock)
-                .where(
-                    ConversationBlock.discord_id == discord_id,
-                    ConversationBlock.summarized == 0,
-                )
-                .order_by(ConversationBlock.start_time.asc())
-            )
-            return list(result.scalars().all())
-
-        if session:
-            return await _get_blocks(session)
-        else:
-            async with AsyncSessionLocal() as sess:
-                return await _get_blocks(sess)
-
-    async def mark_blocks_as_summarized(
-        self,
-        block_ids: List[int],
-        session: Optional[AsyncSession] = None,
-    ) -> int:
-        """
-        将指定的对话块标记为已总结。
-
-        Args:
-            block_ids: 要标记的对话块 ID 列表
-            session: 可选的数据库会话
-
-        Returns:
-            更新的记录数量
-        """
-        if not block_ids:
-            return 0
-
-        from sqlalchemy import update
-
-        async def _mark(sess: AsyncSession) -> int:
-            stmt = (
-                update(ConversationBlock)
-                .where(ConversationBlock.id.in_(block_ids))
-                .values(summarized=1)
-            )
-            await sess.execute(stmt)
-            log.info(f"已将 {len(block_ids)} 个对话块标记为已总结: {block_ids}")
-            return len(block_ids)
-
-        if session:
-            return await _mark(session)
-        else:
-            async with AsyncSessionLocal() as sess:
-                async with sess.begin():
-                    return await _mark(sess)
-
-    async def get_blocks_for_summary(
-        self,
-        discord_id: str,
-        session: Optional[AsyncSession] = None,
-    ) -> tuple[List[ConversationBlock], bool]:
-        """
-        检查是否有足够的未总结对话块，如果达到阈值则返回最早的对应对话块。
-
-        用于方案E：每 N 个新块触发一次印象总结（N 由配置决定）。
-
-        Args:
-            discord_id: 用户 Discord ID
-            session: 可选的数据库会话
-
-        Returns:
-            (blocks_to_summarize, should_summarize)
-            - blocks_to_summarize: 需要总结的对话块列表
-            - should_summarize: 是否应该触发总结
-        """
-        # 从配置获取触发总结的对话块阈值
-        summary_trigger = self.config.get("summary_trigger_blocks", 2)
-
-        unsummarized = await self.get_unsummarized_blocks(discord_id, session)
-
-        if len(unsummarized) >= summary_trigger:
-            # 返回最早的 N 个未总结块
-            blocks_to_summarize = unsummarized[:summary_trigger]
-            log.info(
-                f"用户 {discord_id} 有 {len(unsummarized)} 个未总结的对话块，"
-                f"将总结最早的 {summary_trigger} 个: {[b.id for b in blocks_to_summarize]}"
-            )
-            return blocks_to_summarize, True
-        else:
-            log.debug(
-                f"用户 {discord_id} 有 {len(unsummarized)} 个未总结的对话块，"
-                f"暂不触发总结（需要至少 {summary_trigger} 个）"
-            )
-            return [], False
+    # async def get_blocks_for_summary(
+    #     self,
+    #     discord_id: str,
+    #     session: Optional[AsyncSession] = None,
+    # ) -> tuple[List[ConversationBlock], bool]:
+    #     """检查是否有足够的未总结对话块，如果达到阈值则返回最早的对应对话块。用于方案E。"""
+    #     summary_trigger = self.config.get("summary_trigger_blocks", 2)
+    #     unsummarized = await self.get_unsummarized_blocks(discord_id, session)
+    #     if len(unsummarized) >= summary_trigger:
+    #         blocks_to_summarize = unsummarized[:summary_trigger]
+    #         log.info(
+    #             f"用户 {discord_id} 有 {len(unsummarized)} 个未总结的对话块，"
+    #             f"将总结最早的 {summary_trigger} 个: {[b.id for b in blocks_to_summarize]}"
+    #         )
+    #         return blocks_to_summarize, True
+    #     else:
+    #         log.debug(
+    #             f"用户 {discord_id} 有 {len(unsummarized)} 个未总结的对话块，"
+    #             f"暂不触发总结（需要至少 {summary_trigger} 个）"
+    #         )
+    #         return [], False
+    # --- [DISABLED END] ---
 
     async def get_user_blocks(self, discord_id: str) -> List[Dict]:
         """

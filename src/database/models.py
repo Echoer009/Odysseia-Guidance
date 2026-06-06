@@ -711,13 +711,13 @@ class ConversationBlock(Base):
         Integer, nullable=False, default=0, comment="对话块中的消息数量"
     )
 
-    # 是否已被印象总结（用于方案E：每2个新块触发一次印象总结）
-    summarized: Mapped[bool] = mapped_column(
-        Integer,  # SQLite兼容：用 0/1 表示布尔值
-        nullable=False,
-        default=0,
-        comment="是否已被印象总结（0=未总结，1=已总结）",
-    )
+    # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
+    # summarized: Mapped[bool] = mapped_column(
+    #     Integer,  # SQLite兼容：用 0/1 表示布尔值
+    #     nullable=False,
+    #     default=0,
+    #     comment="是否已被印象总结（0=未总结，1=已总结）",
+    # )
 
     # 向量嵌入
     bge_embedding: Mapped[list[float] | None] = mapped_column(

@@ -165,14 +165,15 @@ class ChatSettingsView(View):
             )
         )
 
-        self.add_item(
-            Button(
-                label="📝 总结模型",
-                style=ButtonStyle.secondary,
-                custom_id="summary_model_settings",
-                row=3,
-            )
-        )
+        # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
+        # self.add_item(
+        #     Button(
+        #         label="📝 总结模型",
+        #         style=ButtonStyle.secondary,
+        #         custom_id="summary_model_settings",
+        #         row=3,
+        #     )
+        # )
 
         self.add_item(
             Button(
@@ -264,8 +265,9 @@ class ChatSettingsView(View):
             await self.on_warm_up_settings(interaction)
         elif custom_id == "ai_model_settings":
             await self.on_ai_model_settings(interaction)
-        elif custom_id == "summary_model_settings":
-            await self.on_summary_model_settings(interaction)
+        # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
+        # elif custom_id == "summary_model_settings":
+        #     await self.on_summary_model_settings(interaction)
         elif custom_id == "show_token_usage":
             await self.on_show_token_usage(interaction)
         elif custom_id == "embedding_settings":
@@ -413,53 +415,47 @@ class ChatSettingsView(View):
                 # 直接存模型名，不带 provider 前缀
                 await self.service.set_ai_model(model)
 
-    async def on_summary_model_settings(self, interaction: Interaction):
-        """打开总结模型设置视图。"""
-        from src.chat.services.ai.config.models import get_model_configs
-
-        current_summary_model = await self.service.get_summary_model()
-
-        view = await AIModelSettingsView.create(
-            current_provider=None,
-            current_model=current_summary_model,
-        )
-
-        embed = discord.Embed(
-            title="📝 总结模型设置",
-            description="选择用于个人记忆摘要的模型",
-            color=discord.Color.blue(),
-        )
-
-        if current_summary_model:
-            model_configs = get_model_configs()
-            display = current_summary_model
-            if current_summary_model in model_configs:
-                display = model_configs[current_summary_model].display_name or current_summary_model
-            embed.add_field(
-                name="当前设置",
-                value=f"模型: `{display}`",
-                inline=False,
-            )
-        else:
-            embed.add_field(
-                name="当前设置",
-                value="未设置（使用默认值）",
-                inline=False,
-            )
-
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-        )
-
-        await view.wait()
-
-        full_model_id = view.get_selected_full_model_id()
-        if full_model_id:
-            provider, model = AIModelSettingsView.parse_full_model_id(full_model_id)
-            if model:
-                await self.service.set_summary_model(model)
+    # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
+    # async def on_summary_model_settings(self, interaction: Interaction):
+    #     """打开总结模型设置视图。"""
+    #     from src.chat.services.ai.config.models import get_model_configs
+    #     current_summary_model = await self.service.get_summary_model()
+    #     view = await AIModelSettingsView.create(
+    #         current_provider=None,
+    #         current_model=current_summary_model,
+    #     )
+    #     embed = discord.Embed(
+    #         title="📝 总结模型设置",
+    #         description="选择用于个人记忆摘要的模型",
+    #         color=discord.Color.blue(),
+    #     )
+    #     if current_summary_model:
+    #         model_configs = get_model_configs()
+    #         display = current_summary_model
+    #         if current_summary_model in model_configs:
+    #             display = model_configs[current_summary_model].display_name or current_summary_model
+    #         embed.add_field(
+    #             name="当前设置",
+    #             value=f"模型: `{display}`",
+    #             inline=False,
+    #         )
+    #     else:
+    #         embed.add_field(
+    #             name="当前设置",
+    #             value="未设置（使用默认值）",
+    #             inline=False,
+    #         )
+    #     await interaction.response.send_message(
+    #         embed=embed,
+    #         view=view,
+    #         ephemeral=True,
+    #     )
+    #     await view.wait()
+    #     full_model_id = view.get_selected_full_model_id()
+    #     if full_model_id:
+    #         provider, model = AIModelSettingsView.parse_full_model_id(full_model_id)
+    #         if model:
+    #             await self.service.set_summary_model(model)
 
     async def on_show_token_usage(self, interaction: Interaction):
         """显示今天的 Token 使用情况。"""
