@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.chat.utils.time_utils import BEIJING_TZ
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -128,11 +129,13 @@ async def summarize_channel(
 
 
 def text_to_summary_image(
-    text: str, title: str = "类脑娘的总结时间到!"
+    text: str, title: Optional[str] = None
 ) -> Optional[bytes]:
     """
     将文本转换为一张自适应高度的长图，能正确处理换行和避让右上角的Logo。
     """
+    if title is None:
+        title = f"{BOT_NAME}的总结时间到!"
     LOGO_PATH = "src/chat/assets/logo.png"
     FONT_PATH = "src/chat/assets/font.TTF"
     IMG_WIDTH = 1200

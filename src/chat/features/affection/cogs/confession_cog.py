@@ -8,6 +8,7 @@ from src.chat.config.chat_config import (
     CONFESSION_PROMPT,
     CONFESSION_PERSONA_INJECTION,
 )
+from src.config import BOT_NAME
 from src.chat.config import chat_config
 from src.chat.features.affection.service.affection_service import AffectionService
 from src.chat.features.affection.service.confession_service import ConfessionService
@@ -16,7 +17,7 @@ from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
-from src.config import DEVELOPER_USER_IDS
+from src.config import DEVELOPER_USER_IDS, BOT_NAME
 from src.chat.services.event_service import event_service
 from src.chat.features.affection.utils.interaction_checks import (
     check_command_availability,
@@ -33,7 +34,7 @@ class ConfessionCog(commands.Cog):
         self.confession_service = ConfessionService()
 
     @app_commands.command(
-        name="忏悔", description="向类脑娘忏悔，或许能让她对你的态度改观一些?"
+        name="忏悔", description=f"向{BOT_NAME}忏悔，或许能让她对你的态度改观一些?"
     )
     @app_commands.guild_only()
     @app_commands.rename(content="忏悔内容")
@@ -112,6 +113,7 @@ class ConfessionCog(commands.Cog):
                 user_name=interaction.user.display_name,
                 confession_message=content,
                 affection_level=level_name,
+                BOT_NAME=BOT_NAME,
             )
 
             # 获取用户配置的 AI 模型
@@ -124,7 +126,7 @@ class ConfessionCog(commands.Cog):
 
             if not ai_response:
                 await interaction.followup.send(
-                    "类脑娘现在似乎不想听你的忏悔，请稍后再试。", ephemeral=True
+                    f"{BOT_NAME}现在似乎不想听你的忏悔，请稍后再试。", ephemeral=True
                 )
                 return
 
@@ -149,7 +151,7 @@ class ConfessionCog(commands.Cog):
             await self.confession_service.record_confession(user_id_str)
 
             embed = discord.Embed(
-                title="来自类脑娘的低语",
+                title=f"来自{BOT_NAME}的低语",
                 description=truncate_text(
                     replace_emojis(ai_response), DISCORD_EMBED_DESCRIPTION_LIMIT
                 ),
@@ -181,7 +183,7 @@ class ConfessionCog(commands.Cog):
             if image_url:
                 embed.set_thumbnail(url=image_url)
 
-            embed.set_footer(text="类脑娘对你的忏悔做出了一些回应...")
+            embed.set_footer(text=f"{BOT_NAME}对你的忏悔做出了一些回应...")
 
             await interaction.followup.send(embed=embed, ephemeral=not is_unrestricted)
 

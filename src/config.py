@@ -6,11 +6,39 @@
 
 import os
 
+import yaml
+
 # --- 路径配置 ---
-# 项目根目录
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 数据存储目录
 DATA_DIR = os.path.join(BASE_DIR, "data")
+
+
+# --- Bot 身份配置 (从 config/bot.yaml 加载) ---
+def _load_bot_identity():
+    config_path = os.path.join(BASE_DIR, "config", "bot.yaml")
+    if not os.path.exists(config_path):
+        return {
+            "bot_name": "Bot",
+            "community_name": "Community",
+            "currency_name": "金币",
+            "mascot_title": "看板娘",
+            "nickname": "",
+            "community_type": "",
+            "bot_self_introduction": "",
+        }
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    return cfg.get("identity", {})
+
+
+_identity = _load_bot_identity()
+BOT_NAME = _identity.get("bot_name", "Bot")
+COMMUNITY_NAME = _identity.get("community_name", "Community")
+CURRENCY_NAME = _identity.get("currency_name", "金币")
+MASCOT_TITLE = _identity.get("mascot_title", "看板娘")
+NICKNAME = _identity.get("nickname", "")
+COMMUNITY_TYPE = _identity.get("community_type", "")
+BOT_SELF_INTRODUCTION = _identity.get("bot_self_introduction", "")
 
 
 def _parse_ids(env_var: str) -> set[int]:
@@ -39,13 +67,13 @@ DEVELOPER_USER_IDS = _parse_ids("DEVELOPER_USER_IDS")
 ADMIN_ROLE_IDS = _parse_ids("ADMIN_ROLE_IDS")
 
 # --- AI 身份配置 ---
-# 用于识别AI自身发布的消息，请在 .env 文件中设置
-_brain_girl_app_id = os.getenv("BRAIN_GIRL_APP_ID")
-BRAIN_GIRL_APP_ID = (
-    int(_brain_girl_app_id)
-    if _brain_girl_app_id and _brain_girl_app_id.isdigit()
+_bot_app_id_str = os.getenv("BOT_APP_ID") or os.getenv("BRAIN_GIRL_APP_ID")
+BOT_APP_ID = (
+    int(_bot_app_id_str)
+    if _bot_app_id_str and _bot_app_id_str.isdigit()
     else None
 )
+BRAIN_GIRL_APP_ID = BOT_APP_ID
 
 # --- 交互视图相关 ---
 VIEW_TIMEOUT = 300  # 交互视图的超时时间（秒），例如按钮、下拉菜单

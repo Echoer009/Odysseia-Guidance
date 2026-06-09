@@ -17,7 +17,7 @@ _TEST_DATABASE_URL = os.getenv("DATABASE_URL")
 if not _TEST_DATABASE_URL:
     _db_user = os.getenv("POSTGRES_USER", "user")
     _db_password = os.getenv("POSTGRES_PASSWORD", "password")
-    _db_name = os.getenv("POSTGRES_DB", "braingirl_db")
+    _db_name = os.getenv("POSTGRES_DB", "bot_db")
     _db_port = os.getenv("DB_PORT", "5432")
     _db_host = os.getenv("DB_HOST", "db") if os.getenv("RUNNING_IN_DOCKER") else os.getenv("DB_HOST", "localhost")
     _TEST_DATABASE_URL = (

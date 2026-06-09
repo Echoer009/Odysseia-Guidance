@@ -21,7 +21,7 @@ def get_parade_db_connection() -> Optional[psycopg2.extensions.connection]:
             db_host = os.getenv("DB_HOST", "localhost")
 
         conn = psycopg2.connect(
-            dbname=os.getenv("POSTGRES_DB", "braingirl_db"),
+            dbname=os.getenv("POSTGRES_DB", "bot_db"),
             user=os.getenv("POSTGRES_USER", "user"),
             password=os.getenv("POSTGRES_PASSWORD", "password"),
             host=db_host,

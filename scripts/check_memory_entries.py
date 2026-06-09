@@ -27,7 +27,7 @@ DB_USER = os.getenv("POSTGRES_USER", "user")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 DB_HOST = os.getenv("DB_HOST", "db")  # 在 Docker 环境中，默认使用服务名 'db'
 DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("POSTGRES_DB", "braingirl_db")
+DB_NAME = os.getenv("POSTGRES_DB", "bot_db")
 
 # 构建数据库连接 URL
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

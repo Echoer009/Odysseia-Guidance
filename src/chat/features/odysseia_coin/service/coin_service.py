@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from src.chat.config.chat_config import COIN_CONFIG
+from src.config import BOT_NAME, CURRENCY_NAME
 from ...affection.service.affection_service import affection_service
 from src.database.database import AsyncSessionLocal
 from src.database.models import (
@@ -74,7 +75,7 @@ class CoinService:
                 new_balance = row.balance
 
             log.info(
-                f"用户 {user_id} 获得 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
+                f"用户 {user_id} 获得 {amount} {CURRENCY_NAME}，原因: {reason}。新余额: {new_balance}"
             )
             return new_balance
 
@@ -104,7 +105,7 @@ class CoinService:
                 new_balance = row.balance
 
             log.info(
-                f"用户 {user_id} 消费 {amount} 类脑币，原因: {reason}。新余额: {new_balance}"
+                f"用户 {user_id} 消费 {amount} {CURRENCY_NAME}，原因: {reason}。新余额: {new_balance}"
             )
             return new_balance
 
@@ -145,7 +146,7 @@ class CoinService:
                 )
                 session.add(tx)
 
-        log.info(f"用户 {user_id} 获得每日首次与AI对话奖励 ({reward_amount} 类脑币)。")
+        log.info(f"用户 {user_id} 获得每日首次与AI对话奖励 ({reward_amount} {CURRENCY_NAME})。")
         return True
 
     async def add_item_to_shop(
@@ -266,7 +267,7 @@ class CoinService:
         if current_balance < total_cost:
             return (
                 False,
-                f"你的余额不足！需要 {total_cost} 类脑币，但你只有 {current_balance}。",
+                f"你的余额不足！需要 {total_cost} {CURRENCY_NAME}，但你只有 {current_balance}。",
                 None,
                 False,
                 None,
@@ -278,7 +279,7 @@ class CoinService:
             reason = f"购买 {quantity}x {item['name']}"
             new_balance = await self.remove_coins(user_id, total_cost, reason)
             if new_balance is None:
-                return False, "购买失败，无法扣除类脑币。", None, False, None, None
+                return False, f"购买失败，无法扣除{CURRENCY_NAME}。", None, False, None, None
 
         item_target = item["target"]
         item_effect = item["effect_id"]
@@ -300,7 +301,7 @@ class CoinService:
                     user_id, total_cost, f"送礼失败返还: {item['name']}"
                 )
                 log.warning(
-                    f"用户 {user_id} 送礼失败，已返还 {total_cost} 类脑币。原因: {gift_message}"
+                    f"用户 {user_id} 送礼失败，已返还 {total_cost} {CURRENCY_NAME}。原因: {gift_message}"
                 )
                 return False, gift_message, current_balance, False, None, None
 
@@ -313,7 +314,7 @@ class CoinService:
                 await personal_memory_service.clear_personal_memory(user_id)
                 return (
                     True,
-                    f"一道耀眼的闪光后，类脑娘关于 **{item['name']}** 的记忆...呃，不对，是类脑娘关于你的记忆被清除了。你们可以重新开始了。",
+                    f"一道耀眼的闪光后，{BOT_NAME}关于 **{item['name']}** 的记忆...呃，不对，是{BOT_NAME}关于你的记忆被清除了。你们可以重新开始了。",
                     new_balance,
                     False,
                     None,
@@ -350,7 +351,7 @@ class CoinService:
                 }
                 return (
                     True,
-                    "你与类脑娘进行了一次成功的\u201c午后闲谈\u201d。",
+                    f"你与{BOT_NAME}进行了一次成功的\u201c午后闲谈\u201d。",
                     new_balance,
                     False,
                     embed_data,
@@ -362,7 +363,7 @@ class CoinService:
                 if has_personal_memory:
                     return (
                         True,
-                        f"你花费了 {total_cost} 类脑币来更新你的个人档案。",
+                        f"你花费了 {total_cost} {CURRENCY_NAME}来更新你的个人档案。",
                         new_balance,
                         True,
                         None,
@@ -371,7 +372,7 @@ class CoinService:
                 else:
                     return (
                         True,
-                        f"你已成功解锁 **{item['name']}**！现在类脑娘将开始为你记录个人记忆。",
+                        f"你已成功解锁 **{item['name']}**！现在{BOT_NAME}将开始为你记录个人记忆。",
                         new_balance,
                         True,
                         None,
@@ -380,7 +381,7 @@ class CoinService:
             elif item_effect == WORLD_BOOK_CONTRIBUTION_ITEM_EFFECT_ID:
                 return (
                     True,
-                    f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    f"你花费了 {total_cost} {CURRENCY_NAME}购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     True,
                     None,
@@ -389,7 +390,7 @@ class CoinService:
             elif item_effect == SELL_BODY_EVENT_SUBMISSION_EFFECT_ID:
                 return (
                     True,
-                    f"你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    f"你花费了 {total_cost} {CURRENCY_NAME}购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     True,
                     None,
@@ -399,7 +400,7 @@ class CoinService:
                 await self.set_warmup_preference(user_id, wants_warmup=False)
                 return (
                     True,
-                    f"你购买了 **{item['name']}**。从此，类脑娘将不再暖你的贴。",
+                    f"你购买了 **{item['name']}**。从此，{BOT_NAME}将不再暖你的贴。",
                     new_balance,
                     False,
                     None,
@@ -410,7 +411,7 @@ class CoinService:
                 log.info(f"用户 {user_id} 购买了告示牌，已禁用帖子回复功能。")
                 return (
                     True,
-                    f"你举起了 **{item['name']}**，上面写着禁止通行。从此，类脑娘将不再进入你的帖子。",
+                    f"你举起了 **{item['name']}**，上面写着禁止通行。从此，{BOT_NAME}将不再进入你的帖子。",
                     new_balance,
                     False,
                     None,
@@ -420,7 +421,7 @@ class CoinService:
                 await self.set_warmup_preference(user_id, wants_warmup=True)
                 return (
                     True,
-                    f"你使用了 **{item['name']}**，枯萎的向日葵恢复了生机。类脑娘现在会重新暖你的贴了。",
+                    f"你使用了 **{item['name']}**，枯萎的向日葵恢复了生机。{BOT_NAME}现在会重新暖你的贴了。",
                     new_balance,
                     False,
                     None,
@@ -441,7 +442,7 @@ class CoinService:
                 )
                 return (
                     True,
-                    f"你使用了 **{item['name']}**，花费了 {total_cost} 类脑币。现在你创建的所有帖子将默认拥有 **60秒2次** 的发言许可，你也可以随时通过弹出的窗口自定义规则。",
+                    f"你使用了 **{item['name']}**，花费了 {total_cost} {CURRENCY_NAME}。现在你创建的所有帖子将默认拥有 **60秒2次** 的发言许可，你也可以随时通过弹出的窗口自定义规则。",
                     new_balance,
                     True,
                     None,
@@ -450,7 +451,7 @@ class CoinService:
             else:
                 return (
                     True,
-                    f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    f"购买成功！你花费了 {total_cost} {CURRENCY_NAME}购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     False,
                     None,
@@ -470,7 +471,7 @@ class CoinService:
                     cg_url = _select_random_cg_url(item.get("cg_url"))
                     return (
                         True,
-                        f"你花 {total_cost} 类脑币请类脑娘吃了 **{item['name']}**。",
+                        f"你花 {total_cost} {CURRENCY_NAME}请{BOT_NAME}吃了 **{item['name']}**。",
                         new_balance,
                         False,
                         None,
@@ -481,13 +482,13 @@ class CoinService:
                         user_id, total_cost, f"请吃饭失败返还: {item['name']}"
                     )
                     log.warning(
-                        f"用户 {user_id} 请类脑娘吃饭失败，已返还 {total_cost} 类脑币。原因: {meal_message}"
+                        f"用户 {user_id} 请{BOT_NAME}吃饭失败，已返还 {total_cost} {CURRENCY_NAME}。原因: {meal_message}"
                     )
                     return False, meal_message, current_balance, False, None, None
             else:
                 return (
                     True,
-                    f"购买成功！你花费了 {total_cost} 类脑币购买了 {quantity}x **{item['name']}**。",
+                    f"购买成功！你花费了 {total_cost} {CURRENCY_NAME}购买了 {quantity}x **{item['name']}**。",
                     new_balance,
                     False,
                     None,
@@ -504,7 +505,7 @@ class CoinService:
         if current_balance < price:
             return (
                 False,
-                f"你的余额不足！需要 {price} 类脑币，但你只有 {current_balance}。",
+                f"你的余额不足！需要 {price} {CURRENCY_NAME}，但你只有 {current_balance}。",
                 None,
             )
 
@@ -513,7 +514,7 @@ class CoinService:
             reason = f"购买活动商品: {item_name}"
             new_balance = await self.remove_coins(user_id, price, reason)
             if new_balance is None:
-                return False, "购买失败，无法扣除类脑币。", None
+                return False, f"购买失败，无法扣除{CURRENCY_NAME}。", None
 
         return True, f"成功购买 {item_name}！", new_balance
 
@@ -578,7 +579,7 @@ class CoinService:
 
         max_loan = COIN_CONFIG["MAX_LOAN_AMOUNT"]
         if amount > max_loan:
-            return False, f"❌ 单次最多只能借 {max_loan} 类脑币。"
+            return False, f"❌ 单次最多只能借 {max_loan} {CURRENCY_NAME}。"
 
         uid = str(user_id)
         async with AsyncSessionLocal() as session:
@@ -592,7 +593,7 @@ class CoinService:
                 if existing:
                     return (
                         False,
-                        f"❌ 你还有一笔 **{existing[0].amount}** 类脑币的借款尚未还清，请先还款。",
+                        f"❌ 你还有一笔 **{existing[0].amount}** {CURRENCY_NAME}的借款尚未还清，请先还款。",
                     )
 
                 loan = CoinLoan(user_id=uid, amount=amount)
@@ -600,8 +601,8 @@ class CoinService:
 
         await self.add_coins(user_id, amount, "从系统借款")
 
-        log.info(f"用户 {user_id} 成功借款 {amount} 类脑币。")
-        return True, f"✅ 成功借款 **{amount}** 类脑币！"
+        log.info(f"用户 {user_id} 成功借款 {amount} {CURRENCY_NAME}。")
+        return True, f"✅ 成功借款 **{amount}** {CURRENCY_NAME}！"
 
     async def repay_loan(self, user_id: int) -> tuple[bool, str]:
         uid = str(user_id)
@@ -629,13 +630,13 @@ class CoinService:
 
                 new_balance = await self.remove_coins(user_id, loan_amount, "偿还系统贷款")
                 if new_balance is None:
-                    return False, "❌ 还款失败，无法扣除类脑币。"
+                    return False, f"❌ 还款失败，无法扣除{CURRENCY_NAME}。"
 
                 loan.status = "paid"
                 loan.paid_at = datetime.utcnow()
 
-        log.info(f"用户 {user_id} 成功偿还 {loan_amount} 类脑币的贷款。")
-        return True, f"✅ 成功偿还 **{loan_amount}** 类脑币的贷款！"
+        log.info(f"用户 {user_id} 成功偿还 {loan_amount} {CURRENCY_NAME}的贷款。")
+        return True, f"✅ 成功偿还 **{loan_amount}** {CURRENCY_NAME}的贷款！"
 
     async def get_transaction_history(
         self, user_id: int, limit: int = 10, offset: int = 0

@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
+from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class TransactionHistoryView(discord.ui.View):
         )
 
         embed = discord.Embed(
-            title=f"{self.target_user.display_name} 的类脑币流水",
+            title=f"{self.target_user.display_name} 的{CURRENCY_NAME}流水",
             color=discord.Color.gold(),
         )
 

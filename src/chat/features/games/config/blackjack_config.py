@@ -20,7 +20,7 @@ MINIMUM_BET_AMOUNTS = {
 }
 
 # 荷官判断玩家下注大小的阈值
-# 这些是固定的类脑币金额
+# These are fixed coin amounts
 DEALER_BET_THRESHOLDS = {
     "low": 100,  # 低于此值为小赌注
     "high": 1000,  # 高于或等于此值为大赌注

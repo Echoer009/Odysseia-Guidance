@@ -7,7 +7,7 @@ import yaml
 from sqlalchemy import select, func
 
 from src.chat.config.chat_config import AFFECTION_CONFIG
-from src.config import DEVELOPER_USER_IDS
+from src.config import DEVELOPER_USER_IDS, BOT_NAME
 from src.chat.utils.time_utils import BEIJING_TZ
 from src.database.database import AsyncSessionLocal
 from src.database.models import UserAffection
@@ -155,7 +155,7 @@ class AffectionService:
             and affection_data.get("last_gift_date") == today
         ):
             log.info(f"用户 {user_id} 今天已经送过礼物了，送礼失败。")
-            return False, "你今天已经送过礼物啦，类脑娘很开心，不过明天再来吧！"
+            return False, f"你今天已经送过礼物啦，{BOT_NAME}很开心，不过明天再来吧！"
         elif user_id in DEVELOPER_USER_IDS:
             log.info(f"开发者用户 {user_id} 正在送礼，已绕过每日限制。")
 
@@ -168,7 +168,7 @@ class AffectionService:
             last_interaction_date=today,
         )
         log.info(f"用户 {user_id} 通过送礼增加了 {points_to_add} 点好感度。")
-        return True, f"你送的礼物类脑娘很喜欢！好感度增加了 {points_to_add} 点。"
+        return True, f"你送的礼物{BOT_NAME}很喜欢！好感度增加了 {points_to_add} 点。"
 
     async def add_affection_points(self, user_id: int, points_to_add: int) -> int:
         affection_data = await self._get_or_create_affection(user_id)

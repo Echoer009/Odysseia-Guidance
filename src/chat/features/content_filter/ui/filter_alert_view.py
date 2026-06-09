@@ -21,6 +21,7 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
 from src.chat.features.content_filter.services.content_filter_service import (
     ignore_keywords,
 )
+from src.config import BOT_NAME, COMMUNITY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class FilterAlertView(View):
                 return
             embed = discord.Embed(
                 title="⚠️ 警告通知",
-                description=f"你已被 **类脑娘** 警告并临时封禁 **{ban_duration}** 分钟。",
+                description=f"你已被 **{BOT_NAME}** 警告并临时封禁 **{ban_duration}** 分钟。",
                 color=discord.Color.orange(),
                 timestamp=datetime.now(timezone.utc),
             )
@@ -68,7 +69,7 @@ class FilterAlertView(View):
                 value="请遵守社区规范，尊重他人。如有疑问，请联系管理员。",
                 inline=False,
             )
-            embed.set_footer(text="类脑娘社区 · 警告系统")
+            embed.set_footer(text=f"{COMMUNITY_NAME}社区 · 警告系统")
             await user.send(embed=embed)
         except Exception as e:
             log.error(f"发送警告私信失败: {e}")
@@ -80,12 +81,12 @@ class FilterAlertView(View):
                 return
             embed = discord.Embed(
                 title="🔨 封禁通知",
-                description=f"你已被 **类脑娘** 封禁 **{ban_duration}** 分钟。",
+                description=f"你已被 **{BOT_NAME}** 封禁 **{ban_duration}** 分钟。",
                 color=discord.Color.red(),
                 timestamp=datetime.now(timezone.utc),
             )
             embed.add_field(name="封禁理由", value=reason, inline=False)
-            embed.set_footer(text="类脑娘社区 · 封禁系统")
+            embed.set_footer(text=f"{COMMUNITY_NAME}社区 · 封禁系统")
             await user.send(embed=embed)
         except Exception as e:
             log.error(f"发送封禁私信失败: {e}")

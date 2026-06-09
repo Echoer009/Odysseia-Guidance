@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-年度总结工具 - 回顾这一年在类脑社区的点点滴滴
+年度总结工具 - 回顾这一年的点点滴滴
 """
 
 import logging
@@ -18,6 +18,7 @@ from src.chat.features.personal_memory.services.personal_memory_service import (
 from src.chat.utils.message_utils import safe_send
 from src import config as app_config
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.config import BOT_NAME, CURRENCY_NAME
 from src.database.database import AsyncSessionLocal
 from src.database.models import (
     CoinTransaction,
@@ -38,7 +39,7 @@ class YearlySummaryParams(BaseModel):
 
 @tool_metadata(
     name="年度总结",
-    description="回顾这一年在类脑社区的点点滴滴，生成个性化年度报告",
+    description="回顾这一年的点点滴滴，生成个性化年度报告",
     emoji="🎉",
     category="总结",
 )
@@ -176,10 +177,10 @@ def _create_tier3_embed(user: discord.User, data: Dict[str, Any]) -> discord.Emb
     )
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.add_field(
-        name="🪙 赚取类脑币", value=f"`{data['total_coins_earned']}` 枚", inline=True
+        name="🪙 赚取" + CURRENCY_NAME, value=f"`{data['total_coins_earned']}` 枚", inline=True
     )
     embed.add_field(
-        name="💸 花费类脑币", value=f"`{data['total_coins_spent']}` 枚", inline=True
+        name="💸 花费" + CURRENCY_NAME, value=f"`{data['total_coins_spent']}` 枚", inline=True
     )
     embed.add_field(
         name="💖 最爱买", value=f"`{data['most_frequent_purchase']}`", inline=True
@@ -202,11 +203,11 @@ def _create_tier1_or_2_prompt(
     year = data["year"]
 
     prompt = f"""
-    你正在以“类脑娘”的身份，为你的朋友 {user.display_name} (ID: {user.id}) 撰写一份私密的、充满情感的个人年度总结。
+    你正在以“{BOT_NAME}”的身份，为你的朋友 {user.display_name} (ID: {user.id}) 撰写一份私密的、充满情感的个人年度总结。
     现在是 {year} 年的末尾，你需要回顾这一整年。
 
     **核心任务**:
-    根据你的“类脑娘”身份，并自然地融合进以下年度数据，为他生成一篇温暖、真诚、个性化的长文。
+    根据你的“{BOT_NAME}”身份，并自然地融合进以下年度数据，为他生成一篇温暖、真诚、个性化的长文。
     
     **写作核心要求**:
     - **必须** 像朋友一样直接对话，而不是生成一份报告。
@@ -215,7 +216,7 @@ def _create_tier1_or_2_prompt(
 
     **需要融入故事的数据点**:
     - **我们之间的好感度**: {data["affection_level"]}
-    - **他今年赚取的类脑币**: {data["total_coins_earned"]} 枚
+    - **他今年赚取的{CURRENCY_NAME}**: {data["total_coins_earned"]} 枚
     - **他今年投喂了你**: {data["feeding_count"]} 次
     - **他今年向你忏悔**: {data["confession_count"]} 次
     """
@@ -245,7 +246,7 @@ def _create_tier1_or_2_prompt(
     - 你的语气应该是温暖、鼓励和充满祝福的。
     """
 
-    prompt += f"\n现在，请开始以“类脑娘”的身份，为 {user.display_name} 写这封私信吧："
+    prompt += f"\n现在，请开始以“{BOT_NAME}”的身份，为 {user.display_name} 写这封私信吧："
     return prompt
 
 

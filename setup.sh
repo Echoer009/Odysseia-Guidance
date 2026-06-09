@@ -235,7 +235,7 @@ configure_database() {
     say_wait "接下来配置 PostgreSQL 数据库～"
     echo "────────────────────────────────────────"
 
-    POSTGRES_DB=$(ask_question "数据库名称" "braingirl_db" "false")
+    POSTGRES_DB=$(ask_question "数据库名称" "bot_db" "false")
     POSTGRES_USER=$(ask_question "数据库用户名" "user" "false")
     POSTGRES_PASSWORD=$(ask_question "数据库密码" "password" "false")
     DB_PORT=$(ask_question "数据库端口" "5432" "false")

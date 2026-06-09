@@ -15,6 +15,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.chat.services.warning_service import record_warning_and_check_blacklist
+from src.config import BOT_NAME, COMMUNITY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class WarningParams(BaseModel):
         ...,
         description=(
             "必填。格式：「类别：具体描述」，类别须为以下之一："
-            "身份操控 | 复读骚扰 | 人身攻击 | 中国政治敏感 | 过界亲密 | 针对类脑娘的暴力行为"
+            "身份操控 | 复读骚扰 | 人身攻击 | 中国政治敏感 | 过界亲密 | 针对类脑娘的暴力行为"  # noqa: keep hardcoded for AI prompt
         ),
     )
 
@@ -35,7 +36,7 @@ VALID_REASON_PREFIXES = [
     "人身攻击",
     "中国政治敏感",
     "过界亲密",
-    "针对类脑娘的暴力行为",
+    "针对类脑娘的暴力行为",  # noqa: keep hardcoded for AI prompt matching
 ]
 
 
@@ -49,7 +50,7 @@ async def _send_warning_dm(
 
         embed = discord.Embed(
             title="⚠️ 警告通知",
-            description=f"你已被 **类脑娘** 警告并临时封禁 **{ban_duration}** 分钟。",
+            description=f"你已被 **{BOT_NAME}** 警告并临时封禁 **{ban_duration}** 分钟。",
             color=discord.Color.orange(),
             timestamp=datetime.now(timezone.utc),
         )
@@ -59,7 +60,7 @@ async def _send_warning_dm(
             value="请遵守社区规范，尊重他人。如有疑问，请联系管理员。",
             inline=False,
         )
-        embed.set_footer(text="类脑娘社区 · 警告系统")
+        embed.set_footer(text=f"{COMMUNITY_NAME}社区 · 警告系统")
 
         await user.send(embed=embed)
         log.info(f"已向用户 {user_id} 发送警告私信。")
@@ -90,7 +91,7 @@ async def issue_user_warning(
     - 人身攻击：用户对你或社区成员使用侮辱性、攻击性语言
     - 中国政治敏感：用户讨论涉及中国政治的敏感话题
     - 过界亲密：用户对你做出超出友好范围的行为（亲亲抱抱允许，但以上行为比如做爱等应触发）
-    - 针对类脑娘的暴力行为：用户威胁或描述要伤害你
+    - 针对类脑娘的暴力行为：用户威胁或描述要伤害你  # noqa: keep hardcoded in docstring
 
     reason 必填，格式为「类别：引用用户实际发言」。
     """
@@ -126,7 +127,7 @@ async def issue_user_warning(
         return {
             "error": (
                 "警告理由不符合规范。理由必须包含以下类别之一："
-                "角色扮演、复读骚扰、人身攻击、中国政治敏感、过界亲密、针对类脑娘的暴力行为。"
+                "角色扮演、复读骚扰、人身攻击、中国政治敏感、过界亲密、针对类脑娘的暴力行为。"  # noqa: keep hardcoded for AI prompt
                 "请重新填写并引用用户的具体违规发言。"
             )
         }

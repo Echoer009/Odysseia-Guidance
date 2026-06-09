@@ -1,6 +1,8 @@
 from typing import TYPE_CHECKING
 import discord
 
+from src.config import CURRENCY_NAME
+
 from .base_panel import BasePanel
 
 if TYPE_CHECKING:
@@ -38,5 +40,5 @@ class ShopPanel(BasePanel["SimpleShopView"]):
             if self.shop_data.balance is not None
             else "查询失败"
         )
-        embed.set_footer(text=f"你的余额: {balance_str} 类脑币")
+        embed.set_footer(text=f"你的余额: {balance_str} {CURRENCY_NAME}")
         return embed

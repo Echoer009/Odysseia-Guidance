@@ -4,6 +4,7 @@ from discord.ui import View, Button
 from typing import cast
 
 from src import config as root_config
+from src.config import CURRENCY_NAME
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.admin_panel.ui.coin_management_modal import (
     UserSearchModal,
@@ -16,7 +17,7 @@ from src.chat.features.odysseia_coin.ui.transaction_history_ui import (
 
 class CoinManagementView(View):
     """
-    类脑币管理视图
+    Coin management view
     """
 
     def __init__(
@@ -116,20 +117,20 @@ class CoinManagementView(View):
     async def get_embed(self) -> discord.Embed:
         """生成类脑币管理的 Embed"""
         if self.target_user:
-            description = f"正在管理用户 **{self.target_user.display_name}** (`{self.target_user_id}`) 的类脑币。"
+            description = f"正在管理用户 **{self.target_user.display_name}** (`{self.target_user_id}`) 的{CURRENCY_NAME}。"
             color = root_config.EMBED_COLOR_SUCCESS
         else:
             description = "请使用下方按钮搜索您想管理的用户ID。"
             color = root_config.EMBED_COLOR_INFO
 
         embed = discord.Embed(
-            title="🪙 类脑币管理", description=description, color=color
+            title=f"🪙 {CURRENCY_NAME}管理", description=description, color=color
         )
 
         if self.target_user or self.target_user_id:
             embed.add_field(
                 name="当前余额",
-                value=f"**{self.current_balance}** 类脑币",
+                value=f"**{self.current_balance}** {CURRENCY_NAME}",
                 inline=False,
             )
         if self.target_user_id and not self.target_user:

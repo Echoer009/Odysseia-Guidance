@@ -24,7 +24,7 @@ from src.chat.config import chat_config
 from src.chat.utils.prompt_utils import extract_persona_prompt, replace_emojis
 from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
 from src.chat.utils.database import chat_db_manager
-from src.config import DEVELOPER_USER_IDS
+from src.config import DEVELOPER_USER_IDS, BOT_NAME, CURRENCY_NAME
 from src.chat.features.affection.utils.interaction_checks import (
     check_command_availability,
 )
@@ -163,7 +163,7 @@ class FeedingCog(commands.Cog):
                 prompt, compressed_bytes, compressed_mime, config, model_id
             )
 
-    @app_commands.command(name="投喂", description="在吃饭?给类脑娘来一口怎么样")
+    @app_commands.command(name="投喂", description=f"在吃饭?给{BOT_NAME}来一口怎么样")
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
         is_allowed, error_message = await check_command_availability(
@@ -182,7 +182,7 @@ class FeedingCog(commands.Cog):
                 await interaction.response.send_message(message, ephemeral=False)
                 return
 
-        await interaction.response.send_message("类脑娘正在嚼嚼嚼...", ephemeral=False)
+        await interaction.response.send_message(f"{BOT_NAME}正在嚼嚼嚼...", ephemeral=False)
 
         if not image.content_type or not image.content_type.startswith("image/"):
             await interaction.edit_original_response(
@@ -267,7 +267,7 @@ class FeedingCog(commands.Cog):
 
             system_message = ""
             if coin_gain > 0:
-                system_message = f"> 你获得了 {coin_gain} 枚类脑币！"
+                system_message = f"> 你获得了 {coin_gain} 枚{CURRENCY_NAME}！"
 
             embed_description = evaluation_with_emojis
             if system_message:
@@ -354,7 +354,7 @@ class FeedingCog(commands.Cog):
                 if sticker_url:
                     embed.set_image(url=sticker_url)
 
-            embed.set_footer(text="类脑娘对你的投喂做出回应...")
+            embed.set_footer(text=f"{BOT_NAME}对你的投喂做出回应...")
 
             await self.feeding_service.record_feeding(user_id_str)
 

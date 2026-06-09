@@ -3,6 +3,8 @@ import discord
 from discord.ui import Modal, TextInput
 from typing import TYPE_CHECKING
 
+from src.config import CURRENCY_NAME
+
 if TYPE_CHECKING:
     from src.chat.features.admin_panel.ui.coin_management_view import CoinManagementView
 
@@ -37,7 +39,7 @@ class UserSearchModal(Modal, title="搜索用户"):
 class CoinBalanceModal(Modal, title="修改用户余额"):
     new_balance_input = TextInput(
         label="新的余额",
-        placeholder="请输入新的类脑币总额...",
+        placeholder=f"请输入新的{CURRENCY_NAME}总额...",
         style=discord.TextStyle.short,
         required=True,
     )

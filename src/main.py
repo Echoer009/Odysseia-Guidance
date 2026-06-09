@@ -177,7 +177,7 @@ def setup_logging():
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
-class GuidanceBot(commands.Bot):
+class DiscordBot(commands.Bot):
     """机器人类，继承自 commands.Bot"""
 
     def __init__(self):
@@ -446,7 +446,7 @@ async def main():
     log.info("已启动每日数据库备份任务。")
 
     # 4. 创建并运行机器人实例
-    bot = GuidanceBot()
+    bot = DiscordBot()
 
     # 在机器人启动时，将 bot 实例注入到 AIService 中
     # 这是确保工具能够访问 Discord API 的关键步骤

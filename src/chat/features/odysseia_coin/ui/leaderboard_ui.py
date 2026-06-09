@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any, TYPE_CHECKING, TypeVar, cast
 from discord.ext import commands
 
+from src.config import CURRENCY_NAME
 from src.chat.utils.database import chat_db_manager
 from src.database.database import AsyncSessionLocal
 from src.database.models import UserCoins
@@ -140,8 +141,8 @@ class LeaderboardView(discord.ui.View):
             await self.refresh_leaderboard()
 
         if self.leaderboard_type == "coins":
-            title = "💰 类脑币排行榜"
-            description = "显示拥有最多类脑币的用户"
+            title = f"💰 {CURRENCY_NAME}排行榜"
+            description = f"显示拥有最多{CURRENCY_NAME}的用户"
         else:
             title = "🥵 卖屁股次数排行榜"
             description = "显示卖屁股次数最多的用户"
@@ -173,7 +174,7 @@ class LeaderboardView(discord.ui.View):
 
                 value_text = f"{entry['value']}"
                 if self.leaderboard_type == "coins":
-                    value_text += " 类脑币"
+                    value_text += f" {CURRENCY_NAME}"
                 else:
                     value_text += " 次"
 
@@ -203,7 +204,7 @@ class CoinsLeaderboardButton(LeaderboardButton["LeaderboardView"]):
 
     def __init__(self):
         super().__init__(
-            label="类脑币榜", style=discord.ButtonStyle.primary, emoji="💰", row=0
+            label=f"{CURRENCY_NAME}榜", style=discord.ButtonStyle.primary, emoji="💰", row=0
         )
 
     async def callback(self, interaction: discord.Interaction):

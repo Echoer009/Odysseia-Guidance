@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-用户资料查询工具 - 查询用户的类脑币余额、头像、角色等信息
+用户资料查询工具 - 查询用户的余额、头像、角色等信息
 """
 
 import base64
@@ -14,6 +14,7 @@ import discord
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class UserProfileQuery(BaseModel):
 
 @tool_metadata(
     name="查询资料",
-    description="查询用户的类脑币余额、头像、角色等信息",
+    description="查询用户的" + CURRENCY_NAME + "余额、头像、角色等信息",
     emoji="👤",
     category="用户信息",
 )
@@ -141,7 +142,7 @@ async def get_user_profile(
     if "balance" in query_set:
         try:
             balance = await coin_service.get_balance(target_id)
-            result["profile"]["balance"] = {"amount": balance, "name": "类脑币"}
+            result["profile"]["balance"] = {"amount": balance, "name": CURRENCY_NAME}
             result["queries_successful"].append("balance")
             log.info(f"成功获取用户 {target_id} 的余额: {balance}")
         except Exception as e:

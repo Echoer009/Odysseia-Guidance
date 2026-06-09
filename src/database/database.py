@@ -18,7 +18,7 @@ if not DATABASE_URL:
     # This constructs the URL from individual components we set earlier
     db_user = os.getenv("POSTGRES_USER", "user")
     db_password = os.getenv("POSTGRES_PASSWORD", "password")
-    db_name = os.getenv("POSTGRES_DB", "braingirl_db")
+    db_name = os.getenv("POSTGRES_DB", "bot_db")
     db_port = os.getenv("DB_PORT", "5432")
     # In docker-compose, the hostname is the service name ('db').
     # For local scripts connecting to the Docker container, it's 'localhost'.

@@ -28,7 +28,7 @@ DB_USER = os.getenv("POSTGRES_USER", "user")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 DB_HOST = os.getenv("DB_HOST", "db")
 DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("POSTGRES_DB", "odysseia_db")
+DB_NAME = os.getenv("POSTGRES_DB", "bot_db")
 
 # For Alembic's sync operations, we use psycopg2.
 # The main application will still use its own asyncpg connection.

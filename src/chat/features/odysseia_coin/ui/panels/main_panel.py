@@ -1,5 +1,7 @@
 import discord
 
+from src.config import CURRENCY_NAME
+
 from .base_panel import BasePanel
 
 
@@ -14,7 +16,7 @@ class MainPanel(BasePanel):
         embed = discord.Embed(
             title="🧠 类脑商店",
             description=f"欢迎来到类脑商店，{self.view.user.mention}！\n"
-            f"你的当前余额: **{balance_str}** 类脑币",
+            f"你的当前余额: **{balance_str}** {CURRENCY_NAME}",
             color=discord.Color.blurple(),
         )
         embed.set_footer(text="使用下面的菜单浏览商店。")

@@ -182,14 +182,14 @@ def print_results(results: Dict[str, List[str]]):
     total_images = sum(len(urls) for urls in results.values())
     print(f"共 {len(results)} 个商品，{total_images} 张图片\n")
 
-    # 输出格式：复制到 shop_config.py 的 BRAIN_GIRL_EATING_IMAGES
+    # 输出格式：复制到 shop_config.py 的 BOT_EATING_IMAGES
     print("=" * 60)
     print(
-        "复制以下内容到 src/chat/config/shop_config.py 的 BRAIN_GIRL_EATING_IMAGES 字典"
+        "复制以下内容到 src/chat/config/shop_config.py 的 BOT_EATING_IMAGES 字典"
     )
     print("=" * 60 + "\n")
 
-    print("BRAIN_GIRL_EATING_IMAGES = {")
+    print("BOT_EATING_IMAGES = {")
     for folder_name, urls in results.items():
         if urls:
             cg_url = urls[0]
@@ -222,11 +222,11 @@ def save_results_to_file(
         # 复制到 shop_config.py 的格式
         f.write("=" * 60 + "\n")
         f.write(
-            "复制以下内容到 src/chat/config/shop_config.py 的 BRAIN_GIRL_EATING_IMAGES 字典\n"
+            "复制以下内容到 src/chat/config/shop_config.py 的 BOT_EATING_IMAGES 字典\n"
         )
         f.write("=" * 60 + "\n\n")
 
-        f.write("BRAIN_GIRL_EATING_IMAGES = {\n")
+        f.write("BOT_EATING_IMAGES = {\n")
         for folder_name, urls in results.items():
             if urls:
                 cg_url = urls[0]

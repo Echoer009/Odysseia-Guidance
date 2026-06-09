@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.tools.tool_metadata import tool_metadata
 from src.chat.utils.prompt_utils import replace_emojis
+from src.config import BOT_NAME, CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -82,14 +83,14 @@ class RedEnvelopeView(ui.View):
                 embed = interaction.message.embeds[0]
                 embed.title = "🧧 红包已开启！"
                 embed.color = discord.Color.gold()
-                embed.description = f"**恭喜！**\n\n你收到了 **{amount} 类脑币**！\n\n> {self.blessing_text}"
+                embed.description = f"**恭喜！**\n\n你收到了 **{amount} {CURRENCY_NAME}**！\n\n> {self.blessing_text}"
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
                 await interaction.response.send_message(
-                    f"**恭喜！**\n\n你收到了 **{amount} 类脑币**！\n\n> {self.blessing_text}",
+                    f"**恭喜！**\n\n你收到了 **{amount} {CURRENCY_NAME}**！\n\n> {self.blessing_text}",
                     ephemeral=True,
                 )
-            log.info(f"用户 {user_id_int} 领取红包成功，获得 {amount} 类脑币")
+            log.info(f"用户 {user_id_int} 领取红包成功，获得 {amount} {CURRENCY_NAME}")
 
         except Exception as e:
             log.error(f"处理红包领取时出错: {e}", exc_info=True)
@@ -100,7 +101,7 @@ class RedEnvelopeView(ui.View):
 
 @tool_metadata(
     name="发送红包",
-    description="发送春节红包给用户，用户点击后随机获得500-1000类脑币",
+    description="发送春节红包给用户，用户点击后随机获得500-1000类脑币",  # noqa: keep hardcoded in tool description
     emoji="🧧",
     category="春节活动",
 )
@@ -158,7 +159,7 @@ async def spring_festival_red_envelope(
     # 创建embed（不显示具体祝福语，保持神秘感）
     embed = discord.Embed(
         title="🧧 春节红包",
-        description="你收到了一份来自类脑娘的新年祝福！",
+        description="你收到了一份来自" + BOT_NAME + "的新年祝福！",
         color=discord.Color.gold(),
     )
     embed.set_footer(text="每人每天限领一次哦～")

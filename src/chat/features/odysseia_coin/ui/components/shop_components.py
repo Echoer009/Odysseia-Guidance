@@ -25,6 +25,7 @@ from src.chat.features.chat_settings.ui.channel_settings_modal import ChatSettin
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
 import src.config as config
+from src.config import BOT_NAME, CURRENCY_NAME
 from src.chat.features.odysseia_coin.service.shop_service import shop_service
 from src.chat.features.tools.tool_metadata import (
     get_all_tools_metadata,
@@ -149,7 +150,7 @@ class LoanModal(discord.ui.Modal, title="输入借款金额"):
         self.loan_view = loan_view
         self.amount_input = discord.ui.TextInput(
             label=f"借款金额 (最多 {chat_config.COIN_CONFIG['MAX_LOAN_AMOUNT']})",
-            placeholder="请输入你要借的类脑币数量",
+            placeholder=f"请输入你要借的{CURRENCY_NAME}数量",
             style=discord.TextStyle.short,
             required=True,
         )
@@ -215,14 +216,14 @@ class LoanView(discord.ui.View):
         )
         if self.active_loan:
             desc = (
-                f"你当前有一笔 **{self.active_loan['amount']}** 类脑币的贷款尚未还清。"
+                f"你当前有一笔 **{self.active_loan['amount']}** {CURRENCY_NAME}的贷款尚未还清。"
             )
         else:
-            desc = f"你可以从类脑娘这里借款，最高可借 **{chat_config.COIN_CONFIG['MAX_LOAN_AMOUNT']}** 类脑币。"
+            desc = f"你可以从{BOT_NAME}这里借款，最高可借 **{chat_config.COIN_CONFIG['MAX_LOAN_AMOUNT']}** {CURRENCY_NAME}。"
         embed = discord.Embed(
-            title="类脑币借贷中心", description=desc, color=discord.Color.blue()
+            title=f"{CURRENCY_NAME}借贷中心", description=desc, color=discord.Color.blue()
         )
-        embed.set_footer(text=f"你的余额: {balance} 类脑币")
+        embed.set_footer(text=f"你的余额: {balance} {CURRENCY_NAME}")
         thumbnail_url = chat_config.COIN_CONFIG.get("LOAN_THUMBNAIL_URL")
         if thumbnail_url:
             embed.set_thumbnail(url=thumbnail_url)
@@ -309,7 +310,7 @@ class ItemSelect(ShopSelect["SimpleShopView"]):
             discord.SelectOption(
                 label=item["name"],
                 value=str(item["item_id"]),
-                description=f"{item['price']} 类脑币 - {item['description']}",
+                description=f"{item['price']} {CURRENCY_NAME} - {item['description']}",
                 emoji="🛒",
             )
             for item in items
@@ -487,7 +488,7 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
         current_balance = await coin_service.get_balance(interaction.user.id)
         if current_balance < item["price"]:
             await interaction.response.send_message(
-                f"你的余额不足！需要 {item['price']} 类脑币，但你只有 {current_balance}。",
+                f"你的余额不足！需要 {item['price']} {CURRENCY_NAME}，但你只有 {current_balance}。",
                 ephemeral=True,
             )
             return
@@ -506,7 +507,7 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
         current_balance = await coin_service.get_balance(interaction.user.id)
         if current_balance < item["price"]:
             await interaction.response.send_message(
-                f"你的余额不足！需要 {item['price']} 类脑币，但你只有 {current_balance}。",
+                f"你的余额不足！需要 {item['price']} {CURRENCY_NAME}，但你只有 {current_balance}。",
                 ephemeral=True,
             )
             return
@@ -668,7 +669,7 @@ class PurchaseButton(ShopButton["SimpleShopView"]):
             view.add_item(button)
 
             await interaction.followup.send(
-                "请点击下方按钮来配置你的帖子或子区里类脑娘的活跃时间,默认是1分钟两次哦",
+                f"请点击下方按钮来配置你的帖子或子区里{BOT_NAME}的活跃时间,默认是1分钟两次哦",
                 view=view,
                 ephemeral=True,
             )
@@ -1110,7 +1111,7 @@ class ToolListButton(ShopButton["SimpleShopView"]):
 
     def __init__(self):
         super().__init__(
-            label="类脑娘的工作清单", style=discord.ButtonStyle.primary, emoji="🗒️"
+            label=f"{BOT_NAME}的工作清单", style=discord.ButtonStyle.primary, emoji="🗒️"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -1281,11 +1282,11 @@ class ToolSettingsView(discord.ui.View):
             return self._create_profile_card_embed()
 
         if self.current_mode == self.MODE_TOOLS:
-            title = "🗒️ 类脑娘的工作清单 - 工具设置"
-            description = "在这里可以设置类脑娘在你的帖子里能使用哪些工具哦～\n默认情况下所有工具都是开启的。"
+            title = f"🗒️ {BOT_NAME}的工作清单 - 工具设置"
+            description = f"在这里可以设置{BOT_NAME}在你的帖子里能使用哪些工具哦～\n默认情况下所有工具都是开启的。"
             color = discord.Color.blue()
         elif self.current_mode == self.MODE_COMMANDS:
-            title = "🗒️ 类脑娘的工作清单 - 命令设置"
+            title = f"🗒️ {BOT_NAME}的工作清单 - 命令设置"
             description = (
                 "在这里可以设置其他人在你的帖子里能使用哪些命令哦～\n"
                 "默认情况下所有命令都是开启的。\n"
@@ -1293,7 +1294,7 @@ class ToolSettingsView(discord.ui.View):
             )
             color = discord.Color.purple()
         else:
-            title = "🗒️ 类脑娘的工作清单 - 你希望类脑娘是?"
+            title = f"🗒️ {BOT_NAME}的工作清单 - 你希望{BOT_NAME}是?"
             style_display = {
                 "default": "这样就好",
                 "gentle": "更温柔些",
@@ -1301,10 +1302,10 @@ class ToolSettingsView(discord.ui.View):
             }.get(self.persona_style, self.persona_style)
             description = (
                 f"当前选择: **{style_display}**\n\n"
-                "选择你喜欢的类脑娘风格吧～\n"
-                "• **这样就好** — 保持类脑娘原本的性格\n"
-                "• **更温柔些** — 类脑娘会变得更加温柔体贴\n"
-                "• **坦率一点** — 类脑娘会变得更坦率直接"
+                f"选择你喜欢的{BOT_NAME}风格吧～\n"
+                f"• **这样就好** — 保持{BOT_NAME}原本的性格\n"
+                f"• **更温柔些** — {BOT_NAME}会变得更加温柔体贴\n"
+                f"• **坦率一点** — {BOT_NAME}会变得更坦率直接"
             )
             color = discord.Color.green()
 
@@ -1324,7 +1325,7 @@ class ToolSettingsView(discord.ui.View):
         if not self.profile_data:
             return discord.Embed(
                 title="🪪 我的名片",
-                description="类脑娘还不认识你\n\n如果你想让类脑娘记住你，可以在商店购买**名片**哦～",
+                description=f"{BOT_NAME}还不认识你\n\n如果你想让{BOT_NAME}记住你，可以在商店购买**名片**哦～",
                 color=discord.Color.dark_grey(),
             )
 
@@ -1337,7 +1338,7 @@ class ToolSettingsView(discord.ui.View):
 
         embed = discord.Embed(
             title="🪪 我的名片",
-            description=f"**{name}** 交给类脑娘的名片",
+            description=f"**{name}** 交给{BOT_NAME}的名片",
             color=discord.Color.gold(),
         )
 
@@ -1349,7 +1350,7 @@ class ToolSettingsView(discord.ui.View):
             embed.add_field(name="喜好偏好", value=preferences, inline=False)
         if personal_summary:
             embed.add_field(
-                name="类脑娘对你的印象",
+                name=f"{BOT_NAME}对你的印象",
                 value=personal_summary,
                 inline=False,
             )
@@ -1683,21 +1684,21 @@ class ChatGuidelinesView(discord.ui.View):
         )
         embed.add_field(
             name="🚫 禁止文爱",
-            value="类脑娘不会参与任何形式的色情角色扮演或文爱对话，包括暗示性内容。请尊重这条底线~",
+            value=f"{BOT_NAME}不会参与任何形式的色情角色扮演或文爱对话，包括暗示性内容。请尊重这条底线~",
             inline=False,
         )
         embed.add_field(
             name="🤝 平等相处",
             value=(
-                '类脑娘和你是平等的朋友关系。'
-                '不接受"主人""爸爸""老公"等上位称呼，互相尊重是最好的相处方式~'
+                f'{BOT_NAME}和你是平等的朋友关系。'
+                f'不接受"主人""爸爸""老公"等上位称呼，互相尊重是最好的相处方式~'
             ),
             inline=False,
         )
         embed.add_field(
             name="🔒 隐私保护",
             value=(
-                "类脑娘不会记录争吵、色情、过分要求等负面内容。"
+                f"{BOT_NAME}不会记录争吵、色情、过分要求等负面内容。"
                 "只记住值得纪念的美好瞬间。"
             ),
             inline=False,
@@ -1712,7 +1713,7 @@ class ChatGuidelinesView(discord.ui.View):
         )
         embed.add_field(
             name="",
-            value="⚠️ **以上规则在公屏频道和子区均适用，违反可能会被封禁，届时将无法与类脑娘互动。**",
+            value=f"⚠️ **以上规则在公屏频道和子区均适用，违反可能会被封禁，届时将无法与{BOT_NAME}互动。**",
             inline=False,
         )
         return embed

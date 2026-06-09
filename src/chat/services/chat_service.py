@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional
 import discord.abc
 
 # 导入所需的服务
+from src.config import BOT_NAME
 from src.chat.services.ai.service import ai_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.services.prompt_service import prompt_service
@@ -396,7 +397,7 @@ class ChatService:
     def _format_ai_response(self, ai_response: str) -> str:
         """清理和格式化AI的原始回复。"""
         # 移除可能包含的自身名字前缀
-        bot_name_prefix = "类脑娘:"
+        bot_name_prefix = f"{BOT_NAME}:"
         if ai_response.startswith(bot_name_prefix):
             ai_response = ai_response[len(bot_name_prefix) :].lstrip()
         # 将多段回复的双换行符替换为单换行符

@@ -13,7 +13,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.tutorial_search.services.tutorial_rag_service import (
     tutorial_rag_service,
 )
-from src.chat.config.shop_config import SHOP_ITEMS, BRAIN_GIRL_EATING_IMAGES
+from src.chat.config.shop_config import SHOP_ITEMS, BOT_EATING_IMAGES
 
 log = logging.getLogger(__name__)
 
@@ -65,8 +65,8 @@ class ShopService:
                     # 格式: (name, description, price, category, target, effect_id)
                     name, description, price, category, target, effect_id = item_data
 
-                    # 从 BRAIN_GIRL_EATING_IMAGES 获取 cg_url
-                    cg_url = BRAIN_GIRL_EATING_IMAGES.get(name)
+                    # 从 BOT_EATING_IMAGES 获取 cg_url
+                    cg_url = BOT_EATING_IMAGES.get(name)
 
                     # 创建新商品
                     new_item = ShopItem(

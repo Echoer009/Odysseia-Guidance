@@ -7,6 +7,7 @@ from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.odysseia_coin.ui.shop_ui import SimpleShopView
 from src.chat.config import chat_config
 from src.chat.features.odysseia_coin.service.shop_service import shop_service
+from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class CoinCog(commands.Cog):
             reason = f"在频道 {channel_name} 发布新帖"
             new_balance = await coin_service.add_coins(author.id, reward_amount, reason)
             log.info(
-                f"[CoinCog] 用户 {author.name} ({author.id}) 因发帖获得 {reward_amount} 类脑币。新余额: {new_balance}"
+                f"[CoinCog] 用户 {author.name} ({author.id}) 因发帖获得 {reward_amount} {CURRENCY_NAME}。新余额: {new_balance}"
             )
 
         except Exception as e:

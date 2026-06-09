@@ -273,7 +273,7 @@ class IncrementalRAGService:
                     db_host = os.getenv("DB_HOST", "localhost")
 
                 self.parade_conn = psycopg2.connect(
-                    dbname=os.getenv("POSTGRES_DB", "braingirl_db"),
+                    dbname=os.getenv("POSTGRES_DB", "bot_db"),
                     user=os.getenv("POSTGRES_USER", "user"),
                     password=os.getenv("POSTGRES_PASSWORD", "password"),
                     host=db_host,

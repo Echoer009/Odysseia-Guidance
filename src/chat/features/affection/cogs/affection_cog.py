@@ -5,6 +5,7 @@ from datetime import datetime, time, timezone, timedelta
 import logging
 
 from src.chat.features.affection.service.affection_service import affection_service
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class AffectionCog(commands.Cog):
 
         log.info("每日好感度定时任务执行完毕。")
 
-    @app_commands.command(name="好感度", description="查询你与类脑娘的好感度状态。")
+    @app_commands.command(name="好感度", description=f"查询你与{BOT_NAME}的好感度状态。")
     async def affection(self, interaction: discord.Interaction):
         """处理好感度查询命令。"""
         await interaction.response.defer(ephemeral=True)
@@ -58,7 +59,7 @@ class AffectionCog(commands.Cog):
             status = await self.affection_service.get_affection_status(user.id)
 
             embed = discord.Embed(
-                title=f"{user.display_name} 与类脑娘的好感度",
+                title=f"{user.display_name} 与{BOT_NAME}的好感度",
                 color=discord.Color.pink(),
             )
             embed.set_thumbnail(url=user.display_avatar.url)

@@ -4,6 +4,23 @@
 用于定义AI对话的提示词模板和系统角色
 """
 
+from src.config import BOT_NAME, COMMUNITY_NAME, MASCOT_TITLE, NICKNAME, COMMUNITY_TYPE
+
+
+def _apply_identity(template: str) -> str:
+    if BOT_NAME == "类脑娘":
+        return template
+    result = template
+    result = result.replace("类脑娘", BOT_NAME)
+    result = result.replace("类脑是一个nsfw的airp社区", f"{COMMUNITY_NAME}是一个{COMMUNITY_TYPE}")
+    result = result.replace("类脑社区", f"{COMMUNITY_NAME}社区")
+    result = result.replace("分裂类脑的人", f"分裂{COMMUNITY_NAME}的人")
+    result = result.replace("类脑是一个", f"{COMMUNITY_NAME}是一个")
+    result = result.replace("看板娘", MASCOT_TITLE)
+    result = result.replace("宝宝", NICKNAME)
+    result = result.replace("AIRP", COMMUNITY_TYPE)
+    return result
+
 # --- 提示词配置结构 ---
 
 PROMPT_CONFIG = {
@@ -260,4 +277,21 @@ PERSONA_VARIANTS = {
 }
 
 # --- 为了向后兼容，保留旧的常量，但它们现在从新配置中获取值 ---
-SYSTEM_PROMPT = PROMPT_CONFIG["default"]["SYSTEM_PROMPT"]
+SYSTEM_PROMPT = _apply_identity(PROMPT_CONFIG["default"]["SYSTEM_PROMPT"])
+
+
+def _apply_all_identity():
+    for key, variant in PROMPT_CONFIG.items():
+        if isinstance(variant, dict) and "SYSTEM_PROMPT" in variant:
+            variant["SYSTEM_PROMPT"] = _apply_identity(variant["SYSTEM_PROMPT"])
+        for sub_key, sub_val in variant.items():
+            if isinstance(sub_val, str):
+                variant[sub_key] = _apply_identity(sub_val)
+    for style, style_variants in PERSONA_VARIANTS.items():
+        for model, model_config in style_variants.items():
+            for k, v in model_config.items():
+                if isinstance(v, str):
+                    model_config[k] = _apply_identity(v)
+
+
+_apply_all_identity()

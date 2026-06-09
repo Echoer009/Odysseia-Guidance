@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.services.faction_service import faction_service
+from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ class EventItemSelect(discord.ui.Select):
                 discord.SelectOption(
                     label=item["item_name"],
                     value=item["item_id"],
-                    description=f"{item['price']} 类脑币 - {item['description']}"[:100],
+                    description=f"{item['price']} {CURRENCY_NAME} - {item['description']}"[:100],
                     emoji="💖",
                 )
             )

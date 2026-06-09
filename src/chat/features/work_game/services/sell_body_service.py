@@ -4,7 +4,7 @@ from src.chat.features.odysseia_coin.service.coin_service import CoinService
 from ..config.work_config import WorkConfig
 from .work_db_service import WorkDBService
 from src.chat.utils.time_utils import format_time_delta
-from src.config import DEVELOPER_USER_IDS
+from src.config import DEVELOPER_USER_IDS, CURRENCY_NAME
 
 
 class SellBodyService:
@@ -103,9 +103,9 @@ class SellBodyService:
             description += f"\n\n{outcome_description}"
 
         if reward > 0:
-            reward_text = f"你获得了 {reward} 类脑币。"
+            reward_text = f"你获得了 {reward} {CURRENCY_NAME}。"
         elif reward < 0:
-            reward_text = f"你损失了 {-reward} 类脑币！"
+            reward_text = f"你损失了 {-reward} {CURRENCY_NAME}！"
         else:
             reward_text = "你白忙活了一场，什么都没得到。"
 

@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.config import BOT_NAME
+
 log = logging.getLogger(__name__)
 
 GUIDANCE_APPLICATION_ID = int(os.getenv("VITE_DISCORD_CLIENT_ID") or "0")
@@ -16,9 +18,9 @@ GUIDANCE_CHANNEL_ID = int(os.getenv("GUIDANCE_CHANNEL_ID") or "0")
 
 WELCOME_EMBED_COLOR = 0xF39C12
 
-DM_TITLE = "嗨～欢迎来到类脑社区！"
+DM_TITLE = f"嗨～欢迎来到类脑社区！"
 DM_DESCRIPTION = (
-    "诶嘿，你终于来啦！我是类脑娘～\n\n"
+    f"诶嘿，你终于来啦！我是{BOT_NAME}～\n\n"
     "我们社区可有意思了，角色卡、AI绘图……啥都有！"
     "大家都很友善的，你肯定会喜欢的\n\n"
     "不过这里人好多频道也好多，怕你迷路，所以我准备了一个小引导～\n"
@@ -27,7 +29,7 @@ DM_DESCRIPTION = (
 DM_BUTTON_LABEL = "前往引导频道"
 DM_BUTTON_EMOJI = "✨"
 
-CHANNEL_EMBED_TITLE = "让类脑娘带你逛逛～"
+CHANNEL_EMBED_TITLE = f"让{BOT_NAME}带你逛逛～"
 CHANNEL_EMBED_DESCRIPTION = (
     "好耶！你来了！\n\n"
     "社区里频道蛮多的，第一次来很容易转晕……"

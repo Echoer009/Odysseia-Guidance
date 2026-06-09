@@ -22,6 +22,7 @@ from src.chat.services.embedding_factory import (
     is_vector_enabled,
 )
 from src.chat.config import chat_config
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class ConversationBlockService:
             if role == "user":
                 lines.append(f"用户: {text}")
             else:
-                lines.append(f"类脑娘: {text}")
+                lines.append(f"{BOT_NAME}: {text}")
 
         return "\n".join(lines)
 

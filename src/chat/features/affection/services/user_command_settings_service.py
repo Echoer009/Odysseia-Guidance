@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.database import AsyncSessionLocal
 from src.database.models import UserCommandSettings
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ log = logging.getLogger(__name__)
 CONFIGURABLE_COMMANDS = {
     "投喂": {
         "name": "投喂",
-        "description": "给类脑娘投喂食物",
+        "description": f"给{BOT_NAME}投喂食物",
         "emoji": "🍽️",
     },
     "忏悔": {
         "name": "忏悔",
-        "description": "向类脑娘忏悔",
+        "description": f"向{BOT_NAME}忏悔",
         "emoji": "🙏",
     },
     "好感度": {

@@ -24,6 +24,7 @@ from src.chat.features.personal_memory.services.user_memory_note_service import 
     user_memory_note_service,
     CATEGORY_LABELS,
 )
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -497,7 +498,7 @@ class UserConversationBlocksView(discord.ui.View):
                 )
                 await interaction.followup.send(
                     f"✅ 已成功删除你的 {deleted_count} 个对话记忆。\n"
-                    f"类脑娘对你的整体印象保留不变。",
+                    f"{BOT_NAME}对你的整体印象保留不变。",
                     ephemeral=True,
                 )
 
@@ -528,7 +529,7 @@ class UserConversationBlocksView(discord.ui.View):
         await interaction.response.send_message(
             f"**⚠️ 确认操作**\n"
             f"你确定要永久删除所有 **{block_count}** 个对话记忆吗？\n"
-            f"类脑娘对你的个人印象将保留。\n此操作无法撤销。",
+            f"{BOT_NAME}对你的个人印象将保留。\n此操作无法撤销。",
             view=confirm_view,
             ephemeral=True,
         )
@@ -563,7 +564,7 @@ class UserConversationBlocksView(discord.ui.View):
                     f"用户 {self.user_id} 删除了所有 {deleted_count} 个对话块，并清除了个人印象。"
                 )
                 await interaction.followup.send(
-                    f"✅ 已成功删除你的 {deleted_count} 个对话记忆，并清除了类脑娘对你的印象。\n"
+                    f"✅ 已成功删除你的 {deleted_count} 个对话记忆，并清除了{BOT_NAME}对你的印象。\n"
                     f"你们可以重新开始了！",
                     ephemeral=True,
                 )
@@ -595,7 +596,7 @@ class UserConversationBlocksView(discord.ui.View):
 
         await interaction.response.send_message(
             f"**⚠️ 确认操作**\n"
-            f"你确定要永久删除所有 **{block_count}** 个对话记忆，并清除类脑娘对你的印象吗？\n"
+            f"你确定要永久删除所有 **{block_count}** 个对话记忆，并清除{BOT_NAME}对你的印象吗？\n"
             f"这将删除所有三层记忆，此操作无法撤销。",
             view=confirm_view,
             ephemeral=True,
@@ -617,7 +618,7 @@ class UserConversationBlocksView(discord.ui.View):
 
                 log.info(f"用户 {self.user_id} 清除了个人印象。")
                 await interaction.followup.send(
-                    "✅ 已成功清除类脑娘对你的印象。\n"
+                    f"✅ 已成功清除{BOT_NAME}对你的印象。\n"
                     "对话记忆（第二层）保留不变，但她会忘记对你的整体印象。",
                     ephemeral=True,
                 )
@@ -641,8 +642,8 @@ class UserConversationBlocksView(discord.ui.View):
         confirm_view.add_item(cancel_button)
 
         await interaction.response.send_message(
-            "**⚠️ 确认操作**\n"
-            "你确定要清除类脑娘对你的**个人印象**吗？\n"
+            f"**⚠️ 确认操作**\n"
+            f"你确定要清除{BOT_NAME}对你的**个人印象**吗？\n"
             "这只会删除第一层记忆（她对你的整体印象），对话记录将保留。\n"
             "此操作无法撤销。",
             view=confirm_view,
@@ -734,12 +735,12 @@ class UserConversationBlocksView(discord.ui.View):
     async def _build_memory_notes_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="📝 记忆笔记",
-            description="这些是类脑娘记住的关于你的信息。\n你可以选择要删除的条目。",
+            description=f"这些是{BOT_NAME}记住的关于你的信息。\n你可以选择要删除的条目。",
             color=discord.Color.blue(),
         )
 
         if not self.memory_notes_items:
-            embed.description = "目前没有任何记忆笔记。\n这些笔记会在你和类脑娘聊天时由她主动记录。"
+            embed.description = f"目前没有任何记忆笔记。\n这些笔记会在你和{BOT_NAME}聊天时由她主动记录。"
         else:
             grouped: Dict[str, List[Any]] = {}
             for note in self.memory_notes_items:

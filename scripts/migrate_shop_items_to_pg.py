@@ -20,7 +20,7 @@ from sqlalchemy import select, delete
 
 from src.database.database import AsyncSessionLocal
 from src.database.models import ShopItem
-from src.chat.config.shop_config import SHOP_ITEMS, BRAIN_GIRL_EATING_IMAGES
+from src.chat.config.shop_config import SHOP_ITEMS, BOT_EATING_IMAGES
 
 
 async def recreate_shop_items():
@@ -45,8 +45,8 @@ async def recreate_shop_items():
             # 格式: (name, description, price, category, target, effect_id)
             name, description, price, category, target, effect_id = item_data
 
-            # 从 BRAIN_GIRL_EATING_IMAGES 获取 cg_url
-            cg_url = BRAIN_GIRL_EATING_IMAGES.get(name)
+            # 从 BOT_EATING_IMAGES 获取 cg_url
+            cg_url = BOT_EATING_IMAGES.get(name)
 
             # 创建新商品
             new_item = ShopItem(
@@ -99,8 +99,8 @@ async def migrate_shop_items():
                 skip_count += 1
                 continue
 
-            # 从 BRAIN_GIRL_EATING_IMAGES 获取 cg_url
-            cg_url = BRAIN_GIRL_EATING_IMAGES.get(name)
+            # 从 BOT_EATING_IMAGES 获取 cg_url
+            cg_url = BOT_EATING_IMAGES.get(name)
 
             # 创建新商品
             new_item = ShopItem(
@@ -136,7 +136,7 @@ async def update_existing_cg_urls():
     not_found_count = 0
 
     async with AsyncSessionLocal() as session:
-        for name, cg_url in BRAIN_GIRL_EATING_IMAGES.items():
+        for name, cg_url in BOT_EATING_IMAGES.items():
             # 查找商品
             result = await session.execute(
                 select(ShopItem).where(ShopItem.name == name)
@@ -171,7 +171,7 @@ async def main():
     parser.add_argument(
         "--update-existing",
         action="store_true",
-        help="更新已存在商品的 cg_url 字段（从 BRAIN_GIRL_EATING_IMAGES 读取）",
+        help="更新已存在商品的 cg_url 字段（从 BOT_EATING_IMAGES 读取）",
     )
 
     args = parser.parse_args()

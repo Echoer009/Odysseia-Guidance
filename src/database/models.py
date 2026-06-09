@@ -376,7 +376,7 @@ class TokenUsage(Base):
 class UserToolSettings(Base):
     """
     存储每个用户的工具启用设置。
-    用户可以控制在自己的帖子里类脑娘可以使用哪些工具。
+    用户可以控制在自己的帖子里Bot可以使用哪些工具。
     默认启用所有工具，如果用户没有设置记录。
     """
 
@@ -435,8 +435,8 @@ class UserCommandSettings(Base):
 
 class UserPersonaPreference(Base):
     """
-    存储每个用户对类脑娘人设风格的偏好。
-    用户可以选择类脑娘的对话风格，如默认风格或温柔风格。
+    存储每个用户对Bot人设风格的偏好。
+    用户可以选择Bot的对话风格，如默认风格或温柔风格。
     """
 
     __tablename__ = "user_persona_preference"
@@ -516,7 +516,7 @@ class ShopItem(Base):
     )
     description: Mapped[str] = mapped_column(Text, nullable=True, comment="商品描述")
     price: Mapped[int] = mapped_column(
-        Integer, nullable=False, comment="商品价格（类脑币）"
+        Integer, nullable=False, comment="商品价格（金币）"
     )
     category: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="商品类别"
@@ -657,7 +657,7 @@ CONVERSATION_SCHEMA = "conversation"
 
 class ConversationBlock(Base):
     """
-    代表用户与类脑娘的一段对话块。
+    代表用户与Bot的一段对话块。
     每 block_size 条对话存储为一个块，支持向量检索实现"永久记忆"。
     使用混合搜索（向量+BM25）来检索相关历史对话。
     """

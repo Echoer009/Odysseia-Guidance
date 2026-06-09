@@ -31,12 +31,12 @@ def build_forum_thread_document(
 
     Example:
         >>> build_forum_thread_document(
-        ...     thread_name="如何使用类脑娘的RAG功能",
-        ...     content="类脑娘支持混合搜索...",
+        ...     thread_name="如何使用Bot的RAG功能",
+        ...     content="Bot支持混合搜索...",
         ...     author_name="小明",
         ...     category_name="教程分享"
         ... )
-        '标题: 如何使用类脑娘的RAG功能\\n分类: 教程分享\\n作者: 小明\\n\\n内容:\\n类脑娘支持混合搜索...'
+        '标题: 如何使用Bot的RAG功能\\n分类: 教程分享\\n作者: 小明\\n\\n内容:\\nBot支持混合搜索...'
     """
     parts = [f"标题: {thread_name}"]
 

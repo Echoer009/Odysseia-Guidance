@@ -31,6 +31,7 @@ from .providers import (
 from .config.providers import get_provider_configs, ProviderConfig, _get_provider_configs_from_env
 from .config.models import get_fallback_providers, get_model_config
 from src.chat.config.chat_config import PROVIDER_RETRY_CONFIG
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -945,7 +946,7 @@ class AIService:
                             # 统一使用占位符替换
                             if source not in ("emoji", "sticker"):
                                 image_descriptions.append(
-                                    "[图片: 当前类脑娘无法识别]"
+                                    f"[图片: 当前{BOT_NAME}无法识别]"
                                 )
 
                         elif part.get("type") == "image_url":
@@ -957,7 +958,7 @@ class AIService:
                             # 统一使用占位符替换
                             if source not in ("emoji", "sticker"):
                                 image_descriptions.append(
-                                    "[图片: 当前类脑娘无法识别]"
+                                    f"[图片: 当前{BOT_NAME}无法识别]"
                                 )
 
                 # 合并文本和图片描述

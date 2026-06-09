@@ -163,7 +163,7 @@ services:
     restart: unless-stopped # 保持与项目其余部分一致的重启策略
     environment:
       # 沿用 .env 文件中的变量，更加灵活和安全
-      POSTGRES_DB: ${POSTGRES_DB:-odysseia_db}
+      POSTGRES_DB: ${POSTGRES_DB:-bot_db}
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     #    ports:
@@ -175,7 +175,7 @@ services:
     networks:
       - bot_network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-odysseia_db}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-bot_db}" ]
       interval: 5s
       timeout: 5s
       retries: 5

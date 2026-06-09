@@ -10,6 +10,7 @@ from src.chat.utils.database import chat_db_manager
 from src.chat.features.personal_memory.services.conversation_block_service import (
     conversation_block_service,
 )
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +153,7 @@ class BlacklistAdminCog(commands.Cog):
             if target_user:
                 embed = discord.Embed(
                     title="封禁通知",
-                    description=f"您已被开发者封禁，时长为 {duration_minutes} 分钟。在此期间您将无法与 类脑娘 互动。",
+                    description=f"您已被开发者封禁，时长为 {duration_minutes} 分钟。在此期间您将无法与 {BOT_NAME} 互动。",
                     color=discord.Color.red(),
                 )
                 embed.add_field(name="理由", value=reason, inline=False)

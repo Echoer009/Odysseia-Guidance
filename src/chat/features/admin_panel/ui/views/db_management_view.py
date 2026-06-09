@@ -9,6 +9,7 @@ from .community_members_view import CommunityMembersView
 from .general_knowledge_view import GeneralKnowledgeView
 from .work_events_view import WorkEventsView
 from .vector_db_view import VectorDBView
+from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class DBManagementView(discord.ui.View):
                 label="通用知识", value="general_knowledge", emoji="📚"
             ),
             discord.SelectOption(
-                label="类脑币管理", value="coin_management", emoji="🪙"
+                label=f"{CURRENCY_NAME}管理", value="coin_management", emoji="🪙"
             ),
             discord.SelectOption(label="工作管理", value="work_events", emoji="💼"),
             discord.SelectOption(

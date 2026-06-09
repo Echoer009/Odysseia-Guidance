@@ -9,6 +9,7 @@ import logging
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHANNEL_MUTE_CONFIG
 from src.chat.config import chat_config
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class ChannelMuteCog(commands.Cog):
         self.bot = bot
         self.vote_messages = {}  # message_id: {"channel_id": int, "created_at": datetime}
 
-    @app_commands.command(name="闭嘴", description="发起投票，让类脑娘在此频道禁言。")
+    @app_commands.command(name="闭嘴", description=f"发起投票，让{BOT_NAME}在此频道禁言。")
     async def mute(self, interaction: discord.Interaction):
         """
         发起一个投票，如果票数足够，机器人将在当前频道被禁言。

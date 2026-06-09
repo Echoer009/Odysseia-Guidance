@@ -9,6 +9,7 @@ from src.chat.features.thread_commentor.services.thread_commentor_service import
     thread_commentor_service,
 )
 from src.chat.config.chat_config import THREAD_COMMENTOR_CONFIG, WARMUP_MESSAGES
+from src.config import BOT_NAME
 from src.chat.features.thread_commentor.ui.warmup_consent_view import WarmupConsentView
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.utils.message_utils import safe_send
@@ -79,7 +80,8 @@ class ThreadCommentorCog(commands.Cog):
                         if user:
                             view = WarmupConsentView(user_id)
                             message_content = WARMUP_MESSAGES["consent_dm"].format(
-                                user_mention=f"<@{user_id}>"
+                                user_mention=f"<@{user_id}>",
+                                BOT_NAME=BOT_NAME,
                             )
                             await user.send(message_content, view=view)
                             log.info(

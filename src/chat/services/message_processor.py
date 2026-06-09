@@ -10,6 +10,7 @@ import io
 from PIL import Image
 
 from src import config
+from src.config import BOT_NAME
 from src.chat.config import chat_config
 from src.chat.utils.database import chat_db_manager
 
@@ -380,7 +381,7 @@ class MessageProcessor:
                                     if command_name
                                     else "的回应"
                                 )
-                                reply_header = f"> [类脑娘对 {embed_author_name} {command_context}]:"
+                                reply_header = f"> [{BOT_NAME}对 {embed_author_name} {command_context}]:"
                             else:
                                 reply_header = f"> [{ref_msg.author.display_name}]:"
 

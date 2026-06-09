@@ -18,6 +18,7 @@ from src.chat.config.chat_config import GEMINI_THREAD_COMMENTOR_GEN_CONFIG
 from src.chat.config import chat_config
 from src.database.database import AsyncSessionLocal
 from src.database.models import CommunityMemberProfile
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -223,7 +224,7 @@ class ThreadCommentorService:
                     "parts": [PROMPT_CONFIG["default"]["JAILBREAK_MODEL_RESPONSE"]],
                 },
                 {"role": "user", "parts": [core_persona]},
-                {"role": "model", "parts": ["好的，我是类脑娘，已经准备好了"]},
+                {"role": "model", "parts": [f"好的，我是{BOT_NAME}，已经准备好了"]},
                 {"role": "user", "parts": [user_memory]},
                 {"role": "model", "parts": ["关于你的事情，我当然都记得"]},
             ]

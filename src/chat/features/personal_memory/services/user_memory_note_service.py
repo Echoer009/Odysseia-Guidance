@@ -9,6 +9,7 @@ from sqlalchemy import delete, update, func
 from src.database.database import AsyncSessionLocal
 from src.database.models import UserMemoryNote
 from src.chat.features.world_book.services.world_book_service import world_book_service
+from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def validate_memory_content(category: str, content: str) -> Tuple[bool, str]:
     if category == "preference":
         for pattern in _BLOCKED_PATTERNS_PREFERENCE:
             if pattern.search(content):
-                return False, "类脑娘和用户是平等的好朋友关系，不支持上位/从属/亲密关系的称呼或偏好"
+                return False, f"{BOT_NAME}和用户是平等的好朋友关系，不支持上位/从属/亲密关系的称呼或偏好"
 
     return True, ""
 
