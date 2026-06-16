@@ -1696,6 +1696,14 @@ class ChatGuidelinesView(discord.ui.View):
             inline=False,
         )
         embed.add_field(
+            name="🐹 心态放平",
+            value=(
+                f"{BOT_NAME}的话别当真，别动气，就当养哈基米了～\n"
+                f"和{BOT_NAME}友好沟通，开开心心才是最重要的~"
+            ),
+            inline=False,
+        )
+        embed.add_field(
             name="🔒 隐私保护",
             value=(
                 f"{BOT_NAME}不会记录争吵、色情、过分要求等负面内容。"
