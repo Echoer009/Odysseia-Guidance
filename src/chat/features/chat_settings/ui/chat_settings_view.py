@@ -1,5 +1,4 @@
 import discord
-import logging
 from discord.ui import View, Button, Select
 from discord import (
     ButtonStyle,
@@ -7,8 +6,6 @@ from discord import (
     Interaction,
 )
 from typing import List, Optional, Dict, Any
-
-log = logging.getLogger(__name__)
 
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
@@ -527,12 +524,6 @@ class ChatSettingsView(View):
             cp, cm = AIModelSettingsView.parse_full_model_id(current)
             current_provider, current_model = cp, cm
 
-        log.info(
-            f"[模型选择] 打开选择器: current={current!r}, "
-            f"provider={current_provider!r}, model={current_model!r}, "
-            f"require_tools={require_tools}"
-        )
-
         view = await AIModelSettingsView.create(
             current_provider=current_provider,
             current_model=current_model,
@@ -556,22 +547,10 @@ class ChatSettingsView(View):
         await view.wait()
 
         full_model_id = view.get_selected_full_model_id()
-        log.info(
-            f"[模型选择] wait返回: confirmed={view.confirmed}, "
-            f"selected_provider={view.selected_provider!r}, "
-            f"selected_model={view.selected_model!r}, "
-            f"full_model_id={full_model_id!r}"
-        )
         if full_model_id:
             provider, model = AIModelSettingsView.parse_full_model_id(full_model_id)
             if model:
-                save_value = f"{provider}:{model}" if provider else model
-                log.info(f"[模型选择] 即将保存: {save_value!r}")
-                await setter(save_value)
-            else:
-                log.warning(f"[模型选择] model 为空，未保存: provider={provider!r}")
-        else:
-            log.info("[模型选择] 未确认或未选择，不保存")
+                await setter(f"{provider}:{model}" if provider else model)
 
 
     async def on_tool_model_settings(self, interaction: Interaction):

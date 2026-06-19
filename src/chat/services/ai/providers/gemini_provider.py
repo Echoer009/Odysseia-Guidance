@@ -25,6 +25,8 @@ from .base import (
     GenerationError,
 )
 from ..utils.tool_converter import ToolConverter
+# 应用 google-genai SDK 兼容补丁（导入即生效，使图片等 bytes 字段使用标准 base64）
+from .. import _genai_compat  # noqa: F401
 from src.chat.services.key_rotation_service import (
     KeyRotationService,
     NoAvailableKeyError,
