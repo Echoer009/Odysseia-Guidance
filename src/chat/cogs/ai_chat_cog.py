@@ -26,6 +26,9 @@ from src.chat.features.content_filter.services.content_filter_service import (
     check_content,
     send_developer_alert,
 )
+from src.chat.features.chat_settings.services.chat_settings_service import (
+    chat_settings_service,
+)
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +127,11 @@ class AIChatCog(commands.Cog):
         async with message.channel.typing():
             # 注意：这里我们将已经处理过的数据传递下去
             chat_result = await self.handle_chat_message(message, processed_data)
+            # 回复延迟：限制刷屏速度（typing 会持续显示，UX 自然）
+            if chat_result and chat_result.content:
+                reply_delay = await chat_settings_service.get_reply_delay()
+                if reply_delay > 0:
+                    await asyncio.sleep(reply_delay)
 
         # 在退出 typing 状态后发送回复
         if chat_result and chat_result.content:

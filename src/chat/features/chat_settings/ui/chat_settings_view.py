@@ -109,6 +109,18 @@ class ChatSettingsView(View):
             )
         )
 
+        feeding_command_enabled = self.settings.get("global", {}).get(
+            "feeding_command_enabled", True
+        )
+        self.add_item(
+            Button(
+                label=f"投喂命令: {'开' if feeding_command_enabled else '关'}",
+                style=ButtonStyle.green if feeding_command_enabled else ButtonStyle.red,
+                custom_id="feeding_command_toggle",
+                row=0,
+            )
+        )
+
         # 活动派系选择器 (第 1 行)
         if self.factions:
             faction_options = [
@@ -143,6 +155,16 @@ class ChatSettingsView(View):
                 label="⏱️ 冷却设置",
                 style=ButtonStyle.primary,
                 custom_id="cooldown_settings",
+                row=2,
+            )
+        )
+
+        reply_delay = self.settings.get("global", {}).get("reply_delay_seconds", 30)
+        self.add_item(
+            Button(
+                label=f"🐢 回复延迟: {reply_delay}s",
+                style=ButtonStyle.secondary,
+                custom_id="reply_delay_settings",
                 row=2,
             )
         )
@@ -259,8 +281,12 @@ class ChatSettingsView(View):
             await self.on_api_fallback_toggle(interaction)
         elif custom_id == "feeding_image_toggle":
             await self.on_feeding_image_toggle(interaction)
+        elif custom_id == "feeding_command_toggle":
+            await self.on_feeding_command_toggle(interaction)
         elif custom_id == "cooldown_settings":
             await self.on_cooldown_settings(interaction)
+        elif custom_id == "reply_delay_settings":
+            await self.on_reply_delay_settings(interaction)
         elif custom_id == "warm_up_settings":
             await self.on_warm_up_settings(interaction)
         elif custom_id == "ai_model_settings":
@@ -325,6 +351,15 @@ class ChatSettingsView(View):
         )
         await self._update_view(interaction)
 
+    async def on_feeding_command_toggle(self, interaction: Interaction):
+        """切换 /投喂 命令的全局开关。"""
+        current_state = self.settings.get("global", {}).get(
+            "feeding_command_enabled", True
+        )
+        new_state = not current_state
+        await self.service.set_feeding_command_enabled(new_state)
+        await self._update_view(interaction)
+
     async def on_cooldown_settings(self, interaction: Interaction):
         """切换到冷却设置视图。"""
         if not self.message:
@@ -340,6 +375,26 @@ class ChatSettingsView(View):
             content=None, embed=embed, view=cooldown_view
         )
         self.stop()
+
+    async def on_reply_delay_settings(self, interaction: Interaction):
+        """打开回复延迟设置模态框。"""
+        from src.chat.features.chat_settings.ui.reply_delay_modal import (
+            ReplyDelayModal,
+            DEFAULT_REPLY_DELAY_SECONDS,
+        )
+
+        current_delay = self.settings.get("global", {}).get(
+            "reply_delay_seconds", DEFAULT_REPLY_DELAY_SECONDS
+        )
+
+        async def on_submit(submit_interaction: Interaction, seconds: int):
+            await self.service.set_reply_delay(seconds)
+            # 刷新主面板数据与按钮标签
+            await self._initialize()
+            await submit_interaction.response.edit_message(view=self)
+
+        modal = ReplyDelayModal(current_delay=current_delay, on_submit_callback=on_submit)
+        await interaction.response.send_modal(modal)
 
     async def on_warm_up_settings(self, interaction: Interaction):
         """切换到暖贴频道设置视图。"""

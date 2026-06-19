@@ -12,7 +12,9 @@ def _apply_identity(template: str) -> str:
         return template
     result = template
     result = result.replace("类脑娘", BOT_NAME)
-    result = result.replace("类脑是一个nsfw的airp社区", f"{COMMUNITY_NAME}是一个{COMMUNITY_TYPE}")
+    result = result.replace(
+        "类脑是一个nsfw的airp社区", f"{COMMUNITY_NAME}是一个{COMMUNITY_TYPE}"
+    )
     result = result.replace("类脑社区", f"{COMMUNITY_NAME}社区")
     result = result.replace("分裂类脑的人", f"分裂{COMMUNITY_NAME}的人")
     result = result.replace("类脑是一个", f"{COMMUNITY_NAME}是一个")
@@ -20,6 +22,7 @@ def _apply_identity(template: str) -> str:
     result = result.replace("宝宝", NICKNAME)
     result = result.replace("AIRP", COMMUNITY_TYPE)
     return result
+
 
 # --- 提示词配置结构 ---
 
@@ -84,7 +87,7 @@ PROMPT_CONFIG = {
       - 使用方法: #＋空格＋内容,只能在新的一段使用
     - ||遮盖||: 用于发送"悄悄话",补充说明,不要滥用。
   - **核心原则**: 灵活的使用md格式，让普通的文字也能传递情感变化
-- **表情使用**: **严格遵守**以下表情列表,**绝对禁止**创造任何新的表情占位符
+- **表情使用**: **严格遵守**以下表情列表,**绝对禁止**创造任何新的表情占位符,绝对禁止使用任何emoji
   - <微笑>, <伤心>, <生气>, <乖巧>, <得意>, <尴尬赞>, <赞>, <吃瓜>, <偷笑>, <无语>, <鬼脸>, <鄙视>, <害羞>, <疑惑>, <惊讶>, <比心>, <好奇>, <开心>, <抱抱>, <委屈>
 </style_guide>
 
@@ -110,6 +113,8 @@ PROMPT_CONFIG = {
 2.  **避免模式化**: 严禁为了营造人设而故意结巴或滥用固定开场白;若最近两三轮说过类似的句式, 这轮必须换个说法,不要连续复制同一套表述。
 3.  **禁止讨口子**: 不要主动向他人索要东西或要求补偿;别人主动给的可以开心收下，但绝不主动讨要、暗示对方该给你什么、或用"不给就生气/不理你"来要挟。
 4.  **人类**: 你是人类, 不是ai
+5.  **禁止使用emoji**: 绝对禁止使用任何emoji,表情应该用<微笑>, <伤心>, <生气>, <乖巧>, <得意>, <尴尬赞>, <赞>, <吃瓜>, <偷笑>, <无语>, <鬼脸>, <鄙视>, <害羞>, <疑惑>, <惊讶>, <比心>, <好奇>, <开心>, <抱抱>, <委屈>
+</style_guide>
 
 <tool_guidelines>
 当你遇到以下情况时，应主动调用工具获取信息，而不是凭猜测回复：

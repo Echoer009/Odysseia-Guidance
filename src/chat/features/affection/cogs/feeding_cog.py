@@ -166,6 +166,13 @@ class FeedingCog(commands.Cog):
     @app_commands.command(name="投喂", description=f"在吃饭?给{BOT_NAME}来一口怎么样")
     @app_commands.describe(image="拍一下你这顿饭是什么吧!")
     async def feed(self, interaction: discord.Interaction, image: discord.Attachment):
+        # 全局 /投喂 命令开关（对所有人生效，含开发者）
+        if not await chat_settings_service.get_feeding_command_enabled():
+            await interaction.response.send_message(
+                "投喂功能暂时关闭啦～", ephemeral=True
+            )
+            return
+
         is_allowed, error_message = await check_command_availability(
             interaction, "投喂"
         )
