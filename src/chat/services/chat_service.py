@@ -225,6 +225,19 @@ class ChatService:
             current_model = await chat_settings_service.get_current_ai_model()
             log.info(f"当前使用的AI模型: {current_model}")
 
+            # --- 两阶段回复管线配置 ---
+            two_stage_on = await chat_settings_service.is_two_stage_enabled()
+            tool_model_id = (
+                await chat_settings_service.get_tool_model() if two_stage_on else None
+            )
+            writer_model_id = (
+                await chat_settings_service.get_writer_model() if two_stage_on else None
+            )
+            if two_stage_on:
+                log.info(
+                    f"[两阶段] 已启用：工具模型={tool_model_id}，写作模型={writer_model_id}"
+                )
+
             # --- [新增] 根据上下文确定用于工具设置的用户ID ---
             user_id_for_settings: Optional[str] = None
             if isinstance(message.channel, discord.Thread) and message.channel.owner_id:
@@ -236,23 +249,44 @@ class ChatService:
                 log.info("消息不在帖子中，将使用默认工具集。")
             # --- [结束] ---
 
-            # 获取当前模型对应的 Provider
-            provider_name = ai_service._model_to_provider.get(current_model)
-            provider_instance = ai_service.get_provider(provider_name) if provider_name else None
-            provider_type = provider_instance.provider_type if provider_instance else ""
-            log.info(
-                f"[Provider 映射调试] current_model={repr(current_model)}, "
-                f"provider_name={repr(provider_name)}, "
-                f"provider_type={repr(provider_type)}"
-            )
+            # --- 解析 Provider 类型 ---
+            def _resolve_provider_type(model_id: str) -> str:
+                m_name, explicit_prov = ai_service.parse_model_id(model_id)
+                prov = ai_service.get_provider_for_model(m_name, explicit_prov)
+                return prov.provider_type if prov else ""
 
-            # 根据 Provider 类型确定输出格式
-            message_format = ProviderFormat.get_message_format(provider_type)
-            output_format = (
-                "openai" if message_format == MessageFormat.OPENAI else "gemini"
+            def _output_format_for(p_type: str) -> str:
+                mf = ProviderFormat.get_message_format(p_type)
+                return "openai" if mf == MessageFormat.OPENAI else "gemini"
+
+            writer_provider_type = ""
+            if two_stage_on:
+                # 工具格式跟随 Stage 1（工具模型）；消息人设格式跟随 Stage 2（写作模型）
+                provider_type = _resolve_provider_type(
+                    tool_model_id or current_model
+                )
+                writer_provider_type = _resolve_provider_type(
+                    writer_model_id or current_model
+                )
+                output_format = _output_format_for(writer_provider_type)
+            else:
+                provider_type = _resolve_provider_type(current_model)
+                output_format = _output_format_for(provider_type)
+
+            log.info(
+                f"[Provider 映射调试] two_stage={two_stage_on}, "
+                f"provider_type(工具)={repr(provider_type)}, "
+                f"writer_provider_type="
+                f"{repr(writer_provider_type) if two_stage_on else 'N/A'}"
             )
 
             # 使用 PromptService 构建消息
+            # （两阶段模式下，此 messages 作为 Stage 2 的完整人设提示）
+            # 注意：build_chat_prompt / get_generation_config 按裸模型名查配置，
+            # 因此这里传入去掉 provider 前缀的裸名。
+            _prompt_model_name = current_model
+            if two_stage_on and writer_model_id:
+                _prompt_model_name, _ = ai_service.parse_model_id(writer_model_id)
             messages = await prompt_service.build_chat_prompt(
                 user_name=author.display_name,
                 message=user_content,
@@ -265,7 +299,7 @@ class ChatService:
                 location_name=location_name,
                 personal_summary=None,
                 user_profile_data=user_profile_data,
-                model_name=current_model,
+                model_name=_prompt_model_name,
                 channel=message.channel,
                 conversation_memory=None,
                 latest_block=None,
@@ -275,6 +309,19 @@ class ChatService:
                 recent_chat_history=recent_chat_history,
             )
 
+            # Stage 1：极简工具路由提示（无人设、无世界书、无好感度）
+            stage1_messages: Optional[List[Dict[str, Any]]] = None
+            if two_stage_on:
+                stage1_messages = [
+                    {
+                        "role": "system",
+                        "content": chat_config.TOOL_ROUTER_SYSTEM_PROMPT,
+                    }
+                ]
+                if recent_chat_history:
+                    stage1_messages.extend(recent_chat_history)
+                stage1_messages.append({"role": "user", "content": user_content})
+
             # 获取工具列表（根据 Provider 类型返回对应格式）
             tools = await ai_service.tool_service.get_dynamic_tools_for_context(
                 user_id_for_settings, provider_type=provider_type
@@ -283,6 +330,7 @@ class ChatService:
             # 定义工具执行器（使用闭包追踪本次请求中调用的工具）
             _called_tools: List[str] = []
             _search_scopes: List[str] = []
+            _captured_tool_records: List[Dict[str, Any]] = []
 
             async def tool_executor(call, **kwargs):
                 # 记录被调用的工具名称（兼容 dict 和 FunctionCall 对象）
@@ -295,7 +343,7 @@ class ChatService:
                 _called_tools.append(name)
                 if name == "search":
                     _search_scopes.append(args.get("scope", ""))
-                return await ai_service.tool_service.execute_tool_call(
+                part = await ai_service.tool_service.execute_tool_call(
                     call,
                     channel=message.channel,
                     user_id=author.id,
@@ -304,13 +352,30 @@ class ChatService:
                     fallback_query=rag_query,
                     channel_context=channel_context,
                 )
+                # 捕获工具调用记录（供两阶段 Stage 2 使用）
+                func_resp = getattr(part, "function_response", None)
+                captured_response = (
+                    getattr(func_resp, "response", None) or {}
+                )
+                _captured_tool_records.append(
+                    {
+                        "name": name,
+                        "arguments": args,
+                        "response": captured_response,
+                    }
+                )
+                return part
 
             # 创建生成配置（从数据库获取模型参数）
+            # 两阶段模式下以写作模型（Stage 2）的参数为准
             from src.chat.services.ai.config.models import get_generation_config
 
-            gen_params = get_generation_config(current_model)
+            config_model = writer_model_id or current_model
+            # get_generation_config 按裸模型名查配置，去掉可能的 provider 前缀
+            _config_bare, _ = ai_service.parse_model_id(config_model)
+            gen_params = get_generation_config(_config_bare)
             log.debug(
-                f"模型 {current_model} 生成参数: "
+                f"模型 {config_model} 生成参数: "
                 f"temperature={gen_params.temperature}, "
                 f"top_p={gen_params.top_p}, top_k={gen_params.top_k}, "
                 f"max_output_tokens={gen_params.max_output_tokens}, "
@@ -327,28 +392,51 @@ class ChatService:
             )
 
             # 调用 AIService
-            result = await ai_service.generate_with_tools(
-                messages=messages,
-                config=generation_config,
-                model=current_model,
-                tools=tools,
-                tool_executor=tool_executor,
-                user_id_for_settings=user_id_for_settings,
-            )
+            if two_stage_on:
+                result = await ai_service.generate_two_stage(
+                    stage1_messages=stage1_messages or [],
+                    stage2_messages=messages,
+                    config=generation_config,
+                    tool_model=tool_model_id,
+                    writer_model=writer_model_id,
+                    tools=tools,
+                    tool_executor=tool_executor,
+                    captured_tool_records=_captured_tool_records,
+                    user_id_for_settings=user_id_for_settings,
+                )
+            else:
+                result = await ai_service.generate_with_tools(
+                    messages=messages,
+                    config=generation_config,
+                    model=current_model,
+                    tools=tools,
+                    tool_executor=tool_executor,
+                    user_id_for_settings=user_id_for_settings,
+                )
 
             # 记录模型使用统计
-            # 解析模型 ID（支持 "provider:model" 格式）
-            model_name, explicit_provider = ai_service.parse_model_id(current_model)
-            if explicit_provider:
-                provider_name = explicit_provider
-            else:
-                provider_name = ai_service._model_to_provider.get(model_name, "unknown")
-
-            # 使用纯模型名记录（不含 provider 前缀）
-            await chat_settings_service.increment_model_usage(
-                model_name=model_name, provider_name=provider_name
+            # 两阶段模式下记录工具模型与写作模型两次调用
+            stat_models = (
+                [tool_model_id, writer_model_id] if two_stage_on else [current_model]
             )
-            log.debug(f"记录模型使用: {model_name} (Provider: {provider_name})")
+            for _stat_model_id in stat_models:
+                if not _stat_model_id:
+                    continue
+                _model_name, _explicit_provider = ai_service.parse_model_id(
+                    _stat_model_id
+                )
+                if _explicit_provider:
+                    _provider_name = _explicit_provider
+                else:
+                    _provider_name = ai_service._model_to_provider.get(
+                        _model_name, "unknown"
+                    )
+                await chat_settings_service.increment_model_usage(
+                    model_name=_model_name, provider_name=_provider_name
+                )
+                log.debug(
+                    f"记录模型使用: {_model_name} (Provider: {_provider_name})"
+                )
 
             ai_response = result.content
 

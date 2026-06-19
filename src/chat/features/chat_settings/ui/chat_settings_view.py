@@ -1,4 +1,5 @@
 import discord
+import logging
 from discord.ui import View, Button, Select
 from discord import (
     ButtonStyle,
@@ -6,6 +7,8 @@ from discord import (
     Interaction,
 )
 from typing import List, Optional, Dict, Any
+
+log = logging.getLogger(__name__)
 
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
@@ -197,6 +200,37 @@ class ChatSettingsView(View):
         #     )
         # )
 
+        # 两阶段回复管线：工具模型 / 写作模型设置
+        self.add_item(
+            Button(
+                label="🔧 工具模型",
+                style=ButtonStyle.secondary,
+                custom_id="tool_model_settings",
+                row=3,
+            )
+        )
+
+        self.add_item(
+            Button(
+                label="✍️ 写作模型",
+                style=ButtonStyle.secondary,
+                custom_id="writer_model_settings",
+                row=3,
+            )
+        )
+
+        two_stage_enabled = self.settings.get("global", {}).get(
+            "two_stage_enabled", False
+        )
+        self.add_item(
+            Button(
+                label=f"🔀 两阶段: {'开' if two_stage_enabled else '关'}",
+                style=ButtonStyle.green if two_stage_enabled else ButtonStyle.red,
+                custom_id="two_stage_toggle",
+                row=2,
+            )
+        )
+
         self.add_item(
             Button(
                 label="今日Token",
@@ -291,6 +325,12 @@ class ChatSettingsView(View):
             await self.on_warm_up_settings(interaction)
         elif custom_id == "ai_model_settings":
             await self.on_ai_model_settings(interaction)
+        elif custom_id == "tool_model_settings":
+            await self.on_tool_model_settings(interaction)
+        elif custom_id == "writer_model_settings":
+            await self.on_writer_model_settings(interaction)
+        elif custom_id == "two_stage_toggle":
+            await self.on_two_stage_toggle(interaction)
         # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
         # elif custom_id == "summary_model_settings":
         #     await self.on_summary_model_settings(interaction)
@@ -469,6 +509,98 @@ class ChatSettingsView(View):
             if provider and model:
                 # 直接存模型名，不带 provider 前缀
                 await self.service.set_ai_model(model)
+
+    async def _open_model_picker(
+        self,
+        interaction: Interaction,
+        title: str,
+        description: str,
+        getter,
+        setter,
+        require_tools: bool = False,
+    ):
+        """通用：打开 AIModelSettingsView 选择并保存模型。"""
+        current = await getter()
+        current_provider = None
+        current_model = current
+        if current and ":" in current:
+            cp, cm = AIModelSettingsView.parse_full_model_id(current)
+            current_provider, current_model = cp, cm
+
+        log.info(
+            f"[模型选择] 打开选择器: current={current!r}, "
+            f"provider={current_provider!r}, model={current_model!r}, "
+            f"require_tools={require_tools}"
+        )
+
+        view = await AIModelSettingsView.create(
+            current_provider=current_provider,
+            current_model=current_model,
+            require_tools=require_tools,
+        )
+
+        embed = discord.Embed(
+            title=title, description=description, color=discord.Color.blue()
+        )
+        from src.chat.services.ai.config.models import get_model_configs
+
+        model_configs = get_model_configs()
+        display = current or "未设置（回退到当前AI模型）"
+        if current and current in model_configs:
+            display = model_configs[current].display_name or current
+        embed.add_field(name="当前设置", value=f"模型: `{display}`", inline=False)
+
+        await interaction.response.send_message(
+            embed=embed, view=view, ephemeral=True
+        )
+        await view.wait()
+
+        full_model_id = view.get_selected_full_model_id()
+        log.info(
+            f"[模型选择] wait返回: confirmed={view.confirmed}, "
+            f"selected_provider={view.selected_provider!r}, "
+            f"selected_model={view.selected_model!r}, "
+            f"full_model_id={full_model_id!r}"
+        )
+        if full_model_id:
+            provider, model = AIModelSettingsView.parse_full_model_id(full_model_id)
+            if model:
+                save_value = f"{provider}:{model}" if provider else model
+                log.info(f"[模型选择] 即将保存: {save_value!r}")
+                await setter(save_value)
+            else:
+                log.warning(f"[模型选择] model 为空，未保存: provider={provider!r}")
+        else:
+            log.info("[模型选择] 未确认或未选择，不保存")
+
+
+    async def on_tool_model_settings(self, interaction: Interaction):
+        """打开 Stage 1 工具模型设置（仅显示支持工具调用的模型）。"""
+        await self._open_model_picker(
+            interaction,
+            title="🔧 工具模型设置（Stage 1）",
+            description="选择用于判断并调用工具的模型（仅显示支持工具调用的模型）",
+            getter=self.service.get_tool_model,
+            setter=self.service.set_tool_model,
+            require_tools=True,
+        )
+
+    async def on_writer_model_settings(self, interaction: Interaction):
+        """打开 Stage 2 写作模型设置。"""
+        await self._open_model_picker(
+            interaction,
+            title="✍️ 写作模型设置（Stage 2）",
+            description="选择用于撰写最终回复的模型（文笔优先，可不支持工具）",
+            getter=self.service.get_writer_model,
+            setter=self.service.set_writer_model,
+            require_tools=False,
+        )
+
+    async def on_two_stage_toggle(self, interaction: Interaction):
+        """切换两阶段回复管线总开关。"""
+        new_state = not await self.service.is_two_stage_enabled()
+        await self.service.set_two_stage_enabled(new_state)
+        await self._update_view(interaction)
 
     # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
     # async def on_summary_model_settings(self, interaction: Interaction):

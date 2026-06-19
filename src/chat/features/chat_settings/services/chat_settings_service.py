@@ -83,6 +83,15 @@ class ChatSettingsService:
             else True
         )
 
+        two_stage_value = await self.db_manager.get_global_setting(
+            "two_stage_enabled"
+        )
+        two_stage_enabled = (
+            two_stage_value.lower() in ("true", "1", "yes", "on")
+            if two_stage_value is not None
+            else False
+        )
+
         # 回复延迟（秒），键不存在时默认 30
         reply_delay_value = await self.db_manager.get_global_setting(
             "reply_delay_seconds"
@@ -104,6 +113,7 @@ class ChatSettingsService:
                 "feeding_image_enabled": feeding_image_enabled,
                 "feeding_command_enabled": feeding_command_enabled,
                 "reply_delay_seconds": reply_delay_seconds,
+                "two_stage_enabled": two_stage_enabled,
             },
             "channels": {
                 config["entity_id"]: {
@@ -405,17 +415,44 @@ class ChatSettingsService:
         full_model_id = f"{provider_name}:{model_name}"
         await self.db_manager.set_global_setting("ai_model", full_model_id)
 
-    # --- [DISABLED] 印象总结功能（flash模型）已禁用 ---
-    # async def get_summary_model(self) -> Optional[str]:
-    #     """获取总结模型设置，未设置时返回 None。"""
-    #     return await self.db_manager.get_global_setting("summary_model")
+    # --- 两阶段回复管线设置 ---
+    # Stage 1（工具路由模型）负责判断并调用工具；Stage 2（写作模型）负责最终回复。
+    # 所有设置均为全局（存于 global_settings 键值表），未配置时回退到当前 ai_model。
 
-    # async def set_summary_model(self, model: Optional[str]) -> None:
-    #     """设置总结模型。传入 None 或空字符串则清除设置。"""
-    #     if model:
-    #         await self.db_manager.set_global_setting("summary_model", model)
-    #     else:
-    #         await self.db_manager.set_global_setting("summary_model", "")
+    async def is_two_stage_enabled(self) -> bool:
+        """两阶段回复管线是否启用（全局设置）。默认关闭。"""
+        value = await self.db_manager.get_global_setting("two_stage_enabled")
+        if value is not None:
+            return value.lower() in ("true", "1", "yes", "on")
+        return False
+
+    async def set_two_stage_enabled(self, enabled: bool) -> None:
+        """启用/关闭两阶段回复管线。"""
+        await self.db_manager.set_global_setting(
+            "two_stage_enabled", "true" if enabled else "false"
+        )
+
+    async def get_tool_model(self) -> str:
+        """获取 Stage 1 工具模型。未配置时回退到当前 ai_model。"""
+        model = await self.db_manager.get_global_setting("tool_model")
+        if model:
+            return model
+        return await self.get_current_ai_model()
+
+    async def set_tool_model(self, model: Optional[str]) -> None:
+        """设置 Stage 1 工具模型。传入 None/空串则清除。"""
+        await self.db_manager.set_global_setting("tool_model", model or "")
+
+    async def get_writer_model(self) -> str:
+        """获取 Stage 2 写作模型。未配置时回退到当前 ai_model。"""
+        model = await self.db_manager.get_global_setting("writer_model")
+        if model:
+            return model
+        return await self.get_current_ai_model()
+
+    async def set_writer_model(self, model: Optional[str]) -> None:
+        """设置 Stage 2 写作模型。传入 None/空串则清除。"""
+        await self.db_manager.set_global_setting("writer_model", model or "")
 
     # --- Embedding Model Settings ---
 

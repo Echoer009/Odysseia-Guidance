@@ -639,10 +639,18 @@ class DeepSeekProvider(BaseProvider):
         message = choice.get("message", {})
         content = message.get("content", "")
 
-        # 提取思考链内容（deepseek-reasoner 特有）
+        # 提取思考链内容（deepseek-reasoner / deepseek-v4-pro / deepseek-v4-flash 均可能返回）
         thinking_content = None
         if "reasoning_content" in message:
             thinking_content = message["reasoning_content"]
+            if thinking_content:
+                preview = thinking_content[:200]
+                log.info(
+                    f"模型思考过程 ({model_name}): {preview}..."
+                )
+                log.debug(
+                    f"模型完整思考内容 ({model_name}):\n{thinking_content}"
+                )
 
         # 确定结束原因
         finish_reason_str = choice.get("finish_reason", "stop")

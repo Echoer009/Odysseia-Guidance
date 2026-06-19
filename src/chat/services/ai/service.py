@@ -443,6 +443,7 @@ class AIService:
         max_iterations: int = 5,
         fallback: bool = True,
         user_id_for_settings: Optional[str] = None,
+        allow_empty_response: bool = False,
         **kwargs,
     ) -> GenerationResult:
         """
@@ -502,6 +503,7 @@ class AIService:
                 provider_name=provider_name,
                 tool_executor=tool_executor,
                 max_iterations=max_iterations,
+                allow_empty_response=allow_empty_response,
                 **kwargs,
             )
         except GenerationError as e:
@@ -538,6 +540,136 @@ class AIService:
                 provider_type=provider_name,
                 original_error=e,
             )
+
+    async def generate_two_stage(
+        self,
+        stage1_messages: List[Dict[str, Any]],
+        stage2_messages: List[Dict[str, Any]],
+        config: Optional[GenerationConfig] = None,
+        tool_model: Optional[str] = None,
+        writer_model: Optional[str] = None,
+        tools: Optional[List[Any]] = None,
+        tool_executor: Optional[Any] = None,
+        captured_tool_records: Optional[List[Dict[str, Any]]] = None,
+        max_iterations: int = 5,
+        user_id_for_settings: Optional[str] = None,
+        **kwargs,
+    ) -> GenerationResult:
+        """
+        两阶段回复管线：
+          Stage 1（工具路由模型）：用极简路由提示判断并调用工具，其文字输出被丢弃。
+          Stage 2（写作模型）：拿到工具结果后用完整人设写最终回复。
+
+        Stage 1 的工具调用结果通过 tool_executor 闭包写入 captured_tool_records，
+        本方法据此组装“工具调用记录”上下文块并注入 Stage 2 消息。
+
+        Args:
+            stage1_messages: Stage 1 的极简路由消息（不含人设）
+            stage2_messages: Stage 2 的完整人设消息（工具上下文将被注入）
+            config: 生成配置
+            tool_model: Stage 1 工具模型 ID
+            writer_model: Stage 2 写作模型 ID
+            tools: 工具列表
+            tool_executor: 工具执行器（会向 captured_tool_records 追加记录）
+            captured_tool_records: 可变列表，用于收集工具调用记录
+            user_id_for_settings: 故障转移时重新获取工具用
+        """
+        config = config or GenerationConfig()
+        captured_tool_records = (
+            captured_tool_records if captured_tool_records is not None else []
+        )
+
+        # ---- Stage 1：工具路由 ----
+        stage1_tokens = 0
+        try:
+            stage1_result = await self.generate_with_tools(
+                messages=stage1_messages,
+                config=config,
+                model=tool_model,
+                tools=tools,
+                tool_executor=tool_executor,
+                max_iterations=max_iterations,
+                fallback=True,
+                user_id_for_settings=user_id_for_settings,
+                allow_empty_response=True,
+                **kwargs,
+            )
+            stage1_tokens = (
+                (stage1_result.input_tokens or 0) + (stage1_result.output_tokens or 0)
+            )
+            log.info(
+                f"[两阶段] Stage 1（工具模型 {tool_model}）完成，"
+                f"捕获 {len(captured_tool_records)} 条工具调用记录。"
+            )
+        except Exception as stage1_err:
+            log.warning(
+                f"[两阶段] Stage 1（工具模型 {tool_model}）失败，跳过工具阶段: {stage1_err}"
+            )
+
+        # ---- 组装工具调用记录上下文块 ----
+        tool_block = self._build_tool_results_block(captured_tool_records)
+
+        # ---- 注入到 Stage 2 消息 ----
+        stage2_messages = self._inject_tool_context(stage2_messages, tool_block)
+
+        # ---- Stage 2：写作模型生成最终回复 ----
+        log.info(f"[两阶段] Stage 2（写作模型 {writer_model}）开始生成最终回复。")
+        stage2_result = await self.generate(
+            messages=stage2_messages,
+            config=config,
+            model=writer_model,
+            tools=None,
+            fallback=True,
+            **kwargs,
+        )
+
+        # 累加 Stage 1 的 token 消耗到最终结果（便于统计）
+        if stage1_tokens:
+            stage2_result.input_tokens = (stage2_result.input_tokens or 0) + stage1_tokens
+        return stage2_result
+
+    @staticmethod
+    def _build_tool_results_block(
+        captured_records: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        """把捕获的工具调用记录格式化为可读文本块。无记录时返回 None。"""
+        if not captured_records:
+            return None
+
+        from src.chat.config.chat_config import (
+            TOOL_RESULTS_BLOCK_HEADER,
+            TOOL_RESULTS_BLOCK_INSTRUCTION,
+        )
+
+        lines = [TOOL_RESULTS_BLOCK_HEADER]
+        for idx, rec in enumerate(captured_records, start=1):
+            name = rec.get("name", "未知工具")
+            args = rec.get("arguments", {})
+            response = rec.get("response", {})
+            try:
+                args_str = json.dumps(args, ensure_ascii=False)
+            except Exception:
+                args_str = str(args)
+            try:
+                resp_str = json.dumps(response, ensure_ascii=False)
+            except Exception:
+                resp_str = str(response)
+            lines.append(f"{idx}. 工具: {name} | 参数: {args_str} | 结果: {resp_str}")
+        lines.append(TOOL_RESULTS_BLOCK_INSTRUCTION)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _inject_tool_context(
+        messages: List[Dict[str, Any]], tool_block: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        """在最后一条消息之前插入工具调用记录上下文块。无内容时原样返回副本。"""
+        new_messages = list(messages)
+        if not tool_block:
+            return new_messages
+        context_msg = {"role": "user", "content": tool_block}
+        insert_pos = max(len(new_messages) - 1, 0)
+        new_messages.insert(insert_pos, context_msg)
+        return new_messages
 
     async def _retry_generate(
         self,
@@ -620,6 +752,7 @@ class AIService:
         provider_name: str,
         tool_executor: Optional[Any] = None,
         max_iterations: int = 5,
+        allow_empty_response: bool = False,
         **kwargs,
     ) -> GenerationResult:
         """
@@ -660,7 +793,7 @@ class AIService:
                     model=model,
                     **kwargs,
                 )
-                if not result.content:
+                if not result.content and not allow_empty_response:
                     raise GenerationError(
                         "空响应", provider_type=provider_name
                     )

@@ -27,11 +27,13 @@ class AIModelSettingsView(View):
         self,
         current_provider: Optional[str] = None,
         current_model: Optional[str] = None,
+        require_tools: bool = False,
     ):
         super().__init__(timeout=300)
         self.selected_provider: Optional[str] = current_provider
         self.selected_model: Optional[str] = current_model
         self.confirmed = False
+        self.require_tools: bool = require_tools
 
         self._models_by_provider: Dict[str, Dict[str, "ModelConfig"]] = {}
 
@@ -46,8 +48,9 @@ class AIModelSettingsView(View):
         cls,
         current_provider: Optional[str] = None,
         current_model: Optional[str] = None,
+        require_tools: bool = False,
     ) -> "AIModelSettingsView":
-        view = cls(current_provider, current_model)
+        view = cls(current_provider, current_model, require_tools=require_tools)
         await view._initialize()
         return view
 
@@ -100,6 +103,10 @@ class AIModelSettingsView(View):
 
                     provider_name = m.provider.name if m.provider else "unknown"
 
+                    # 工具模型槽位过滤：只保留支持工具调用的模型
+                    if self.require_tools and not bool(m.supports_tools):
+                        continue
+
                     config = ModelConfig(
                         display_name=m.display_name,
                         provider=provider_name,
@@ -127,6 +134,9 @@ class AIModelSettingsView(View):
 
         model_configs = get_model_configs()
         for model_name, config in model_configs.items():
+            # 工具模型槽位过滤：只保留支持工具调用的模型
+            if self.require_tools and not getattr(config, "supports_tools", False):
+                continue
             provider = config.provider or "unknown"
             if provider not in grouped:
                 grouped[provider] = {}
@@ -149,6 +159,12 @@ class AIModelSettingsView(View):
         return provider_names.get(provider_name, f"📦 {provider_name}")
 
     def _create_provider_select(self):
+        # 重建前先移除旧的 provider_select，避免重复项
+        for item in self.children:
+            if isinstance(item, Select) and item.custom_id == "provider_select":
+                self.remove_item(item)
+                break
+
         options = []
 
         for provider_name in sorted(self._models_by_provider.keys()):
@@ -238,12 +254,16 @@ class AIModelSettingsView(View):
     async def _on_provider_select(self, interaction: Interaction):
         self.selected_provider = self.provider_select.values[0]
         self.selected_model = None
+        # 重建 provider_select 以更新 default（否则 edit_message 后视觉会回弹到旧值）
+        self._create_provider_select()
         self._create_model_select(self.selected_provider)
         self.confirm_button.disabled = True
         await interaction.response.edit_message(view=self)
 
     async def _on_model_select(self, interaction: Interaction):
         self.selected_model = self.model_select.values[0]
+        # 重建 model_select 以更新 default（否则 edit_message 后视觉会回弹到旧模型）
+        self._create_model_select(self.selected_provider)
         self.confirm_button.disabled = False
         await interaction.response.edit_message(view=self)
 

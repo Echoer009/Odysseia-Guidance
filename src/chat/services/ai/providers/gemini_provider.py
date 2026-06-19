@@ -85,6 +85,20 @@ class GeminiProvider(BaseProvider):
         """
         self.provider_name = provider_name
         self.base_url = base_url
+        # 规范化 base_url：google-genai SDK 会自行拼接 /v1beta/models/... 路径。
+        # 若用户误填了 /v1 或 /v1beta，会导致 /v1/v1beta/... 双重路径而 404，这里自动剥离。
+        if self.base_url:
+            _stripped = self.base_url.rstrip("/")
+            for _suffix in ("/v1beta", "/v1"):
+                if _stripped.endswith(_suffix):
+                    _original = self.base_url
+                    self.base_url = _stripped[: -len(_suffix)]
+                    log.warning(
+                        f"GeminiProvider '{provider_name}' 的 base_url 末尾带有 "
+                        f"'{_suffix}'，已自动剥离（SDK 会自行拼接版本路径）。"
+                        f"原值: {_original} -> 修正为: {self.base_url}"
+                    )
+                    break
         self.use_key_rotation = use_key_rotation
 
         # 初始化密钥轮换服务
