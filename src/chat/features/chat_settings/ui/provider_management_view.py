@@ -13,7 +13,7 @@ from typing import Optional, Callable, Awaitable, List
 from src.database.database import AsyncSessionLocal
 from src.database.services.ai_config_service import ai_config_service
 
-PROVIDER_TYPES = ["gemini", "deepseek", "openai_compatible", "gemini_custom"]
+PROVIDER_TYPES = ["gemini", "deepseek", "openai_compatible", "gemini_custom", "grok"]
 
 
 async def _reload_ai_service():
@@ -39,7 +39,7 @@ class AddProviderModal(Modal):
 
         self.type_input = TextInput(
             label="类型",
-            placeholder="gemini/deepseek/openai_compatible/gemini_custom",
+            placeholder="gemini/deepseek/openai_compatible/gemini_custom/grok",
             custom_id="provider_type",
             required=True,
             max_length=50,
@@ -243,7 +243,7 @@ class ProviderManagementView(View):
         embed = discord.Embed(
             title="🔌 Provider 管理",
             description="管理 AI 服务提供商。添加、编辑或删除 Provider。\n\n"
-            "支持类型: `gemini` / `deepseek` / `openai_compatible`",
+            "支持类型: `gemini` / `deepseek` / `openai_compatible` / `gemini_custom` / `grok`",
             color=discord.Color.blue(),
         )
 

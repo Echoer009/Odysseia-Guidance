@@ -182,6 +182,18 @@ class AIService:
                 default_model=config.default_model,
             )
 
+        elif config.type == "grok":
+            # Grok (xAI) 走 OpenAI 兼容协议，但 provider_type 标记为 "grok"
+            # 用于触发平台特定处理（如过滤被 grok console 拦截的 web_search 工具）
+            return OpenAICompatibleProvider(
+                api_key=config.api_key,
+                base_url=config.base_url,
+                provider_name=config.name,
+                models=config.models,
+                default_model=config.default_model,
+                provider_type="grok",
+            )
+
         elif config.type == "custom":
             # 自定义 Gemini 端点
             extra = config.extra or {}

@@ -31,7 +31,7 @@ class ProviderConfig:
     """
 
     name: str
-    type: Literal["gemini", "deepseek", "openai_compatible", "custom"]
+    type: Literal["gemini", "deepseek", "openai_compatible", "grok", "custom"]
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     models: List[str] = field(default_factory=list)
@@ -86,7 +86,7 @@ async def get_provider_configs_from_db() -> Dict[str, ProviderConfig]:
                     default_model = model_names[0]
 
                 provider_type = cast(
-                    Literal["gemini", "deepseek", "openai_compatible", "custom"],
+                    Literal["gemini", "deepseek", "openai_compatible", "grok", "custom"],
                     provider.provider_type,
                 )
                 extra = dict(provider.extra) if provider.extra else {}
@@ -96,11 +96,11 @@ async def get_provider_configs_from_db() -> Dict[str, ProviderConfig]:
                     extra["original_provider"] = "gemini"
 
                 from typing import cast as _cast
-                valid_types = ("gemini", "deepseek", "openai_compatible", "custom")
+                valid_types = ("gemini", "deepseek", "openai_compatible", "grok", "custom")
                 ptype = provider_type if provider_type in valid_types else "custom"
                 configs[provider.name] = ProviderConfig(
                     name=provider.name,
-                    type=_cast(Literal["gemini", "deepseek", "openai_compatible", "custom"], ptype),
+                    type=_cast(Literal["gemini", "deepseek", "openai_compatible", "grok", "custom"], ptype),
                     api_key=api_key,
                     base_url=provider.base_url,
                     models=model_names,

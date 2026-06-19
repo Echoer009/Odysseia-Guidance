@@ -7,7 +7,7 @@ Provider 格式常量 - 统一管理不同 Provider 的消息/工具格式
 """
 
 from enum import Enum
-from typing import Set
+from typing import Dict, Set
 
 
 class MessageFormat(Enum):
@@ -44,6 +44,7 @@ class ProviderFormat:
         # OpenAI 兼容系列 - 使用 OpenAI 格式
         "deepseek": MessageFormat.OPENAI,
         "openai_compatible": MessageFormat.OPENAI,
+        "grok": MessageFormat.OPENAI,  # Grok (xAI) 走 OpenAI 兼容格式
     }
 
     # Gemini Provider 类型集合
@@ -58,6 +59,14 @@ class ProviderFormat:
         "deepseek",
         "openai_compatible",
         "openai",  # 通用标识
+        "grok",
+    }
+
+    # 特定 Provider 需要排除的工具名集合（平台兼容性限制等）
+    # 例：grok console 平台对名为 web_search 的外部工具直接返回 400，
+    #     因为 grok 自身有内置 web search，禁止外部工具占用该名称
+    _EXCLUDED_TOOLS_MAP: Dict[str, Set[str]] = {
+        "grok": {"web_search"},
     }
 
     @classmethod
@@ -111,6 +120,35 @@ class ProviderFormat:
             bool: 是否是 OpenAI 兼容 Provider
         """
         return provider_type in cls._OPENAI_COMPATIBLE_PROVIDERS
+
+    @classmethod
+    def is_grok_provider(cls, provider_type: str) -> bool:
+        """
+        检查是否是 Grok (xAI) 系列 Provider
+
+        Args:
+            provider_type: Provider 类型标识符
+
+        Returns:
+            bool: 是否是 Grok Provider
+        """
+        return provider_type.lower() == "grok"
+
+    @classmethod
+    def get_excluded_tools(cls, provider_type: str) -> Set[str]:
+        """
+        获取指定 Provider 需要排除（不传给 AI）的工具名集合。
+
+        某些平台对特定工具名/功能有限制（如 grok console 对 web_search 拦截），
+        调用方应在构建工具列表时据此过滤。
+
+        Args:
+            provider_type: Provider 类型标识符
+
+        Returns:
+            Set[str]: 需要排除的工具名集合，无限制时返回空集合
+        """
+        return cls._EXCLUDED_TOOLS_MAP.get(provider_type.lower(), set())
 
     @classmethod
     def register_provider(

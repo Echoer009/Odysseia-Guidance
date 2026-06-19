@@ -52,6 +52,13 @@ PROVIDER_SUPPORTED_PARAMS: Dict[str, List[SupportedParam]] = {
         SupportedParam.PRESENCE_PENALTY,
         SupportedParam.FREQUENCY_PENALTY,
     ],
+    "grok": [
+        SupportedParam.TEMPERATURE,
+        SupportedParam.TOP_P,
+        SupportedParam.MAX_OUTPUT_TOKENS,
+        SupportedParam.PRESENCE_PENALTY,
+        SupportedParam.FREQUENCY_PENALTY,
+    ],
     "anthropic": [
         SupportedParam.TEMPERATURE,
         SupportedParam.TOP_P,
@@ -410,6 +417,11 @@ FALLBACK_PRIORITY: Dict[str, List[str]] = {
     ],
     "openai_compatible": [
         "deepseek",
+        "gemini_custom",
+    ],
+    "grok": [
+        "deepseek",
+        "openai_compatible",
         "gemini_custom",
     ],
     "gemini_official": [

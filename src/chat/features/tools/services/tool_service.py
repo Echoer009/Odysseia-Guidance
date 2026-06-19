@@ -165,9 +165,21 @@ class ToolService:
                 f"全局禁用的工具: {disabled_tools}，过滤后剩余 {len(filtered_declarations)} 个工具"
             )
 
+        # 根据 Provider 类型排除不兼容的工具（如 grok console 拦截 web_search）
+        actual_provider_type = provider_type or ""
+        excluded_tools = ProviderFormat.get_excluded_tools(actual_provider_type)
+        if excluded_tools:
+            before = len(filtered_declarations)
+            filtered_declarations = [
+                decl for decl in filtered_declarations if decl.name not in excluded_tools
+            ]
+            log.info(
+                f"为 Provider '{actual_provider_type}' 排除不兼容的工具 {excluded_tools}，"
+                f"过滤 {before - len(filtered_declarations)} 个，剩余 {len(filtered_declarations)} 个"
+            )
+
         # 根据 provider 类型选择返回格式（使用统一的格式判断工具）
         # 调试日志：打印 provider_type 和判断结果
-        actual_provider_type = provider_type or ""
         is_gemini = ProviderFormat.is_gemini_provider(actual_provider_type)
         log.info(
             f"[工具格式调试] provider_type={repr(provider_type)}, "

@@ -56,6 +56,7 @@ class OpenAICompatibleProvider(BaseProvider):
         provider_name: str = "openai_compatible",
         models: Optional[List[str]] = None,
         default_model: Optional[str] = None,
+        provider_type: str = "openai_compatible",
     ):
         """
         初始化 OpenAI 兼容 Provider
@@ -66,8 +67,11 @@ class OpenAICompatibleProvider(BaseProvider):
             provider_name: Provider 名称标识
             models: 支持的模型列表
             default_model: 默认模型
+            provider_type: Provider 类型标识（用于格式判断/工具过滤，
+                如 "openai_compatible"、"grok"）。默认 "openai_compatible"。
         """
         self.provider_name = provider_name
+        self.provider_type = provider_type
         self.api_key = api_key or os.getenv("OPENAI_COMPATIBLE_API_KEY")
         self.base_url = base_url or os.getenv(
             "OPENAI_COMPATIBLE_URL", "https://api.openai.com/v1"
@@ -147,7 +151,33 @@ class OpenAICompatibleProvider(BaseProvider):
             )
             response.raise_for_status()
 
-            result_data = response.json()
+            try:
+                result_data = response.json()
+            except Exception as json_e:
+                content_type = response.headers.get("content-type", "")
+                body_preview = response.text[:500]
+                log.error(
+                    f"OpenAI Compatible 响应 JSON 解析失败: {json_e}\n"
+                    f"HTTP 状态码: {response.status_code}\n"
+                    f"Content-Type: {content_type}\n"
+                    f"响应体(前500字符): {body_preview!r}"
+                )
+                # HTML 响应几乎必然是 base_url 配置错误：请求打到了网站首页而非 API 端点
+                if "html" in content_type.lower():
+                    hint = (
+                        "API 返回了 HTML 页面而非 JSON。这几乎一定是 base_url 配置错误"
+                        "（请求打到了网站首页而不是 API 端点）。"
+                        f"当前 base_url={self.base_url!r}，请确认是否需要补充 API 路径前缀"
+                        "（例如 OpenAI 兼容端点通常需要 /v1）。"
+                    )
+                else:
+                    hint = "响应体不是合法 JSON。"
+                raise GenerationError(
+                    f"响应解析失败 (HTTP {response.status_code}, "
+                    f"Content-Type: {content_type}): {hint}",
+                    provider_type=self.provider_type,
+                    original_error=json_e,
+                )
 
             # 处理响应
             return self._process_response(result_data, model_name)
@@ -426,17 +456,37 @@ class OpenAICompatibleProvider(BaseProvider):
                 )
                 continue
 
-            # 4. 如果 content 是列表（OpenAI 多部分格式）
+            # 4. 如果 content 是列表（OpenAI 多部分格式，可能含图片）
             if content is not None and isinstance(content, list):
-                # 提取文本内容
                 text_parts = []
+                image_parts = []
                 for item in content:
                     if isinstance(item, str):
                         text_parts.append(item)
-                    elif isinstance(item, dict) and item.get("type") == "text":
-                        text_parts.append(item.get("text", ""))
+                    elif isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image_url":
+                            # 保留图片（OpenAI 多模态格式），由 prompt_service 预转成 base64 data URL
+                            image_parts.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": item.get("image_url", {}),
+                                }
+                            )
 
-                if text_parts:
+                if image_parts:
+                    # 含图片：使用 OpenAI 多模态 content 格式（text + image_url 列表）
+                    multimodal_content: List[Dict[str, Any]] = []
+                    if text_parts:
+                        multimodal_content.append(
+                            {"type": "text", "text": "\n".join(text_parts)}
+                        )
+                    multimodal_content.extend(image_parts)
+                    converted_messages.append(
+                        {"role": openai_role, "content": multimodal_content}
+                    )
+                elif text_parts:
                     converted_messages.append(
                         {
                             "role": openai_role,
@@ -616,8 +666,10 @@ class OpenAICompatibleProvider(BaseProvider):
             body["response_format"] = config.response_format
 
         # 添加工具
+        # 工具格式由 ToolService.get_dynamic_tools_for_context() 统一转换
+        # OpenAI Compatible Provider 接收 OpenAI 格式的工具列表（List[Dict]）
         if tools:
-            body["tools"] = ToolConverter.to_openai_tools(tools)
+            body["tools"] = tools
 
         return body
 
