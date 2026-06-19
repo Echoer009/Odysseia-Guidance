@@ -67,12 +67,32 @@ class ChatSettingsService:
             else True
         )
 
+        feeding_command_value = await self.db_manager.get_global_setting(
+            "feeding_command_enabled"
+        )
+        feeding_command_enabled = (
+            feeding_command_value.lower() in ("true", "1", "yes", "on")
+            if feeding_command_value is not None
+            else True
+        )
+
         chat_enabled_value = await self.db_manager.get_global_setting("chat_enabled")
         chat_enabled = (
             chat_enabled_value.lower() in ("true", "1", "yes", "on")
             if chat_enabled_value is not None
             else True
         )
+
+        # 回复延迟（秒），键不存在时默认 30
+        reply_delay_value = await self.db_manager.get_global_setting(
+            "reply_delay_seconds"
+        )
+        try:
+            reply_delay_seconds = (
+                max(0, int(reply_delay_value)) if reply_delay_value is not None else 30
+            )
+        except (ValueError, TypeError):
+            reply_delay_seconds = 30
 
         settings = {
             "global": {
@@ -82,6 +102,8 @@ class ChatSettingsService:
                 else True,
                 "api_fallback_enabled": api_fallback_enabled,
                 "feeding_image_enabled": feeding_image_enabled,
+                "feeding_command_enabled": feeding_command_enabled,
+                "reply_delay_seconds": reply_delay_seconds,
             },
             "channels": {
                 config["entity_id"]: {
@@ -601,6 +623,39 @@ class ChatSettingsService:
                 )
 
         return result
+
+    # --- Feeding Command Settings ---
+
+    async def get_feeding_command_enabled(self) -> bool:
+        """获取 /投喂 命令的全局开关。键不存在时默认开启。"""
+        value = await self.db_manager.get_global_setting("feeding_command_enabled")
+        if value is None:
+            return True
+        return value.lower() in ("true", "1", "yes", "on")
+
+    async def set_feeding_command_enabled(self, enabled: bool) -> None:
+        """设置 /投喂 命令的全局开关。"""
+        await self.db_manager.set_global_setting(
+            "feeding_command_enabled", str(bool(enabled))
+        )
+
+    # --- Reply Delay Settings ---
+
+    async def get_reply_delay(self) -> int:
+        """获取全局回复延迟（秒）。键不存在时默认 30。"""
+        value = await self.db_manager.get_global_setting("reply_delay_seconds")
+        if value is None:
+            return 30
+        try:
+            return max(0, int(value))
+        except (ValueError, TypeError):
+            return 30
+
+    async def set_reply_delay(self, seconds: int) -> None:
+        """设置全局回复延迟（秒）。"""
+        await self.db_manager.set_global_setting(
+            "reply_delay_seconds", str(int(seconds))
+        )
 
     # --- Model Parameters Settings ---
 
