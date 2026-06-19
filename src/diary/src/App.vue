@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import gsap from 'gsap'
 import type { Expression, ChapterMood, Diary, DiaryEntry } from './types'
 import { setupChildBridge } from './child-bridge'
@@ -106,6 +106,41 @@ async function fetchUserInfo() {
 
 async function fetchDiary() {
   diary.value = await apiCall('/api/diary', 'GET')
+}
+
+// ---------------------------------------------------------------------------
+// 自适应缩放：日记按 1280×720 设计，等比缩放铺满 #app（手机/桌面通用）
+// ---------------------------------------------------------------------------
+const DESIGN_W = 1280
+const DESIGN_H = 720
+
+function updateDiaryScale() {
+  const el = document.getElementById('app')
+  if (!el) return
+  const s = Math.min(el.clientWidth / DESIGN_W, el.clientHeight / DESIGN_H)
+  document.documentElement.style.setProperty('--diary-scale', String(s))
+}
+
+let scaleResizeObserver: ResizeObserver | null = null
+
+function setupScale() {
+  updateDiaryScale()
+  window.addEventListener('resize', updateDiaryScale)
+  window.addEventListener('orientationchange', updateDiaryScale)
+  const el = document.getElementById('app')
+  if (el && 'ResizeObserver' in window) {
+    scaleResizeObserver = new ResizeObserver(updateDiaryScale)
+    scaleResizeObserver.observe(el)
+  }
+}
+
+function teardownScale() {
+  window.removeEventListener('resize', updateDiaryScale)
+  window.removeEventListener('orientationchange', updateDiaryScale)
+  if (scaleResizeObserver) {
+    scaleResizeObserver.disconnect()
+    scaleResizeObserver = null
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +339,12 @@ async function main() {
   }
 }
 
-onMounted(main)
+onMounted(() => {
+  setupScale()
+  main()
+})
+
+onUnmounted(teardownScale)
 </script>
 
 <template>
@@ -538,7 +578,12 @@ onMounted(main)
 
 .diary-stage {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%) scale(var(--diary-scale, 1));
+  transform-origin: center center;
 }
 
 /* 日期戳 */
