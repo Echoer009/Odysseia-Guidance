@@ -117,6 +117,25 @@ services:
     depends_on:
       - db
 
+  diary_web:
+    image: echoni0n/braingirl:latest
+    container_name: ${INSTANCE_NAME:-odysseia}_web_diary
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    expose:
+      - "8003"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.diary.app:app --host 0.0.0.0 --port 8003
+    depends_on:
+      - db
+
   # Caddy 反向代理 - 提供 HTTPS
   caddy:
     image: caddy:latest
@@ -134,6 +153,7 @@ services:
       - blackjack_web
       - guidance_web
       - lobby_web
+      - diary_web
 
   #  config_web:
   #    build:

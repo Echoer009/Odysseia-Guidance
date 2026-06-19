@@ -22,6 +22,7 @@ from .components.shop_components import (
     EventButton,
     KnowledgeBaseButton,
     DailyReportButton,
+    DiaryButton,
     ChatGuidelinesButton,
     ToolListButton,
     FeedbackButton,
@@ -84,6 +85,7 @@ class SimpleShopView(discord.ui.View):
         self.add_item(SellBodyButton())
         self.add_item(LeaderboardButton())
         self.add_item(DailyReportButton())
+        self.add_item(DiaryButton())
 
         # --- 动态添加按钮 ---
         if self.shop_data.active_event:

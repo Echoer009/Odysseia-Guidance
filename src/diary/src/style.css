@@ -1,0 +1,90 @@
+:root {
+  /* 纸质/日记主题 */
+  --paper: #f6f1e7;
+  --paper-deep: #efe7d6;
+  --ink: #2b2620;
+  --ink-soft: #6b5f51;
+  --ink-muted: #a99c89;
+  --accent: #b5462d;
+  --accent-soft: #d98a4e;
+  --gold: #c08a3e;
+  --line: rgba(43, 38, 32, 0.12);
+  --card: rgba(255, 252, 244, 0.96);
+
+  --shadow-normal: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 6px 24px rgba(0, 0, 0, 0.12);
+
+  /* guidance 组件兼容别名 (CharacterSprite / DialogueBox 直接复用) */
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-muted: var(--ink-muted);
+  --accent-gold: var(--accent);
+  --border-color: var(--line);
+  --border-hover: rgba(43, 38, 32, 0.24);
+  --card-bg: var(--card);
+  --card-bg-solid: #fffdf7;
+  --radius-dialog: 4px;
+  --radius-card: 4px;
+  --radius-button: 4px;
+  --bg-image: none;
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.serif {
+  font-family: 'Noto Serif SC', 'Noto Sans SC', serif;
+}
+
+.hand {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: none;
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}

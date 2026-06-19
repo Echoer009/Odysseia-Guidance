@@ -141,6 +141,53 @@ class DailyReportButton(ShopButton["SimpleShopView"]):
         await interaction.response.edit_message(embeds=[embed], view=daily_view)
 
 
+class DiaryButton(ShopButton["SimpleShopView"]):
+    """翻开类脑娘日记 Activity 的按钮。"""
+
+    def __init__(self):
+        super().__init__(
+            label="偷看日记", style=discord.ButtonStyle.primary, emoji="📖"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        from src.chat.features.diary.cogs.diary_cog import DIARY_APPLICATION_ID
+
+        if DIARY_APPLICATION_ID == 0:
+            await interaction.response.send_message(
+                "日记功能暂时不可用，请稍后再试。", ephemeral=True
+            )
+            return
+        try:
+            await chat_db_manager.set_global_setting(
+                f"user_intent:{interaction.user.id}", "diary"
+            )
+            await interaction.response.launch_activity()
+            log.info(
+                f"Launched diary activity (from shop) for user {interaction.user.id}"
+            )
+        except discord.InteractionResponded:
+            log.warning(
+                f"Interaction already responded for user {interaction.user.id}"
+            )
+        except discord.errors.NotFound as e:
+            log.error(f"NotFound launching diary for {interaction.user.id}: {e}")
+            try:
+                await interaction.followup.send(
+                    "启动日记失败，请检查网络或稍后再试。", ephemeral=True
+                )
+            except discord.errors.NotFound:
+                pass
+        except Exception as e:
+            log.error(f"Error launching diary for {interaction.user.id}: {e}")
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "启动日记时遇到错误，请稍后再试。", ephemeral=True
+                    )
+                except discord.errors.NotFound:
+                    pass
+
+
 # --- 借贷UI组件 ---
 
 

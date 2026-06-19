@@ -14,3 +14,8 @@ guidance.echonion.org {
     uri strip_prefix /guidance
     reverse_proxy guidance_web:8001
 }
+
+diary.echonion.org {
+    uri strip_prefix /diary
+    reverse_proxy diary_web:8003
+}
