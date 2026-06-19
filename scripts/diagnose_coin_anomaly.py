@@ -115,6 +115,7 @@ async def delete_one(tx_id: int, execute: bool):
     mode = "🔧 执行" if execute else "👁️ DRY-RUN（未写库，加 --execute 真正执行）"
     print(f"\n{mode}：删除流水 ID = {tx_id}\n")
 
+    # --- 预览（只读，独立 session；执行查询会隐式开启事务，故与写库分开）---
     async with AsyncSessionLocal() as session:
         tx = await session.get(CoinTransaction, tx_id)
         if not tx:
@@ -139,8 +140,9 @@ async def delete_one(tx_id: int, execute: bool):
             print("\n（这是预览。确认无误后加 --execute 真正删除并回滚余额。）")
             return
 
+    # --- 执行（新 session，写操作整体放在 begin 事务内）---
+    async with AsyncSessionLocal() as session:
         async with session.begin():
-            # 重新在事务内锁定并读取，避免脏写
             tx = await session.get(CoinTransaction, tx_id)
             if not tx:
                 print("❌ 事务内找不到该流水，可能已被删除，已取消。")
@@ -155,8 +157,9 @@ async def delete_one(tx_id: int, execute: bool):
             if uc_row is None:
                 print("⚠️ 该用户没有 user_coins 记录，仅删除流水，不调整余额。")
             else:
+                before = uc_row.balance
                 uc_row.balance -= tx.amount
-                print(f"✅ 已回滚余额：{fmt(uc_row.balance + tx.amount)} -> {fmt(uc_row.balance)}")
+                print(f"✅ 已回滚余额：{fmt(before)} -> {fmt(uc_row.balance)}")
             await session.delete(tx)
         print(f"✅ 已删除流水 ID = {tx_id}")
 
@@ -168,10 +171,13 @@ async def delete_above(user_id: int, min_amount: int, execute: bool):
     mode = "🔧 执行" if execute else "👁️ DRY-RUN（未写库，加 --execute 真正执行）"
     print(f"\n{mode}：删除用户 {user_id} 所有 |amount| >= {fmt(min_amount)} 的流水\n")
 
+    uid = str(user_id)
+
+    # --- 预览（只读，独立 session）---
     async with AsyncSessionLocal() as session:
         q = (
             select(CoinTransaction)
-            .where(CoinTransaction.user_id == str(user_id))
+            .where(CoinTransaction.user_id == uid)
             .where(func.abs(CoinTransaction.amount) >= min_amount)
             .order_by(desc(func.abs(CoinTransaction.amount)))
         )
@@ -182,7 +188,7 @@ async def delete_above(user_id: int, min_amount: int, execute: bool):
             return
 
         total_amount = sum(tx.amount for tx in rows)
-        bal = await get_balance(session, str(user_id))
+        bal = await get_balance(session, uid)
         new_bal = (bal or 0) - total_amount
 
         print(f"  命中 {len(rows)} 条流水，合计金额 = {fmt(total_amount)}")
@@ -198,11 +204,23 @@ async def delete_above(user_id: int, min_amount: int, execute: bool):
             print("\n（这是预览。确认无误后加 --execute 真正删除并回滚余额。）")
             return
 
+    # --- 执行（新 session，写操作整体放在 begin 事务内）---
+    async with AsyncSessionLocal() as session:
         async with session.begin():
+            q = (
+                select(CoinTransaction)
+                .where(CoinTransaction.user_id == uid)
+                .where(func.abs(CoinTransaction.amount) >= min_amount)
+            )
+            rows = (await session.execute(q)).scalars().all()
+            if not rows:
+                print("（事务内未找到符合条件的流水，已取消。）")
+                return
+            total_amount = sum(tx.amount for tx in rows)
             uc_row = (
                 await session.execute(
                     select(UserCoins)
-                    .where(UserCoins.user_id == str(user_id))
+                    .where(UserCoins.user_id == uid)
                     .with_for_update()
                 )
             ).scalar_one_or_none()
