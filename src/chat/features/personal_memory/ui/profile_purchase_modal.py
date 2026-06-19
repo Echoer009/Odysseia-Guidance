@@ -8,35 +8,35 @@ from src.chat.services.submission_service import submission_service
 log = logging.getLogger(__name__)
 
 
-class PersonalProfilePurchaseModal(discord.ui.Modal, title="创建或更新你的个人名片"):
+class PersonalProfilePurchaseModal(discord.ui.Modal, title="📝 创建或更新名片~这个会发到公屏让大家审核哦!"):
     def __init__(self, purchase_info: Dict[str, Any]):
         super().__init__(timeout=300)
         self.purchase_info = purchase_info
 
         self.name = discord.ui.TextInput(
             label="名称",
-            placeholder="请输入你的角色名称",
+            placeholder="你的名称或昵称（填写后将发到公屏让大家审核）",
             required=True,
             style=discord.TextStyle.short,
             max_length=50,
         )
         self.personality = discord.ui.TextInput(
             label="性格特点",
-            placeholder="用几个词描述你的性格，例如：热情、勇敢、有点内向",
+            placeholder="描述你的性格，如热情、勇敢…（这些内容大家都能看到哦）",
             required=True,
             style=discord.TextStyle.paragraph,
             max_length=1000,
         )
         self.background = discord.ui.TextInput(
             label="背景信息 (可选)",
-            placeholder="可以简单介绍一下你的背景故事",
+            placeholder="简单介绍背景故事（会公开展示给社区成员）",
             required=False,
             style=discord.TextStyle.paragraph,
             max_length=1500,
         )
         self.preferences = discord.ui.TextInput(
             label="喜好偏好 (可选)",
-            placeholder="你喜欢什么？讨厌什么？",
+            placeholder="喜欢/讨厌什么？（会公开展示给社区成员）",
             required=False,
             style=discord.TextStyle.paragraph,
             max_length=1000,

@@ -312,7 +312,7 @@ class SubmissionService:
             f"已为用户 {interaction.user.id} 的个人档案 (pending_id: {pending_id}) 创建审核任务。"
         )
 
-        return True, "✅ 你的名片已成功提交审核！审核通过后将自动生效。"
+        return True, "✅ 你的名片已成功提交审核！\n请关注频道内的公开投票，审核通过后将自动生效。"
 
     async def submit_work_event(
         self,
