@@ -88,3 +88,17 @@ img {
   height: 100%;
   overflow: hidden;
 }
+
+/* 强制横屏：触屏设备竖屏时，把整个应用顺时针旋转 90° 显示为横屏。
+   日记内容是按横屏布局设计的（左侧对话 + 右侧照片墙），竖屏下会挤变形。 */
+@media screen and (orientation: portrait) and (pointer: coarse) {
+  #app {
+    position: fixed;
+    top: 0;
+    left: 100%;
+    width: 100vh;
+    height: 100vw;
+    transform: rotate(90deg);
+    transform-origin: top left;
+  }
+}
