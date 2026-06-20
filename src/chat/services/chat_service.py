@@ -309,18 +309,16 @@ class ChatService:
                 recent_chat_history=recent_chat_history,
             )
 
-            # Stage 1：极简工具路由提示（无人设、无世界书、无好感度）
+            # Stage 1：极简工具路由提示（无人设、无世界书、无好感度、无历史，最大化缓存命中）
             stage1_messages: Optional[List[Dict[str, Any]]] = None
             if two_stage_on:
                 stage1_messages = [
                     {
                         "role": "system",
                         "content": chat_config.TOOL_ROUTER_SYSTEM_PROMPT,
-                    }
+                    },
+                    {"role": "user", "content": user_content},
                 ]
-                if recent_chat_history:
-                    stage1_messages.extend(recent_chat_history)
-                stage1_messages.append({"role": "user", "content": user_content})
 
             # 获取工具列表（根据 Provider 类型返回对应格式）
             tools = await ai_service.tool_service.get_dynamic_tools_for_context(
