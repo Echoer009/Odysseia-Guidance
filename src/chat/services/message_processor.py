@@ -24,6 +24,20 @@ log = logging.getLogger(__name__)
 # <a:emoji_name:emoji_id> (动态) 或 <:emoji_name:emoji_id> (静态)
 EMOJI_REGEX = re.compile(r"<a?:(\w+):(\d+)>")
 
+# FakeNitro sticker link format:
+# [name](https://media.discordapp.net/stickers/ID.ext?...) or bare sticker URL.
+FAKENITRO_STICKER_REGEX = re.compile(
+    r"\[([^\]]+)\]\((https://media\.discordapp\.net/stickers/(\d+)\.(?:png|gif|webp)(?:\?[^\)]*)?)\)"
+    r"|(https://media\.discordapp\.net/stickers/(\d+)\.(?:png|gif|webp)(?:\?[^\s<>\)]*)?)"
+)
+
+# FakeNitro emoji link format:
+# [name](https://cdn.discordapp.com/emojis/ID.ext?...) or bare emoji URL.
+FAKENITRO_EMOJI_REGEX = re.compile(
+    r"\[([^\]]+)\]\((https://cdn\.discordapp\.com/emojis/(\d+)\.(?:png|gif|webp)(?:\?[^\)]*)?)\)"
+    r"|(https://cdn\.discordapp\.com/emojis/(\d+)\.(?:png|gif|webp)(?:\?[^\s<>\)]*)?)"
+)
+
 
 def detect_bot_location(channel: Any) -> Dict[str, Any]:
     """
@@ -74,6 +88,14 @@ class MessageProcessor:
     负责处理和解析 discord.Message 对象，提取用于 AI 对话所需的信息。
     """
 
+    def _get_gif_size_limit_bytes(self, source: str = "generic") -> int:
+        image_cfg = chat_config.IMAGE_PROCESSING_CONFIG
+        if source == "emoji":
+            max_mb = float(image_cfg.get("MAX_ANIMATED_EMOJI_SIZE_MB", 2))
+        else:
+            max_mb = float(image_cfg.get("MAX_GIF_SIZE_MB", 8))
+        return int(max_mb * 1024 * 1024)
+
     async def _fetch_image_aio(
         self, session: aiohttp.ClientSession, url: str, proxy: Optional[str] = None
     ) -> Optional[bytes]:
@@ -97,6 +119,18 @@ class MessageProcessor:
         except aiohttp.ClientError as e:
             log.warning(f"下载表情图片失败: {url}, 错误: {e}")
             return None
+
+    def _guess_mime_type_from_url(self, url: str) -> str:
+        lowered = (url or "").lower().split("?", 1)[0]
+        if lowered.endswith(".png"):
+            return "image/png"
+        if lowered.endswith(".jpg") or lowered.endswith(".jpeg"):
+            return "image/jpeg"
+        if lowered.endswith(".webp"):
+            return "image/webp"
+        if lowered.endswith(".gif"):
+            return "image/gif"
+        return "image/png"
 
     async def _extract_emojis_as_images(
         self, content: str
@@ -191,6 +225,124 @@ class MessageProcessor:
                     log.warning(f"无法下载贴纸图片: {sticker.name}")
 
         return " ".join(sticker_texts), sticker_images
+
+    async def _extract_fakenitro_stickers_from_text(
+        self, content: str
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        sticker_images = []
+        matches = list(FAKENITRO_STICKER_REGEX.finditer(content))
+
+        if not matches:
+            return content, []
+
+        proxy_url = config.PROXY_URL
+        modified_content = content
+
+        async with aiohttp.ClientSession() as session:
+            for match in matches:
+                sticker_name = match.group(1) or f"sticker_{match.group(5)}"
+                sticker_url = match.group(2) or match.group(4)
+
+                image_bytes = await self._fetch_image_aio(
+                    session, sticker_url, proxy=proxy_url
+                )
+
+                if image_bytes:
+                    mime_type = self._guess_mime_type_from_url(sticker_url)
+                    too_large = False
+
+                    if mime_type == "image/gif":
+                        max_gif_size_bytes = self._get_gif_size_limit_bytes(
+                            source="generic"
+                        )
+                        if len(image_bytes) > max_gif_size_bytes:
+                            too_large = True
+                            log.warning(
+                                "FakeNitro sticker GIF skipped, too large: %s (%s bytes > %s bytes)",
+                                sticker_name,
+                                len(image_bytes),
+                                max_gif_size_bytes,
+                            )
+
+                    if not too_large:
+                        sticker_images.append(
+                            {
+                                "mime_type": mime_type,
+                                "data": image_bytes,
+                                "source": "sticker",
+                                "name": sticker_name,
+                                "origin": "fakenitro",
+                            }
+                        )
+                        log.debug(f"成功提取FakeNitro贴纸: {sticker_name}")
+                else:
+                    log.warning(f"无法下载FakeNitro贴纸图片: {sticker_name}")
+
+                modified_content = modified_content.replace(
+                    match.group(0), f"[贴纸: {sticker_name}]", 1
+                )
+
+        return modified_content, sticker_images
+
+    async def _extract_fakenitro_emojis_from_text(
+        self, content: str
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        emoji_images = []
+        matches = list(FAKENITRO_EMOJI_REGEX.finditer(content))
+
+        if not matches:
+            return content, []
+
+        proxy_url = config.PROXY_URL
+        modified_content = content
+
+        async with aiohttp.ClientSession() as session:
+            for match in matches:
+                emoji_name = match.group(1) or f"emoji_{match.group(5)}"
+                emoji_url = match.group(2) or match.group(4)
+
+                image_bytes = await self._fetch_image_aio(
+                    session, emoji_url, proxy=proxy_url
+                )
+
+                if image_bytes:
+                    mime_type = self._guess_mime_type_from_url(emoji_url)
+                    too_large = False
+
+                    if mime_type == "image/gif":
+                        max_emoji_size = self._get_gif_size_limit_bytes(source="emoji")
+                        if len(image_bytes) > max_emoji_size:
+                            too_large = True
+                            log.warning(
+                                "FakeNitro emoji GIF skipped, too large: %s (%s bytes > %s bytes)",
+                                emoji_name,
+                                len(image_bytes),
+                                max_emoji_size,
+                            )
+
+                    if too_large:
+                        replacement = f"[表情: {emoji_name}]"
+                    else:
+                        emoji_images.append(
+                            {
+                                "mime_type": mime_type,
+                                "data": image_bytes,
+                                "source": "emoji",
+                                "name": emoji_name,
+                                "origin": "fakenitro",
+                            }
+                        )
+                        log.debug(f"成功提取FakeNitro表情: {emoji_name}")
+                        replacement = f"__EMOJI_{emoji_name}__"
+                else:
+                    log.warning(f"无法下载FakeNitro表情图片: {emoji_name}")
+                    replacement = f"[表情: {emoji_name}]"
+
+                modified_content = modified_content.replace(
+                    match.group(0), replacement, 1
+                )
+
+        return modified_content, emoji_images
 
     async def process_message(
         self, message: discord.Message, bot: discord.Client
@@ -339,6 +491,15 @@ class MessageProcessor:
                             ref_msg.content, ref_msg.mentions, bot_user
                         )
 
+                        ref_content_processed, ref_emoji_images = await self._extract_fakenitro_emojis_from_text(
+                            ref_content_cleaned
+                        )
+                        image_data_list.extend(ref_emoji_images)
+                        ref_content_processed, ref_sticker_images = await self._extract_fakenitro_stickers_from_text(
+                            ref_content_processed
+                        )
+                        image_data_list.extend(ref_sticker_images)
+
                         # 处理被回复消息中的贴纸（在生成引用内容之前）
                         ref_sticker_text = ""
                         if ref_msg.stickers:
@@ -349,7 +510,7 @@ class MessageProcessor:
                             image_data_list.extend(ref_sticker_images)
 
                         full_ref_content = [
-                            ref for ref in [ref_content_cleaned, embed_content] if ref
+                            ref for ref in [ref_content_processed, embed_content] if ref
                         ]
                         combined_content = "\n".join(full_ref_content).strip()
 
@@ -407,6 +568,16 @@ class MessageProcessor:
             message.content
         )
         image_data_list.extend(emoji_images)
+
+        content_with_placeholders, fakenitro_emoji_images = await self._extract_fakenitro_emojis_from_text(
+            content_with_placeholders
+        )
+        image_data_list.extend(fakenitro_emoji_images)
+
+        content_with_placeholders, fakenitro_sticker_images = await self._extract_fakenitro_stickers_from_text(
+            content_with_placeholders
+        )
+        image_data_list.extend(fakenitro_sticker_images)
 
         # 提取贴纸图片
         sticker_text, sticker_images = await self._extract_stickers_as_images(message)
