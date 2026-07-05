@@ -131,6 +131,7 @@ class GuidanceCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._guidance_message_id: int | None = None
+        self._guidance_url: str | None = None
         self._pending_dm: set[int] = set()
 
     async def cog_load(self):
@@ -140,6 +141,10 @@ class GuidanceCog(commands.Cog):
         if raw:
             self._guidance_message_id = int(raw)
             log.info(f"Loaded cached guidance_message_id: {self._guidance_message_id}")
+        url = await chat_db_manager.get_global_setting("guidance_url")
+        if url:
+            self._guidance_url = url
+            log.info(f"Loaded cached guidance_url: {self._guidance_url}")
 
     async def _ensure_channel_message(self):
         if GUIDANCE_CHANNEL_ID == 0 or GUILD_ID == 0:
@@ -189,12 +194,11 @@ class GuidanceCog(commands.Cog):
         )
         await chat_db_manager.set_global_setting("guidance_message_id", str(msg.id))
         await chat_db_manager.set_global_setting("guidance_url", guidance_url)
+        self._guidance_url = guidance_url
         log.info(f"Sent guidance channel message: {msg.id}, url: {guidance_url}")
 
     def _get_guidance_jump_url(self) -> str | None:
-        if not self._guidance_message_id or GUILD_ID == 0 or GUIDANCE_CHANNEL_ID == 0:
-            return None
-        return f"https://discord.com/channels/{GUILD_ID}/{GUIDANCE_CHANNEL_ID}/{self._guidance_message_id}"
+        return self._guidance_url
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
