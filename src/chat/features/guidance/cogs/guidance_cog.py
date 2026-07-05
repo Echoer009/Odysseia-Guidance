@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import asyncio
+
 import discord
 from discord.ext import commands
 import logging
@@ -15,6 +17,7 @@ log = logging.getLogger(__name__)
 GUIDANCE_APPLICATION_ID = int(os.getenv("VITE_DISCORD_CLIENT_ID") or "0")
 GUIDANCE_TRIGGER_ROLE_ID = int(os.getenv("GUIDANCE_TRIGGER_ROLE_ID") or "0")
 GUIDANCE_CHANNEL_ID = int(os.getenv("GUIDANCE_CHANNEL_ID") or "0")
+GUIDANCE_DM_DELAY_SECONDS = int(os.getenv("GUIDANCE_DM_DELAY_SECONDS") or "120")
 
 WELCOME_EMBED_COLOR = 0xF39C12
 
@@ -128,6 +131,7 @@ class GuidanceCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._guidance_message_id: int | None = None
+        self._pending_dm: set[int] = set()
 
     async def cog_load(self):
         from src.chat.utils.database import chat_db_manager
@@ -210,6 +214,31 @@ class GuidanceCog(commands.Cog):
         if before_had or not after_has:
             return
 
+        if after.id in self._pending_dm:
+            log.info(f"DM already pending for {after.id}, skip duplicate trigger.")
+            return
+        self._pending_dm.add(after.id)
+        asyncio.create_task(self._delayed_send(after.id))
+        log.info(
+            f"Scheduled guidance welcome DM for {after.id} "
+            f"in {GUIDANCE_DM_DELAY_SECONDS}s (role trigger)."
+        )
+
+    async def _delayed_send(self, user_id: int) -> None:
+        try:
+            await asyncio.sleep(GUIDANCE_DM_DELAY_SECONDS)
+        finally:
+            self._pending_dm.discard(user_id)
+
+        try:
+            user = await self.bot.fetch_user(user_id)
+        except discord.NotFound:
+            log.warning(f"User {user_id} not found, skip guidance DM.")
+            return
+        except Exception as e:
+            log.error(f"Failed to fetch user {user_id}: {e}")
+            return
+
         try:
             embed = build_dm_embed()
             jump_url = self._get_guidance_jump_url()
@@ -224,16 +253,16 @@ class GuidanceCog(commands.Cog):
                         url=jump_url,
                     )
                 )
-                await after.send(embed=embed, view=view)
+                await user.send(embed=embed, view=view)
             else:
                 fallback_view = ChannelActivityView()
-                await after.send(embed=embed, view=fallback_view)
+                await user.send(embed=embed, view=fallback_view)
 
-            log.info(f"Sent guidance welcome DM to {after.id} ({after.display_name})")
+            log.info(f"Sent guidance welcome DM to {user_id} ({user.display_name})")
         except discord.errors.Forbidden:
-            log.warning(f"Cannot send DM to {after.id}, skipping guidance welcome.")
+            log.warning(f"Cannot send DM to {user_id}, skipping guidance welcome.")
         except Exception as e:
-            log.error(f"Failed to send guidance welcome to {after.id}: {e}")
+            log.error(f"Failed to send guidance welcome to {user_id}: {e}")
 
     @commands.Cog.listener()
     async def on_ready(self):

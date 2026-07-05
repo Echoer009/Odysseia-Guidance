@@ -312,10 +312,12 @@ class GeminiProvider(BaseProvider):
             )
 
         except Exception as e:
-            log.error(f"Gemini 生成错误: {e}", exc_info=True)
+            # TimeoutError/CancelledError 等异常的 str() 为空，补上类型名避免空日志
+            err_desc = f"{type(e).__name__}: {e}"
+            log.error(f"Gemini 生成错误: {err_desc}", exc_info=True)
             await self.release_client(api_key, success=False, failure_penalty=10)
             raise GenerationError(
-                f"Gemini 生成错误: {e}",
+                f"Gemini 生成错误: {err_desc}",
                 provider_type=self.provider_type,
                 original_error=e,
             )
