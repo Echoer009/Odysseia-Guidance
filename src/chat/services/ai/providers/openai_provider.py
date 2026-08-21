@@ -466,6 +466,27 @@ class OpenAICompatibleProvider(BaseProvider):
                     elif isinstance(item, dict):
                         if item.get("type") == "text":
                             text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image":
+                            # 处理内部格式 image_bytes（投喂等功能使用），转为 base64 data URL
+                            image_bytes = item.get("image_bytes")
+                            if image_bytes:
+                                try:
+                                    import base64
+
+                                    mime_type = item.get("mime_type", "image/png")
+                                    b64_data = base64.b64encode(image_bytes).decode(
+                                        "utf-8"
+                                    )
+                                    image_parts.append(
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": f"data:{mime_type};base64,{b64_data}"
+                                            },
+                                        }
+                                    )
+                                except Exception as e:
+                                    log.error(f"处理 image_bytes 图片失败: {e}")
                         elif item.get("type") == "image_url":
                             # 保留图片（OpenAI 多模态格式），由 prompt_service 预转成 base64 data URL
                             image_parts.append(
