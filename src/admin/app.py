@@ -81,6 +81,11 @@ index_html_path = os.path.join(static_files_path, "index.html")
 async def spa_fallback(full_path: str):
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.normpath(
+        os.path.join(static_files_path, full_path.lstrip("/"))
+    )
+    if candidate.startswith(static_files_path) and os.path.isfile(candidate):
+        return FileResponse(candidate)
     if os.path.isfile(index_html_path):
         return FileResponse(index_html_path)
     raise HTTPException(status_code=404, detail="Not Found")
