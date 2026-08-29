@@ -29,7 +29,6 @@ app = FastAPI(title="Odysseia Diary", version="1.0.0")
 log = logging.getLogger(__name__)
 
 auth_scheme = HTTPBearer(auto_error=False)
-TEST_USER_ID = 999999999999999999
 
 
 @app.on_event("startup")
@@ -66,8 +65,7 @@ async def get_current_user_id(
     token: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme),
 ) -> int:
     if token is None:
-        log.warning(f"未找到认证Token。回退到测试用户ID: {TEST_USER_ID}")
-        return TEST_USER_ID
+        raise HTTPException(status_code=401, detail="Missing authentication token")
 
     headers = {"Authorization": f"Bearer {token.credentials}"}
     async with httpx.AsyncClient() as client:
@@ -148,12 +146,9 @@ async def _get_guild_nickname(user_id: int) -> Optional[str]:
 @app.get("/api/user")
 async def get_user_info(user_id: int = Depends(get_current_user_id)):
     username = None
-    if user_id == TEST_USER_ID:
-        username = f"旅行者_{user_id % 10000}"
-    else:
-        nickname = await _get_guild_nickname(user_id)
-        if nickname:
-            username = nickname
+    nickname = await _get_guild_nickname(user_id)
+    if nickname:
+        username = nickname
     return JSONResponse(content={"user_id": str(user_id), "username": username})
 
 

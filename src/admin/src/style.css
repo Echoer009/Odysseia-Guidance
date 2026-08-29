@@ -1,0 +1,85 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background-color: #101014;
+}
+
+.page-card + .page-card {
+  margin-top: 16px;
+}
+
+.feedback-expand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.feedback-expand-label {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.feedback-expand pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.n-input.mono .n-input__textarea-el {
+  font-family: Consolas, 'JetBrains Mono', 'Courier New', monospace;
+}
+
+.json-pre {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.cell-json {
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.55);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.n-layout-sider ::-webkit-scrollbar,
+.n-layout-sider ::-webkit-scrollbar-thumb {
+  width: 0;
+  height: 0;
+  display: none;
+}

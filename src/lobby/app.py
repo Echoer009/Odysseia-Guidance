@@ -16,7 +16,6 @@ app = FastAPI(title="Odysseia Lobby", version="1.0.0")
 log = logging.getLogger(__name__)
 
 auth_scheme = HTTPBearer(auto_error=False)
-TEST_USER_ID = 999999999999999999
 
 
 @app.on_event("startup")
@@ -45,7 +44,7 @@ async def get_current_user_id(
     token: Optional[HTTPAuthorizationCredentials],
 ) -> Optional[int]:
     if token is None:
-        return None
+        raise HTTPException(status_code=401, detail="Missing authentication token")
     headers = {"Authorization": f"Bearer {token.credentials}"}
     async with httpx.AsyncClient() as client:
         try:

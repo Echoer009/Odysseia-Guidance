@@ -11,6 +11,7 @@ from src.chat.features.affection.service.feeding_service import feeding_service
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
 from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.prompt_service import prompt_service
 from src.chat.services.event_service import event_service
 from src.chat.services.gpt_image_service import gpt_image_service
@@ -208,9 +209,14 @@ class FeedingCog(commands.Cog):
                     f"投喂图片预压缩: {original_size} -> {len(image_bytes)} bytes"
                 )
 
-            system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
+            system_prompt = await prompt_service.get_prompt_async(
+                "SYSTEM_PROMPT"
+            ) or ""
             persona_part = extract_persona_prompt(system_prompt)
-            base_prompt = PROMPT_CONFIG.get("feeding_prompt", "")
+            base_prompt = await config_override_service.get(
+                "feature.feeding_prompt",
+                PROMPT_CONFIG.get("feeding_prompt", ""),
+            )
             prompt = f"{persona_part}\n\n{base_prompt}"
 
             config = GenerationConfig(
@@ -296,9 +302,12 @@ class FeedingCog(commands.Cog):
             file = discord.File(fp=io.BytesIO(image_bytes), filename=image.filename)
             embed.set_thumbnail(url=f"attachment://{image.filename}")
 
+            unrestricted_ids = await config_override_service.get_json(
+                "channels.unrestricted_ids", chat_config.UNRESTRICTED_CHANNEL_IDS
+            )
             is_unrestricted = (
                 interaction.channel
-                and interaction.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
+                and interaction.channel.id in unrestricted_ids
                 or isinstance(interaction.channel, discord.Thread)
             )
 

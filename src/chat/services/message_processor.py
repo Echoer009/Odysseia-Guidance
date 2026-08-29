@@ -12,6 +12,7 @@ from PIL import Image
 from src import config
 from src.config import BOT_NAME
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.utils.database import chat_db_manager
 
 _ATTACHMENT_IMAGE_MAX_BYTES = 1 * 1024 * 1024
@@ -365,7 +366,11 @@ class MessageProcessor:
             return None
 
         # 检查消息是否来自配置中禁用的频道
-        if message.channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+        disabled_ids = await config_override_service.get_json(
+            "channels.disabled_interaction_ids",
+            chat_config.DISABLED_INTERACTION_CHANNEL_IDS,
+        )
+        if message.channel.id in disabled_ids:
             channel_name = getattr(message.channel, "name", str(message.channel.id))
             log.debug(f"消息来自禁用的频道 {channel_name}，已忽略。")
             return None

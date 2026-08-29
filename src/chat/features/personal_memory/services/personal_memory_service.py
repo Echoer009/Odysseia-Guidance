@@ -9,6 +9,7 @@ from src.chat.config.chat_config import (
     PROMPT_CONFIG,
     CONVERSATION_MEMORY_CONFIG,
 )
+from src.chat.services.config_override_service import config_override_service
 from src.chat.features.personal_memory.services.conversation_block_service import (
     conversation_block_service,
 )
@@ -35,10 +36,13 @@ class PersonalMemoryService:
         Returns:
             bool: 是否创建了新的对话块
         """
-        if not CONVERSATION_MEMORY_CONFIG.get("enabled", True):
+        memory_cfg = await config_override_service.get_json(
+            "rag.conversation_memory.config", CONVERSATION_MEMORY_CONFIG
+        )
+        if not memory_cfg.get("enabled", True):
             return False
 
-        block_size = CONVERSATION_MEMORY_CONFIG.get("block_size", 10)
+        block_size = memory_cfg.get("block_size", 10)
 
         try:
             async with AsyncSessionLocal() as session:

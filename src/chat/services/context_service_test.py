@@ -7,6 +7,7 @@ from discord.ext import commands
 import re
 from collections import OrderedDict
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 
 log = logging.getLogger(__name__)
 
@@ -30,13 +31,18 @@ class ContextServiceTest:
         channel_id: int,
         user_id: int,
         guild_id: int,
-        limit: int = chat_config.CHANNEL_MEMORY_CONFIG["formatted_history_limit"],
+        limit: Optional[int] = None,
         exclude_message_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         获取结构化的频道对话历史。
-        此方法将历史消息与用户的最新消息分离，以引导模型只回复最新内容。
+        此方法将用户的最新消息分离，以引导模型只回复最新内容。
         """
+        if limit is None:
+            channel_memory_cfg = await config_override_service.get_json(
+                "rag.channel_memory.config", chat_config.CHANNEL_MEMORY_CONFIG
+            )
+            limit = int(channel_memory_cfg.get("formatted_history_limit", 35))
         if not self.bot:
             log.error("ContextServiceTest 的 bot 实例未设置，无法获取频道消息历史。")
             return []

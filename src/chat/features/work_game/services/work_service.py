@@ -1,7 +1,8 @@
 import random
 from datetime import datetime, timedelta, timezone
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
-from ..config.work_config import WorkConfig
+from src.chat.services.config_override_service import config_override_service
+from ..config.work_config import WORK_CONFIG_DEFAULT
 from .work_db_service import WorkDBService
 from src.chat.utils.time_utils import format_time_delta
 from src.config import DEVELOPER_USER_IDS, CURRENCY_NAME
@@ -38,7 +39,10 @@ class WorkService:
                     last_work_time_naive = last_work_timestamp_value
 
                 last_work_time = last_work_time_naive.replace(tzinfo=timezone.utc)
-                cooldown = timedelta(hours=WorkConfig.COOLDOWN_HOURS)
+                wc = await config_override_service.get_json(
+                    "economy.work.config", WORK_CONFIG_DEFAULT
+                )
+                cooldown = timedelta(hours=wc["cooldown_hours"])
                 if datetime.now(timezone.utc) - last_work_time < cooldown:
                     remaining = cooldown - (datetime.now(timezone.utc) - last_work_time)
                     return f"你刚打完一份工，正在休息呢。请在 **{format_time_delta(remaining)}** 后再来吧！"
@@ -95,9 +99,12 @@ class WorkService:
 
         # 7. 如果达成全勤，添加奖励和消息
         if is_streak_achieved:
-            streak_reward = WorkConfig.STREAK_REWARD
+            wc = await config_override_service.get_json(
+                "economy.work.config", WORK_CONFIG_DEFAULT
+            )
+            streak_reward = wc["streak_reward"]
             total_reward += streak_reward
-            message += f"\n\n🎉 **全勤奖励！** 你已连续打工 **{WorkConfig.STREAK_DAYS}** 天，额外获得 **{streak_reward}** {CURRENCY_NAME}！"
+            message += f"\n\n🎉 **全勤奖励！** 你已连续打工 **{wc['streak_days']}** 天，额外获得 **{streak_reward}** {CURRENCY_NAME}！"
             message += "\n你的连续打工记录已重置，期待你再次达成！"
         else:
             message += f"\n\n*你已连续打工 **{new_streak_days}** 天。*"

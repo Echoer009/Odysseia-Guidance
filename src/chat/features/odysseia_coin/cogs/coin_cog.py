@@ -6,6 +6,7 @@ from discord.ext import commands
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.odysseia_coin.ui.shop_ui import SimpleShopView
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.features.odysseia_coin.service.shop_service import shop_service
 from src.config import CURRENCY_NAME
 
@@ -61,7 +62,10 @@ class CoinCog(commands.Cog):
 
             # 检查服务器是否在奖励列表中已由中央处理器完成，这里直接执行逻辑
             log.info(f"[CoinCog] 接收到新帖子进行奖励处理: {thread.name} ({thread.id})")
-            reward_amount = chat_config.COIN_CONFIG["FORUM_POST_REWARD"]
+            coin_cfg = await config_override_service.get_json(
+                "economy.coin.config", chat_config.COIN_CONFIG
+            )
+            reward_amount = coin_cfg["FORUM_POST_REWARD"]
             channel_name = thread.parent.name if thread.parent else "未知频道"
             reason = f"在频道 {channel_name} 发布新帖"
             new_balance = await coin_service.add_coins(author.id, reward_amount, reason)

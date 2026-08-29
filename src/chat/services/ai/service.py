@@ -31,6 +31,7 @@ from .providers import (
 from .config.providers import get_provider_configs, ProviderConfig, _get_provider_configs_from_env
 from .config.models import get_fallback_providers, get_model_config
 from src.chat.config.chat_config import PROVIDER_RETRY_CONFIG
+from src.chat.services.config_override_service import config_override_service
 from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
@@ -702,8 +703,11 @@ class AIService:
             GenerationError: 所有重试均失败时抛出
             Exception: 其他未预期的异常
         """
-        max_retries = PROVIDER_RETRY_CONFIG["MAX_RETRIES"]
-        retry_delay = PROVIDER_RETRY_CONFIG["RETRY_DELAY_SECONDS"]
+        retry_cfg = await config_override_service.get_json(
+            "ai.provider_retry_config", PROVIDER_RETRY_CONFIG
+        )
+        max_retries = retry_cfg["MAX_RETRIES"]
+        retry_delay = retry_cfg["RETRY_DELAY_SECONDS"]
         last_error: Optional[Exception] = None
 
         for attempt in range(max_retries + 1):
@@ -778,8 +782,11 @@ class AIService:
             GenerationError: 所有重试均失败时抛出
             Exception: 其他未预期的异常
         """
-        max_retries = PROVIDER_RETRY_CONFIG["MAX_RETRIES"]
-        retry_delay = PROVIDER_RETRY_CONFIG["RETRY_DELAY_SECONDS"]
+        retry_cfg = await config_override_service.get_json(
+            "ai.provider_retry_config", PROVIDER_RETRY_CONFIG
+        )
+        max_retries = retry_cfg["MAX_RETRIES"]
+        retry_delay = retry_cfg["RETRY_DELAY_SECONDS"]
         last_error: Optional[Exception] = None
 
         for attempt in range(max_retries + 1):

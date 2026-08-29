@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from src.chat.config.chat_config import COIN_CONFIG
+from src.chat.services.config_override_service import config_override_service
 from src.config import BOT_NAME, CURRENCY_NAME
 from ...affection.service.affection_service import affection_service
 from src.database.database import AsyncSessionLocal
@@ -129,7 +130,10 @@ class CoinService:
                     if last_daily_date >= today_beijing:
                         return False
 
-                reward_amount = COIN_CONFIG["DAILY_FIRST_CHAT_REWARD"]
+                coin_cfg = await config_override_service.get_json(
+                    "economy.coin.config", COIN_CONFIG
+                )
+                reward_amount = coin_cfg["DAILY_FIRST_CHAT_REWARD"]
                 if row:
                     row.balance += reward_amount
                     row.last_daily_message_date = today_str
@@ -577,7 +581,10 @@ class CoinService:
         if amount <= 0:
             return False, "❌ 借款金额必须是正数。"
 
-        max_loan = COIN_CONFIG["MAX_LOAN_AMOUNT"]
+        coin_cfg = await config_override_service.get_json(
+            "economy.coin.config", COIN_CONFIG
+        )
+        max_loan = coin_cfg["MAX_LOAN_AMOUNT"]
         if amount > max_loan:
             return False, f"❌ 单次最多只能借 {max_loan} {CURRENCY_NAME}。"
 

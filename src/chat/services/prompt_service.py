@@ -13,12 +13,38 @@ import discord
 from src.chat.config.prompts import PROMPT_CONFIG, PERSONA_VARIANTS
 from src.chat.config import chat_config
 from src.chat.services.ai.config.models import get_model_config, get_prompt_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.event_service import event_service
-from src.config import BOT_NAME
+from src.config import (
+    BOT_NAME,
+    BOT_SELF_INTRODUCTION,
+    COMMUNITY_NAME,
+    COMMUNITY_TYPE,
+    CURRENCY_NAME,
+    MASCOT_TITLE,
+    NICKNAME,
+)
 
 log = logging.getLogger(__name__)
 
 EMOJI_PLACEHOLDER_REGEX = re.compile(r"__EMOJI_(\w+)__")
+
+PROMPT_FIELD_SUFFIX = {
+    "SYSTEM_PROMPT": "system_prompt",
+    "JAILBREAK_USER_PROMPT": "jailbreak_user_prompt",
+    "JAILBREAK_MODEL_RESPONSE": "jailbreak_model_response",
+    "JAILBREAK_FINAL_INSTRUCTION": "jailbreak_final_instruction",
+}
+
+IDENTITY_FIELDS = (
+    ("bot_name", BOT_NAME),
+    ("community_name", COMMUNITY_NAME),
+    ("currency_name", CURRENCY_NAME),
+    ("mascot_title", MASCOT_TITLE),
+    ("nickname", NICKNAME),
+    ("community_type", COMMUNITY_TYPE),
+    ("bot_self_introduction", BOT_SELF_INTRODUCTION),
+)
 
 
 class PromptService:
@@ -164,6 +190,187 @@ class PromptService:
             return model_config[prompt_name]
         # 3. 否则，回退到默认配置
         return PROMPT_CONFIG.get("default", {}).get(prompt_name)
+
+    async def _get_effective_identity(self) -> Dict[str, str]:
+        identity = {}
+        for field, default in IDENTITY_FIELDS:
+            identity[field] = await config_override_service.get(
+                f"identity.{field}", default
+            )
+        return identity
+
+    def _apply_identity_overrides(
+        self, template: Optional[str], identity: Dict[str, str]
+    ) -> Optional[str]:
+        if not template:
+            return template
+        result = template
+        bot_name = identity.get("bot_name", "")
+        if bot_name and bot_name != BOT_NAME:
+            result = result.replace(BOT_NAME, bot_name)
+            result = result.replace("类脑娘", bot_name)
+        community_name = identity.get("community_name", "")
+        if community_name and community_name != COMMUNITY_NAME:
+            community_type = identity.get("community_type", "")
+            result = result.replace(COMMUNITY_NAME, community_name)
+            result = result.replace(
+                "类脑是一个nsfw的airp社区",
+                f"{community_name}是一个{community_type or 'airp'}社区",
+            )
+            result = result.replace("类脑社区", f"{community_name}社区")
+            result = result.replace("分裂类脑的人", f"分裂{community_name}的人")
+            result = result.replace("类脑是一个", f"{community_name}是一个")
+        mascot_title = identity.get("mascot_title", "")
+        if mascot_title and mascot_title != MASCOT_TITLE:
+            result = result.replace(MASCOT_TITLE, mascot_title)
+            result = result.replace("看板娘", mascot_title)
+        nickname = identity.get("nickname", "")
+        if nickname and nickname != NICKNAME:
+            result = result.replace("宝宝", nickname)
+        community_type = identity.get("community_type", "")
+        if community_type and community_type != COMMUNITY_TYPE:
+            result = result.replace("AIRP", community_type)
+        return result
+
+    async def _get_model_specific_prompt_async(
+        self, model_name: Optional[str], prompt_name: str
+    ) -> Optional[str]:
+        """
+        _get_model_specific_prompt 的异步版本。
+        优先级：模型参数配置中的自定义提示词 > 运行时覆盖 > PROMPT_CONFIG 中的模型特定提示词 > 默认提示词
+        """
+        # 1. 优先检查模型参数配置中的自定义提示词
+        if model_name:
+            prompt_config = get_prompt_config(model_name)
+            if prompt_name == "SYSTEM_PROMPT" and prompt_config.system_prompt:
+                log.debug(f"使用模型 {model_name} 的自定义系统提示词")
+                return prompt_config.system_prompt
+            elif (
+                prompt_name == "JAILBREAK_USER_PROMPT"
+                and prompt_config.jailbreak_user_prompt
+            ):
+                log.debug(f"使用模型 {model_name} 的自定义越狱用户提示词")
+                return prompt_config.jailbreak_user_prompt
+            elif (
+                prompt_name == "JAILBREAK_MODEL_RESPONSE"
+                and prompt_config.jailbreak_model_response
+            ):
+                log.debug(f"使用模型 {model_name} 的自定义越狱模型响应")
+                return prompt_config.jailbreak_model_response
+            elif (
+                prompt_name == "JAILBREAK_FINAL_INSTRUCTION"
+                and prompt_config.jailbreak_final_instruction
+            ):
+                log.debug(f"使用模型 {model_name} 的自定义最终指令")
+                return prompt_config.jailbreak_final_instruction
+
+        # 2. 检查运行时配置覆盖 (persona.<model_name>.<field> → persona.default.<field>)
+        identity = await self._get_effective_identity()
+        suffix = PROMPT_FIELD_SUFFIX.get(prompt_name)
+        if suffix:
+            if model_name and model_name != "default":
+                override = await config_override_service.get(
+                    f"persona.{model_name}.{suffix}"
+                )
+                if isinstance(override, str) and override:
+                    return self._apply_identity_overrides(override, identity)
+            override = await config_override_service.get(
+                f"persona.default.{suffix}"
+            )
+            if isinstance(override, str) and override:
+                return self._apply_identity_overrides(override, identity)
+
+        # 3. 尝试获取特定模型的配置
+        model_config = PROMPT_CONFIG.get(model_name) if model_name else None
+        if model_config and prompt_name in model_config:
+            return self._apply_identity_overrides(
+                model_config[prompt_name], identity
+            )
+        # 4. 否则，回退到默认配置
+        return self._apply_identity_overrides(
+            PROMPT_CONFIG.get("default", {}).get(prompt_name), identity
+        )
+
+    async def _get_persona_system_prompt_async(
+        self, persona_style: str, model_name: Optional[str]
+    ) -> Optional[str]:
+        """
+        _get_persona_system_prompt 的异步版本。
+        查找顺序: 运行时覆盖 persona.variant.<style>.<model>.system_prompt
+        → persona.variant.<style>.default.system_prompt
+        → PERSONA_VARIANTS[style][model_name] → PERSONA_VARIANTS[style]["default"] → None
+        """
+        if persona_style == "default" or persona_style not in PERSONA_VARIANTS:
+            return None
+
+        identity = await self._get_effective_identity()
+        if model_name and model_name != "default":
+            override = await config_override_service.get(
+                f"persona.variant.{persona_style}.{model_name}.system_prompt"
+            )
+            if isinstance(override, str) and override:
+                return self._apply_identity_overrides(
+                    override, identity
+                )
+        override = await config_override_service.get(
+            f"persona.variant.{persona_style}.default.system_prompt"
+        )
+        if isinstance(override, str) and override:
+            return self._apply_identity_overrides(override, identity)
+
+        style_variants = PERSONA_VARIANTS[persona_style]
+        if model_name and model_name in style_variants:
+            return self._apply_identity_overrides(
+                style_variants[model_name].get("SYSTEM_PROMPT"), identity
+            )
+        default_variant = style_variants.get("default")
+        if default_variant:
+            return self._apply_identity_overrides(
+                default_variant.get("SYSTEM_PROMPT"), identity
+            )
+        return None
+
+    async def get_prompt_async(self, prompt_name: str, **kwargs) -> Optional[str]:
+        """
+        get_prompt 的异步版本，会额外应用运行时人设覆盖与身份覆盖。
+        """
+        prompt_template = None
+        model_name = kwargs.get("model_name")
+
+        # 1. 优先检查活动覆盖
+        prompt_overrides = event_service.get_prompt_overrides()
+        active_event = event_service.get_active_event()
+        active_event_id = active_event["event_id"] if active_event else "N/A"
+
+        if prompt_overrides and prompt_name in prompt_overrides:
+            prompt_template = prompt_overrides[prompt_name]
+            log.info(
+                f"PromptService: 已为 '{prompt_name}' 应用活动 '{active_event_id}' 的提示词覆盖。"
+            )
+        else:
+            # 2. 如果没有活动覆盖，则获取模型特定的提示词（含运行时覆盖）
+            prompt_template = await self._get_model_specific_prompt_async(
+                model_name, prompt_name
+            )
+
+        if not prompt_template:
+            log.warning(
+                f"提示词 '{prompt_name}' 在任何地方都找不到 (模型: {model_name})。"
+            )
+            return None
+
+        # 3. 使用提供的参数格式化提示词
+        format_kwargs = kwargs.copy()
+        format_kwargs.pop("model_name", None)
+
+        if format_kwargs and prompt_template:
+            try:
+                return prompt_template.format(**format_kwargs)
+            except KeyError as e:
+                log.error(f"格式化提示词 '{prompt_name}' 时缺少参数: {e}")
+                return prompt_template
+
+        return prompt_template
 
     def get_prompt(self, prompt_name: str, **kwargs) -> Optional[str]:
         """
@@ -457,10 +664,10 @@ class PromptService:
                     log.warning(f"获取帖子首楼内容失败: {e}")
 
         # --- 新增：根据模型动态注入绕过限制的上下文 ---
-        jailbreak_user = self._get_model_specific_prompt(
+        jailbreak_user = await self._get_model_specific_prompt_async(
             model_name, "JAILBREAK_USER_PROMPT"
         )
-        jailbreak_model = self._get_model_specific_prompt(
+        jailbreak_model = await self._get_model_specific_prompt_async(
             model_name, "JAILBREAK_MODEL_RESPONSE"
         )
         if jailbreak_user and jailbreak_model:
@@ -472,10 +679,13 @@ class PromptService:
         beijing_tz = timezone(timedelta(hours=8))
         current_beijing_time = datetime.now(beijing_tz).strftime("%Y年%m月%d日 %H:%M")
         # 动态知识块（世界之书、个人记忆）将作为独立消息注入，无需在此处处理占位符
-        core_prompt_template = self.get_prompt("SYSTEM_PROMPT", model_name=model_name)
-
+        core_prompt_template = await self.get_prompt_async(
+            "SYSTEM_PROMPT", model_name=model_name
+        )
         # 如果用户选择了非默认人设风格，尝试用人设变体覆盖 SYSTEM_PROMPT
-        persona_prompt = self._get_persona_system_prompt(persona_style, model_name)
+        persona_prompt = await self._get_persona_system_prompt_async(
+            persona_style, model_name
+        )
         if persona_prompt:
             core_prompt_template = persona_prompt
 
@@ -617,7 +827,7 @@ class PromptService:
 
         if last_model_message_index != -1:
             # 根据模型动态获取并格式化基础指令
-            final_instruction_template = self._get_model_specific_prompt(
+            final_instruction_template = await self._get_model_specific_prompt_async(
                 model_name, "JAILBREAK_FINAL_INSTRUCTION"
             )
             if not final_instruction_template:
@@ -923,10 +1133,10 @@ class PromptService:
         # ============================================
 
         # 1. 越狱提示词
-        jailbreak_user = self._get_model_specific_prompt(
+        jailbreak_user = await self._get_model_specific_prompt_async(
             model_name, "JAILBREAK_USER_PROMPT"
         )
-        jailbreak_model = self._get_model_specific_prompt(
+        jailbreak_model = await self._get_model_specific_prompt_async(
             model_name, "JAILBREAK_MODEL_RESPONSE"
         )
         if jailbreak_user and jailbreak_model:
@@ -934,8 +1144,12 @@ class PromptService:
             final_conversation.append({"role": "model", "parts": [jailbreak_model]})
 
         # 2. 核心人设
-        core_prompt_template = self.get_prompt("SYSTEM_PROMPT", model_name=model_name)
-        persona_prompt = self._get_persona_system_prompt(persona_style, model_name)
+        core_prompt_template = await self.get_prompt_async(
+            "SYSTEM_PROMPT", model_name=model_name
+        )
+        persona_prompt = await self._get_persona_system_prompt_async(
+            persona_style, model_name
+        )
         if persona_prompt:
             core_prompt_template = persona_prompt
         final_conversation.append({"role": "user", "parts": [core_prompt_template]})
@@ -1070,7 +1284,7 @@ class PromptService:
                 break
 
         if last_model_message_index != -1:
-            final_instruction_template = self._get_model_specific_prompt(
+            final_instruction_template = await self._get_model_specific_prompt_async(
                 model_name, "JAILBREAK_FINAL_INSTRUCTION"
             )
             if not final_instruction_template:

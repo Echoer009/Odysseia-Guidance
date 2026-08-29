@@ -16,6 +16,18 @@ class WorkConfig:
     pass
 
 
+WORK_CONFIG_DEFAULT = {
+    "event_chance": WorkConfig.EVENT_CHANCE,
+    "good_event_chance": WorkConfig.GOOD_EVENT_CHANCE,
+    "cooldown_hours": WorkConfig.COOLDOWN_HOURS,
+    "streak_days": WorkConfig.STREAK_DAYS,
+    "streak_reward": WorkConfig.STREAK_REWARD,
+    "sell_body_cooldown_hours": WorkConfig.SELL_BODY_COOLDOWN_HOURS,
+    "max_work_per_day": WorkConfig.MAX_WORK_PER_DAY,
+    "max_sell_body_per_day": WorkConfig.MAX_SELL_BODY_PER_DAY,
+}
+
+
 SELL_BODY_EVENTS = [
     {
         "event_type": "sell_body",

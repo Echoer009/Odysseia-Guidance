@@ -10,6 +10,7 @@ from discord.ui import View, Button
 from discord import ButtonStyle, Interaction
 
 from src.chat.config.chat_config import BLACKLIST_BAN_DURATION_MINUTES
+from src.chat.services.config_override_service import config_override_service
 from src.chat.utils.database import chat_db_manager
 from src.chat.services.warning_service import record_warning_and_check_blacklist
 from src.chat.features.personal_memory.services.conversation_block_service import (
@@ -94,7 +95,10 @@ class FilterAlertView(View):
     async def _do_warn(self, interaction: Interaction):
         await interaction.response.defer()
         try:
-            min_d, max_d = BLACKLIST_BAN_DURATION_MINUTES
+            min_d, max_d = await config_override_service.get_json(
+                "warning.ban_duration_minutes",
+                list(BLACKLIST_BAN_DURATION_MINUTES),
+            )
             ban_duration = random.randint(min_d, max_d)
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)
             reason = "过界亲密：文爱检测系统触发自动警告"
@@ -113,7 +117,10 @@ class FilterAlertView(View):
     async def _do_ban(self, interaction: Interaction):
         await interaction.response.defer()
         try:
-            min_d, max_d = BLACKLIST_BAN_DURATION_MINUTES
+            min_d, max_d = await config_override_service.get_json(
+                "warning.ban_duration_minutes",
+                list(BLACKLIST_BAN_DURATION_MINUTES),
+            )
             ban_duration = random.randint(min_d, max_d)
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)
             reason = "过界亲密：文爱检测系统触发封禁"

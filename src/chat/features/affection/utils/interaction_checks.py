@@ -8,6 +8,7 @@ from typing import Tuple, Optional
 
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.config import DEVELOPER_USER_IDS
 from src.chat.features.affection.services.user_command_settings_service import (
     user_command_settings_service,
@@ -33,7 +34,11 @@ async def check_interaction_channel_availability(
         return False, "呜…我现在不能在这里说话啦…"
 
     # 1. 检查是否在禁用的频道中
-    if channel and channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+    disabled_ids = await config_override_service.get_json(
+        "channels.disabled_interaction_ids",
+        chat_config.DISABLED_INTERACTION_CHANNEL_IDS,
+    )
+    if channel and channel.id in disabled_ids:
         return False, "嘘... 在这里我需要保持安静，我们去别的地方聊吧？"
 
     # 2. 检查是否在置顶的帖子中

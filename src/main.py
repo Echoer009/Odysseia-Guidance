@@ -35,6 +35,7 @@ from src.chat.services.review_service import initialize_review_service
 from src.chat.features.work_game.services.work_db_service import WorkDBService
 from src.chat.utils.command_sync import sync_commands
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 
 current_script_path = os.path.abspath(__file__)
 current_dir = os.path.dirname(current_script_path)
@@ -247,7 +248,11 @@ class DiscordBot(commands.Bot):
             return False
 
         # 检查交互是否来自配置中禁用的频道
-        if channel.id in chat_config.DISABLED_INTERACTION_CHANNEL_IDS:
+        disabled_ids = await config_override_service.get_json(
+            "channels.disabled_interaction_ids",
+            chat_config.DISABLED_INTERACTION_CHANNEL_IDS,
+        )
+        if channel.id in disabled_ids:
             logging.getLogger(__name__).debug(
                 f"交互来自禁用的频道 {getattr(channel, 'name', f'ID: {channel.id}')}，已忽略。"
             )

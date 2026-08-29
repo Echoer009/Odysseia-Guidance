@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from src.chat.utils.database import chat_db_manager
 from src.chat.config import chat_config
 from src.chat.features.tools.tool_metadata import tool_metadata
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.warning_service import record_warning_and_check_blacklist
 from src.config import BOT_NAME, COMMUNITY_NAME
 
@@ -154,7 +155,10 @@ async def issue_user_warning(
     try:
         await chat_db_manager.increment_issue_user_warning_count()
 
-        min_d, max_d = chat_config.BLACKLIST_BAN_DURATION_MINUTES
+        min_d, max_d = await config_override_service.get_json(
+            "warning.ban_duration_minutes",
+            list(chat_config.BLACKLIST_BAN_DURATION_MINUTES),
+        )
         ban_duration = random.randint(min_d, max_d)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=ban_duration)
 

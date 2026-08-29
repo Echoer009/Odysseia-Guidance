@@ -5,6 +5,7 @@ from sqlalchemy import select, func, desc
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.time_utils import get_start_of_today_utc
 from src.chat.config.chat_config import FEEDING_CONFIG
+from src.chat.services.config_override_service import config_override_service
 from src.database.database import AsyncSessionLocal
 from src.database.models import InteractionLog
 
@@ -39,7 +40,10 @@ class FeedingService:
         if last_feeding_row:
             last_feeding_time = last_feeding_row
             time_since_last_feeding = now_utc - last_feeding_time
-            cooldown_duration = timedelta(seconds=FEEDING_CONFIG["COOLDOWN_SECONDS"])
+            cooldown_seconds = await config_override_service.get(
+                "feature.feeding_cooldown", FEEDING_CONFIG["COOLDOWN_SECONDS"]
+            )
+            cooldown_duration = timedelta(seconds=cooldown_seconds)
             if time_since_last_feeding < cooldown_duration:
                 remaining_time = cooldown_duration - time_since_last_feeding
                 hours, remainder = divmod(remaining_time.seconds, 3600)

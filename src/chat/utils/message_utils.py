@@ -41,11 +41,17 @@ def truncate_text(text: str, limit: int, suffix: str = "...") -> str:
     return text[: limit - len(suffix)] + suffix
 
 
-async def safe_send(sendable, text: str, **kwargs) -> list[discord.Message]:
+async def safe_send(
+    sendable, text: str, embed=None, view=None, **kwargs
+) -> list[discord.Message]:
     chunks = split_message(text)
     messages = []
     for i, chunk in enumerate(chunks):
         if i == 0:
+            if embed is not None:
+                kwargs["embed"] = embed
+            if view is not None:
+                kwargs["view"] = view
             msg = await sendable.send(chunk, **kwargs)
         else:
             msg = await sendable.send(chunk)
@@ -54,12 +60,16 @@ async def safe_send(sendable, text: str, **kwargs) -> list[discord.Message]:
 
 
 async def safe_reply(
-    message: discord.Message, text: str, **kwargs
+    message: discord.Message, text: str, embed=None, view=None, **kwargs
 ) -> list[discord.Message]:
     chunks = split_message(text)
     messages = []
     for i, chunk in enumerate(chunks):
         if i == 0:
+            if embed is not None:
+                kwargs["embed"] = embed
+            if view is not None:
+                kwargs["view"] = view
             msg = await message.reply(chunk, **kwargs)
         else:
             msg = await message.channel.send(chunk)

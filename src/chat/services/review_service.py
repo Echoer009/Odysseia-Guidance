@@ -21,6 +21,7 @@ import asyncio
 from src import config
 from src.config import CURRENCY_NAME
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.features.world_book.services.incremental_rag_service import (
     incremental_rag_service,
 )
@@ -33,6 +34,15 @@ log = logging.getLogger(__name__)
 REVIEW_SETTINGS = chat_config.WORLD_BOOK_CONFIG["review_settings"]
 VOTE_EMOJI = REVIEW_SETTINGS["vote_emoji"]
 REJECT_EMOJI = REVIEW_SETTINGS["reject_emoji"]
+_REVIEW_CONFIG_DEFAULT = {
+    "review_settings": chat_config.WORLD_BOOK_CONFIG["review_settings"],
+    "personal_profile_review_settings": chat_config.WORLD_BOOK_CONFIG[
+        "personal_profile_review_settings"
+    ],
+    "work_event_review_settings": chat_config.WORLD_BOOK_CONFIG[
+        "work_event_review_settings"
+    ],
+}
 
 
 class ReviewService:
@@ -97,7 +107,10 @@ class ReviewService:
         """为通用知识条目发起审核"""
         proposer = await self.bot.fetch_user(entry["proposer_id"])
 
-        embed = self._build_general_knowledge_embed(entry, data, proposer)
+        review_settings = await self._get_review_settings(entry["entry_type"])
+        embed = self._build_general_knowledge_embed(
+            entry, data, proposer, review_settings
+        )
 
         # 从数据库记录中获取提交所在的频道ID
         review_channel_id = entry["channel_id"]
@@ -118,13 +131,17 @@ class ReviewService:
         await self._update_message_id(entry["id"], review_message.id)
 
     def _build_general_knowledge_embed(
-        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User
+        self,
+        entry: sqlite3.Row,
+        data: Dict[str, Any],
+        proposer: discord.User,
+        review_settings: dict,
     ) -> discord.Embed:
         """构建通用知识提交的审核 Embed"""
-        duration = REVIEW_SETTINGS["review_duration_minutes"]
-        approval_threshold = REVIEW_SETTINGS["approval_threshold"]
-        instant_approval_threshold = REVIEW_SETTINGS["instant_approval_threshold"]
-        rejection_threshold = REVIEW_SETTINGS["rejection_threshold"]
+        duration = review_settings["review_duration_minutes"]
+        approval_threshold = review_settings["approval_threshold"]
+        instant_approval_threshold = review_settings["instant_approval_threshold"]
+        rejection_threshold = review_settings["rejection_threshold"]
         title = data.get("title", data.get("name", "未知标题"))
         content = data.get("content_text", data.get("description", ""))
 
@@ -186,7 +203,10 @@ class ReviewService:
     ):
         """为社区成员档案发起审核"""
         proposer = await self.bot.fetch_user(entry["proposer_id"])
-        embed = self._build_community_member_embed(entry, data, proposer)
+        review_settings = await self._get_review_settings(entry["entry_type"])
+        embed = self._build_community_member_embed(
+            entry, data, proposer, review_settings
+        )
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
@@ -205,10 +225,9 @@ class ReviewService:
         await self._update_message_id(entry["id"], review_message.id)
 
     def _build_community_member_embed(
-        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User
+        self, entry: sqlite3.Row, data: Dict[str, str], proposer: discord.User, review_settings: dict
     ) -> discord.Embed:
         """构建社区成员档案提交的审核 Embed"""
-        review_settings = self._get_review_settings(entry["entry_type"])
         duration = review_settings["review_duration_minutes"]
         approval_threshold = review_settings["approval_threshold"]
         instant_approval_threshold = review_settings["instant_approval_threshold"]
@@ -275,7 +294,8 @@ class ReviewService:
     async def _start_work_event_review(self, entry: sqlite3.Row, data: Dict[str, Any]):
         """为自定义工作事件发起审核"""
         proposer = await self.bot.fetch_user(entry["proposer_id"])
-        embed = self._build_work_event_embed(entry, data, proposer)
+        review_settings = await self._get_review_settings(entry["entry_type"])
+        embed = self._build_work_event_embed(entry, data, proposer, review_settings)
 
         review_channel_id = entry["channel_id"]
         channel = self.bot.get_channel(review_channel_id)
@@ -294,10 +314,9 @@ class ReviewService:
         await self._update_message_id(entry["id"], review_message.id)
 
     def _build_work_event_embed(
-        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User
+        self, entry: sqlite3.Row, data: Dict[str, Any], proposer: discord.User, review_settings: dict
     ) -> discord.Embed:
         """构建自定义工作事件的审核 Embed"""
-        review_settings = chat_config.WORLD_BOOK_CONFIG["work_event_review_settings"]
         duration = review_settings["review_duration_minutes"]
 
         embed = discord.Embed(
@@ -385,17 +404,18 @@ class ReviewService:
         )
         await self.process_vote(pending_id, message)
 
-    def _get_review_settings(self, entry_type: str) -> dict:
-        """根据条目类型获取对应的审核配置"""
+    async def _get_review_settings(self, entry_type: str) -> dict:
+        """根据条目类型获取对应的审核配置（含运行时覆盖）"""
+        review_cfg = await config_override_service.get_json(
+            "review.config", _REVIEW_CONFIG_DEFAULT
+        )
         if entry_type == "community_member":
-            return chat_config.WORLD_BOOK_CONFIG.get(
+            return review_cfg.get(
                 "personal_profile_review_settings", REVIEW_SETTINGS
             )
         elif entry_type == "work_event":
-            return chat_config.WORLD_BOOK_CONFIG.get(
-                "work_event_review_settings", REVIEW_SETTINGS
-            )
-        return REVIEW_SETTINGS
+            return review_cfg.get("work_event_review_settings", REVIEW_SETTINGS)
+        return review_cfg.get("review_settings", REVIEW_SETTINGS)
 
     async def process_vote(self, pending_id: int, message: discord.Message):
         """处理投票逻辑，检查是否达到阈值"""
@@ -418,7 +438,7 @@ class ReviewService:
                 )
                 return
 
-            review_settings = self._get_review_settings(entry["entry_type"])
+            review_settings = await self._get_review_settings(entry["entry_type"])
             approvals = 0
             rejections = 0
             for reaction in message.reactions:
@@ -831,7 +851,9 @@ Discord ID: {profile_user_id}
                                     approvals += 1
                             break
 
-                    review_settings = self._get_review_settings(entry["entry_type"])
+                    review_settings = await self._get_review_settings(
+                        entry["entry_type"]
+                    )
                     log.info(
                         f"过期审核ID #{entry['id']} (类型: {entry['entry_type']}): 最终真实用户票数 ✅{approvals}。通过阈值: {review_settings['approval_threshold']}"
                     )

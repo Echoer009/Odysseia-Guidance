@@ -5,6 +5,7 @@ from sqlalchemy import select, func, desc
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.time_utils import get_start_of_today_utc
 from src.chat.config.chat_config import CONFESSION_CONFIG
+from src.chat.services.config_override_service import config_override_service
 from src.database.database import AsyncSessionLocal
 from src.database.models import InteractionLog
 
@@ -41,7 +42,10 @@ class ConfessionService:
         if last_confession_row:
             last_confession_time = last_confession_row
             time_since_last = now_utc - last_confession_time
-            cooldown_duration = timedelta(seconds=CONFESSION_CONFIG["COOLDOWN_SECONDS"])
+            cooldown_seconds = await config_override_service.get(
+                "feature.confession_cooldown", CONFESSION_CONFIG["COOLDOWN_SECONDS"]
+            )
+            cooldown_duration = timedelta(seconds=cooldown_seconds)
             if time_since_last < cooldown_duration:
                 remaining_time = cooldown_duration - time_since_last
                 hours, remainder = divmod(remaining_time.seconds, 3600)

@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any
 
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.utils.database import chat_db_manager
 from src.database.database import AsyncSessionLocal
 from src.database.models import UserWarningRecord, UserAffection
@@ -39,7 +40,10 @@ async def record_warning_and_check_blacklist(
             await session.flush()
 
             if current_warnings >= 1:
-                penalty = chat_config.AFFECTION_CONFIG["BLACKLIST_PENALTY"]
+                affection_cfg = await config_override_service.get_json(
+                    "affection.config", chat_config.AFFECTION_CONFIG
+                )
+                penalty = affection_cfg["BLACKLIST_PENALTY"]
                 if penalty != 0:
                     aff_result = await session.execute(
                         select(UserAffection)

@@ -4,12 +4,14 @@ from sqlalchemy import (
     Column,
     Integer,
     BigInteger,
+    SmallInteger,
     String,
     Text,
     DateTime,
     ForeignKey,
     JSON,
     Index,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
@@ -1044,3 +1046,265 @@ class ContentFilterKeyword(Base):
 
     def __repr__(self):
         return f"<ContentFilterKeyword(keyword='{self.keyword}', is_ignored={self.is_ignored})>"
+
+
+AB_TEST_SCHEMA = "ab_test"
+
+
+class ABExperiment(Base):
+    """
+    A/B 测试实验表。
+    同一时间只应有一个实验处于启用状态。
+    """
+
+    __tablename__ = "ab_experiments"
+    __table_args__ = ({"schema": AB_TEST_SCHEMA},)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, comment="实验名称")
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="实验说明")
+    enabled: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", comment="是否启用 (1=启用, 0=停用)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ABExperiment(name='{self.name}', enabled={self.enabled})>"
+
+
+class ABArm(Base):
+    """
+    A/B 测试分组表。
+    每个分组绑定一个实验模型，按流量百分比随机承接回复。
+    """
+
+    __tablename__ = "ab_arms"
+    __table_args__ = (
+        Index("ix_ab_arms_experiment_id", "experiment_id"),
+        {"schema": AB_TEST_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{AB_TEST_SCHEMA}.ab_experiments.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属实验 ID",
+    )
+    label: Mapped[str] = mapped_column(String(100), nullable=False, comment="分组标签")
+    model_full_id: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="模型完整标识 (provider:model)"
+    )
+    traffic_percent: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="10", comment="流量百分比 (0-100)"
+    )
+    enabled: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", comment="是否启用 (1=启用, 0=禁用)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ABArm(label='{self.label}', model_full_id='{self.model_full_id}')>"
+
+
+class ABRoutedReply(Base):
+    """
+    A/B 测试命中的回复记录表。
+    每条记录对应一条由实验模型生成的机器人回复消息。
+    """
+
+    __tablename__ = "ab_routed_replies"
+    __table_args__ = (
+        Index("ix_ab_routed_replies_message_id", "message_id", unique=True),
+        {"schema": AB_TEST_SCHEMA},
+    )
+
+    id: Mapped[BigInteger] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    experiment_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{AB_TEST_SCHEMA}.ab_experiments.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="所属实验 ID",
+    )
+    arm_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{AB_TEST_SCHEMA}.ab_arms.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="命中的分组 ID",
+    )
+    message_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, nullable=False, comment="机器人回复消息的 Discord ID"
+    )
+    channel_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, nullable=False, comment="频道 ID"
+    )
+    guild_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="服务器 ID (私信为空)"
+    )
+    trigger_user_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, nullable=False, comment="触发本次回复的用户 ID"
+    )
+    question_text: Mapped[Text] = mapped_column(
+        Text, nullable=False, comment="用户提问内容快照"
+    )
+    reply_text: Mapped[Text] = mapped_column(
+        Text, nullable=False, comment="机器人回复内容快照"
+    )
+    model_full_id: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="实际使用的模型完整标识"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ABRoutedReply(message_id={self.message_id}, arm_id={self.arm_id})>"
+
+
+class ABVote(Base):
+    """
+    A/B 测试回复评价表。
+    同一用户对同一条回复仅保留最后一次投票。
+    """
+
+    __tablename__ = "ab_votes"
+    __table_args__ = (
+        UniqueConstraint("reply_id", "voter_id", name="uq_ab_votes_reply_voter"),
+        {"schema": AB_TEST_SCHEMA},
+    )
+
+    id: Mapped[BigInteger] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    reply_id: Mapped[BigInteger] = mapped_column(
+        BigInteger,
+        ForeignKey(f"{AB_TEST_SCHEMA}.ab_routed_replies.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="关联的回复记录 ID",
+    )
+    voter_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, nullable=False, comment="投票用户 ID"
+    )
+    vote: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, comment="投票: 1=更好 2=更差 3=差不多"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return (
+            f"<ABVote(reply_id={self.reply_id}, voter_id={self.voter_id}, vote={self.vote})>"
+        )
+
+
+ADMIN_SCHEMA = "admin"
+
+
+class AuditLog(Base):
+    """
+    管理后台审计日志表。
+    记录后台所有写操作，便于追溯。
+    """
+
+    __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_admin_audit_log_created_at", "created_at"),
+        {"schema": ADMIN_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="操作者的Discord用户ID"
+    )
+    action: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        comment="操作类型: update/create/delete/ban/adjust_coins 等",
+    )
+    target_type: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="操作对象类型"
+    )
+    target_id: Mapped[str] = mapped_column(
+        String(200),
+        nullable=False,
+        default="",
+        server_default="",
+        comment="操作对象ID",
+    )
+    detail: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, comment="操作详情 (JSON)"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, user_id={self.user_id}, action='{self.action}', target_type='{self.target_type}')>"
+
+
+class ConfigOverride(Base):
+    """
+    运行时配置覆盖表。
+    管理后台写入，Bot 端通过带 TTL 缓存的 ConfigOverrideService 读取。
+    """
+
+    __tablename__ = "config_overrides"
+    __table_args__ = ({"schema": ADMIN_SCHEMA},)
+
+    key: Mapped[str] = mapped_column(
+        String(200), primary_key=True, comment="配置键名"
+    )
+    value: Mapped[dict] = mapped_column(JSON, nullable=False, comment="配置值 (JSON)")
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ConfigOverride(key='{self.key}', updated_at={self.updated_at})>"
+
+
+class ABFeedback(Base):
+    """
+    A/B 测试差评反馈表。
+    由“更差”投票弹出的理由选择弹窗提交。
+    """
+
+    __tablename__ = "ab_feedback"
+    __table_args__ = ({"schema": AB_TEST_SCHEMA},)
+
+    id: Mapped[BigInteger] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    reply_id: Mapped[BigInteger] = mapped_column(
+        BigInteger,
+        ForeignKey(f"{AB_TEST_SCHEMA}.ab_routed_replies.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="关联的回复记录 ID",
+    )
+    user_id: Mapped[BigInteger] = mapped_column(
+        BigInteger, nullable=False, comment="提交反馈的用户 ID"
+    )
+    reasons: Mapped[Optional[list]] = mapped_column(
+        JSON, nullable=True, comment="预设原因列表 (JSON)"
+    )
+    free_text: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="自由补充文字"
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return f"<ABFeedback(reply_id={self.reply_id}, user_id={self.user_id})>"

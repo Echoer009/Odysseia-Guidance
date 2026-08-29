@@ -18,6 +18,7 @@ from src.chat.features.tools.functions.summarize_channel import text_to_summary_
 # 导入数据库管理器以进行黑名单检查和斜杠命令
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHAT_ENABLED, MESSAGE_SETTINGS
+from src.chat.services.config_override_service import config_override_service
 from src.chat.config import chat_config
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.utils.message_utils import safe_reply, safe_send
@@ -29,8 +30,72 @@ from src.chat.features.content_filter.services.content_filter_service import (
 from src.chat.features.chat_settings.services.chat_settings_service import (
     chat_settings_service,
 )
+from src import config
+from src.chat.features.ab_test.services.ab_test_service import ab_test_service
 
 log = logging.getLogger(__name__)
+
+
+def _build_ab_rating_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="🧪 实验回复评价",
+        description="这条回复来自实验模型,比起类脑娘平时的回复,你觉得它怎么样?",
+        color=config.EMBED_COLOR_PRIMARY,
+    )
+    embed.set_footer(text="点击按钮投票,也可以无视")
+    return embed
+
+
+class ABRatingView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="👍更好", style=discord.ButtonStyle.success, custom_id="ab:vote:better"
+    )
+    async def better_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        pass
+
+    @discord.ui.button(
+        label="👎更差", style=discord.ButtonStyle.danger, custom_id="ab:vote:worse"
+    )
+    async def worse_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        pass
+
+    @discord.ui.button(
+        label="🤔差不多", style=discord.ButtonStyle.secondary, custom_id="ab:vote:same"
+    )
+    async def same_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        pass
+
+
+async def _record_ab_routed_reply(
+    ab_arm: dict,
+    message: discord.Message,
+    question_text: str,
+    reply_text: str,
+    sent_message_id: int,
+):
+    try:
+        await ab_test_service.record_routed_reply(
+            experiment_id=ab_arm["experiment_id"],
+            arm_id=ab_arm["arm_id"],
+            model_full_id=ab_arm["model_full_id"],
+            guild_id=message.guild.id if message.guild else None,
+            channel_id=message.channel.id,
+            message_id=sent_message_id,
+            trigger_user_id=message.author.id,
+            question_text=question_text,
+            reply_text=reply_text,
+        )
+    except Exception as e:
+        log.error(f"[A/B] 记录实验路由回复失败: {e}", exc_info=True)
 
 
 class AIChatCog(commands.Cog):
@@ -136,6 +201,9 @@ class AIChatCog(commands.Cog):
         # 在退出 typing 状态后发送回复
         if chat_result and chat_result.content:
             response_text = chat_result.content
+            ab_arm = chat_result.ab_arm
+            ab_embed = _build_ab_rating_embed() if ab_arm else None
+            ab_view = ABRatingView() if ab_arm else None
 
             # 检查AI输出是否触发文爱检测
             keywords = await get_all_keywords()
@@ -154,9 +222,19 @@ class AIChatCog(commands.Cog):
                     image_bytes = text_to_summary_image(response_text)
                     if image_bytes:
                         with io.BytesIO(image_bytes) as image_file:
-                            await message.reply(
+                            summary_msg = await message.reply(
                                 file=discord.File(image_file, "summary.png"),
                                 mention_author=True,
+                                embed=ab_embed,
+                                view=ab_view,
+                            )
+                        if ab_arm:
+                            await _record_ab_routed_reply(
+                                ab_arm,
+                                message,
+                                processed_data["user_content"],
+                                response_text,
+                                summary_msg.id,
                             )
                         # 发送成功后直接返回，不再执行后续逻辑
                         return
@@ -164,18 +242,38 @@ class AIChatCog(commands.Cog):
                         log.error("总结图片生成失败，将作为文本尝试发送。")
 
                 # 2. 如果不是长篇总结，则检查是否在豁免频道或帖子 (常规长消息可直接发送)
+                unrestricted_ids = await config_override_service.get_json(
+                    "channels.unrestricted_ids", chat_config.UNRESTRICTED_CHANNEL_IDS
+                )
                 is_unrestricted = (
-                    message.channel.id in chat_config.UNRESTRICTED_CHANNEL_IDS
+                    message.channel.id in unrestricted_ids
                     or isinstance(message.channel, discord.Thread)
                 )
                 if is_unrestricted:
-                    await safe_reply(message, response_text, mention_author=True)
+                    sent_messages = await safe_reply(
+                        message,
+                        response_text,
+                        mention_author=True,
+                        embed=ab_embed,
+                        view=ab_view,
+                    )
+                    if ab_arm and sent_messages:
+                        await _record_ab_routed_reply(
+                            ab_arm,
+                            message,
+                            processed_data["user_content"],
+                            response_text,
+                            sent_messages[0].id,
+                        )
                     return
 
                 # 3. 如果以上都不是，则检查是否为需要发送私信的普通长消息
+                dm_threshold = await config_override_service.get(
+                    "reply.dm_threshold", MESSAGE_SETTINGS["DM_THRESHOLD"]
+                )
                 if (
                     self._get_text_length_without_emojis(response_text)
-                    > MESSAGE_SETTINGS["DM_THRESHOLD"]
+                    > dm_threshold
                 ):
                     try:
                         channel_mention = (
@@ -191,6 +289,17 @@ class AIChatCog(commands.Cog):
                         log.info(
                             f"回复因过长已通过私信发送给 {message.author.display_name}"
                         )
+                        if ab_arm:
+                            card_msg = await message.channel.send(
+                                embed=ab_embed, view=ab_view
+                            )
+                            await _record_ab_routed_reply(
+                                ab_arm,
+                                message,
+                                processed_data["user_content"],
+                                response_text,
+                                card_msg.id,
+                            )
                     except discord.Forbidden:
                         log.warning(
                             f"无法通过私信发送给 {message.author.display_name}，将在原频道回复提示信息。"
@@ -202,7 +311,21 @@ class AIChatCog(commands.Cog):
                     return
 
                 # 4. 默认情况：直接在频道回复短消息
-                await safe_reply(message, response_text, mention_author=True)
+                sent_messages = await safe_reply(
+                    message,
+                    response_text,
+                    mention_author=True,
+                    embed=ab_embed,
+                    view=ab_view,
+                )
+                if ab_arm and sent_messages:
+                    await _record_ab_routed_reply(
+                        ab_arm,
+                        message,
+                        processed_data["user_content"],
+                        response_text,
+                        sent_messages[0].id,
+                    )
 
             except discord.errors.HTTPException as e:
                 log.warning(f"发送回复时发生HTTP错误: {e}")

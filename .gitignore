@@ -307,3 +307,22 @@ src/chat/features/games/blackjack-web/vite.config.ts
 tutorial/
 
 AGENTS.md
+
+# Database backups (e.g. pgdata.bak.YYYYMMDD_HHMMSS/ produced during restore)
+pgdata.bak*/
+*.bak.[0-9]*/
+
+# Database dumps / migration artifacts (never commit large data exports)
+*.dump
+*.pgc
+*.sql.bak
+/migration/
+
+# Large backup archives
+*.tar.gz
+*.tar.bz2
+# Local bot log analysis
+bot_logs/
+
+# Track admin frontend build output
+!src/admin/dist/

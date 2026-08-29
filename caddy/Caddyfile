@@ -2,6 +2,9 @@
 # Caddy 会自动申请和续期 Let's Encrypt SSL 证书
 
 echonion.org {
+    handle_path /admin/* {
+        reverse_proxy admin_web:8004
+    }
     reverse_proxy lobby_web:8002
 }
 

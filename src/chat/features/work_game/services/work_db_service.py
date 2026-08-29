@@ -5,7 +5,8 @@ import logging
 import random
 from src.chat.utils.database import chat_db_manager
 from src.chat.utils.time_utils import format_time_delta
-from ..config.work_config import WorkConfig
+from src.chat.services.config_override_service import config_override_service
+from ..config.work_config import WORK_CONFIG_DEFAULT
 
 
 class WorkDBService:
@@ -50,12 +51,18 @@ class WorkDBService:
         status = await self._reset_daily_counts_if_needed(status)
 
         if action_type == "work":
+            wc = await config_override_service.get_json(
+                "economy.work.config", WORK_CONFIG_DEFAULT
+            )
             count = status["work_count_today"]
-            limit = WorkConfig.MAX_WORK_PER_DAY
+            limit = wc["max_work_per_day"]
             return count >= limit, count
         elif action_type == "sell_body":
+            wc = await config_override_service.get_json(
+                "economy.work.config", WORK_CONFIG_DEFAULT
+            )
             count = status["sell_body_count_today"]
-            limit = WorkConfig.MAX_SELL_BODY_PER_DAY
+            limit = wc["max_sell_body_per_day"]
             return count >= limit, count
         return True, 0
 
@@ -116,7 +123,10 @@ class WorkDBService:
         else:
             consecutive_days = 1
 
-        if consecutive_days >= WorkConfig.STREAK_DAYS:
+        wc = await config_override_service.get_json(
+            "economy.work.config", WORK_CONFIG_DEFAULT
+        )
+        if consecutive_days >= wc["streak_days"]:
             is_streak_achieved = True
             consecutive_days = 0
 
@@ -156,7 +166,10 @@ class WorkDBService:
             else:
                 last_work_time = last_timestamp.replace(tzinfo=timezone.utc)
 
-            cooldown = timedelta(hours=WorkConfig.COOLDOWN_HOURS)
+            wc = await config_override_service.get_json(
+                "economy.work.config", WORK_CONFIG_DEFAULT
+            )
+            cooldown = timedelta(hours=wc["cooldown_hours"])
             if datetime.now(timezone.utc) - last_work_time < cooldown:
                 remaining = cooldown - (datetime.now(timezone.utc) - last_work_time)
                 return True, format_time_delta(remaining)
@@ -178,7 +191,10 @@ class WorkDBService:
             else:
                 last_time = last_timestamp.replace(tzinfo=timezone.utc)
 
-            cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
+            wc = await config_override_service.get_json(
+                "economy.work.config", WORK_CONFIG_DEFAULT
+            )
+            cooldown = timedelta(hours=wc["sell_body_cooldown_hours"])
             if datetime.now(timezone.utc) - last_time < cooldown:
                 remaining = cooldown - (datetime.now(timezone.utc) - last_time)
                 return True, format_time_delta(remaining)

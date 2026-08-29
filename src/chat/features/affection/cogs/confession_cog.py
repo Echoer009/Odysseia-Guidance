@@ -14,6 +14,7 @@ from src.chat.features.affection.service.affection_service import AffectionServi
 from src.chat.features.affection.service.confession_service import ConfessionService
 from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.utils.message_utils import truncate_text, DISCORD_EMBED_DESCRIPTION_LIMIT
@@ -63,8 +64,11 @@ class ConfessionCog(commands.Cog):
                 return
 
         # 检查是否在豁免频道，以决定回复是否公开
+        unrestricted_ids = await config_override_service.get_json(
+            "channels.unrestricted_ids", chat_config.UNRESTRICTED_CHANNEL_IDS
+        )
         is_unrestricted = (
-            interaction.channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+            interaction.channel_id in unrestricted_ids
             or isinstance(interaction.channel, discord.Thread)
         )
         await interaction.response.defer(ephemeral=not is_unrestricted)
@@ -79,7 +83,9 @@ class ConfessionCog(commands.Cog):
             # 注入核心设定
             # 为忏悔场景创建一个特殊的、更宽容的人设
             # 1. 使用正则表达式移除审查模块和绝对规则模块
-            system_prompt = prompt_service.get_prompt("SYSTEM_PROMPT") or ""
+            system_prompt = await prompt_service.get_prompt_async(
+                "SYSTEM_PROMPT"
+            ) or ""
             persona_without_rules = re.sub(
                 r"<ABSOLUTE_RULES>.*?</ABSOLUTE_RULES>",
                 "",
@@ -97,9 +103,13 @@ class ConfessionCog(commands.Cog):
             persona_without_nsfw = persona_without_moderation.replace("nsfw", "")
 
             # 3. 注入宽容的行为准则
+            confession_injection = await config_override_service.get(
+                "feature.confession_persona_injection",
+                CONFESSION_PERSONA_INJECTION,
+            )
             tolerant_persona = persona_without_nsfw.replace(
                 "<behavioral_guidelines>",
-                CONFESSION_PERSONA_INJECTION,
+                confession_injection,
                 1,
             )
 
@@ -108,7 +118,11 @@ class ConfessionCog(commands.Cog):
                 user_name=interaction.user.display_name,
             )
 
-            formatted_prompt = CONFESSION_PROMPT.format(
+            confession_prompt = await config_override_service.get(
+                "feature.confession_prompt",
+                CONFESSION_PROMPT,
+            )
+            formatted_prompt = confession_prompt.format(
                 persona=persona_prompt,
                 user_name=interaction.user.display_name,
                 confession_message=content,

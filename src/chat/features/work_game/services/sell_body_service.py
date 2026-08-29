@@ -1,7 +1,8 @@
 import random
 from datetime import datetime, timedelta, timezone
 from src.chat.features.odysseia_coin.service.coin_service import CoinService
-from ..config.work_config import WorkConfig
+from src.chat.services.config_override_service import config_override_service
+from ..config.work_config import WORK_CONFIG_DEFAULT
 from .work_db_service import WorkDBService
 from src.chat.utils.time_utils import format_time_delta
 from src.config import DEVELOPER_USER_IDS, CURRENCY_NAME
@@ -45,7 +46,10 @@ class SellBodyService:
                 else:
                     last_time = last_time.astimezone(timezone.utc)
 
-                cooldown = timedelta(hours=WorkConfig.SELL_BODY_COOLDOWN_HOURS)
+                wc = await config_override_service.get_json(
+                    "economy.work.config", WORK_CONFIG_DEFAULT
+                )
+                cooldown = timedelta(hours=wc["sell_body_cooldown_hours"])
                 if datetime.now(timezone.utc) - last_time < cooldown:
                     remaining = cooldown - (datetime.now(timezone.utc) - last_time)
                     return {

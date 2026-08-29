@@ -9,6 +9,7 @@ import discord
 
 from src import config
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.review_service import review_service
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 import asyncio
@@ -68,7 +69,18 @@ class SubmissionService:
                 log.error(f"未知的提交类型 '{entry_type}'，无法找到审核配置。")
                 return None
 
-            review_settings = chat_config.WORLD_BOOK_CONFIG.get(review_config_key, {})
+            review_cfg = await config_override_service.get_json(
+                "review.config",
+                {
+                    "review_settings": chat_config.WORLD_BOOK_CONFIG[
+                        "review_settings"
+                    ],
+                    "work_event_review_settings": chat_config.WORLD_BOOK_CONFIG[
+                        "work_event_review_settings"
+                    ],
+                },
+            )
+            review_settings = review_cfg.get(review_config_key, {})
             duration_minutes = review_settings.get(
                 "review_duration_minutes", 1
             )  # 默认为1分钟

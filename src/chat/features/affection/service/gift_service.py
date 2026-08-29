@@ -1,8 +1,9 @@
 import logging
 from src.chat.services.ai.service import ai_service
 from src.chat.features.affection.service.affection_service import AffectionService
+from src.chat.services.config_override_service import config_override_service
+from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import extract_persona_prompt
-from src.chat.config.prompts import SYSTEM_PROMPT
 from src.chat.config import chat_config as app_config  # 导入 chat_config
 from src.chat.services.ai.providers.base import GenerationConfig
 
@@ -22,11 +23,20 @@ class GiftService:
         affection_status = await self.affection_service.get_affection_status(user_id)
         affection_level_name = affection_status.get("level_name", "NEUTRAL")
 
-        persona_prompt = extract_persona_prompt(SYSTEM_PROMPT)
+        persona_source = await prompt_service.get_prompt_async("SYSTEM_PROMPT")
+        persona_prompt = extract_persona_prompt(persona_source or "")
         # 从 app_config 获取提示词模板
-        system_prompt = app_config.GIFT_SYSTEM_PROMPT.format(persona=persona_prompt)
+        gift_system_prompt = await config_override_service.get(
+            "feature.gift_system_prompt",
+            app_config.GIFT_SYSTEM_PROMPT,
+        )
+        system_prompt = gift_system_prompt.format(persona=persona_prompt)
 
-        user_prompt = app_config.GIFT_PROMPT.format(
+        gift_prompt = await config_override_service.get(
+            "feature.gift_prompt",
+            app_config.GIFT_PROMPT,
+        )
+        user_prompt = gift_prompt.format(
             user_name=user.display_name,
             item_name=item_name,
             affection_level=affection_level_name,

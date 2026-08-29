@@ -11,6 +11,7 @@ from src.config import BOT_NAME
 from src.chat.services.ai.service import ai_service
 from src.chat.utils.prompt_utils import replace_emojis
 from src.chat.services.prompt_service import prompt_service
+from src.chat.services.config_override_service import config_override_service
 from src.chat.services.context_service_test import get_context_service  # 导入测试服务
 from src.chat.features.world_book.services.world_book_service import world_book_service
 from src.chat.features.affection.service.affection_service import affection_service
@@ -30,6 +31,7 @@ from src.chat.features.chat_settings.services.chat_settings_service import (
 from src.chat.services.ai.providers.base import GenerationConfig
 from src.chat.services.ai.providers.provider_format import ProviderFormat, MessageFormat
 from src.chat.services.persona_preference_service import persona_preference_service
+from src.chat.features.ab_test.services.ab_test_service import ab_test_service
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +48,7 @@ class ChatResult:
 
     content: str
     tools_called: List[str] = field(default_factory=list)
+    ab_arm: Optional[dict] = None
 
 
 class ChatService:
@@ -225,6 +228,13 @@ class ChatService:
             current_model = await chat_settings_service.get_current_ai_model()
             log.info(f"当前使用的AI模型: {current_model}")
 
+            ab_arm = await ab_test_service.draw_arm()
+            if ab_arm:
+                log.info(
+                    f"[A/B] 本条回复命中实验分组: {ab_arm['label']} "
+                    f"-> {ab_arm['model_full_id']}"
+                )
+
             # --- 两阶段回复管线配置 ---
             two_stage_on = await chat_settings_service.is_two_stage_enabled()
             tool_model_id = (
@@ -234,9 +244,13 @@ class ChatService:
                 await chat_settings_service.get_writer_model() if two_stage_on else None
             )
             if two_stage_on:
+                if ab_arm:
+                    writer_model_id = ab_arm["model_full_id"]
                 log.info(
                     f"[两阶段] 已启用：工具模型={tool_model_id}，写作模型={writer_model_id}"
                 )
+            elif ab_arm:
+                current_model = ab_arm["model_full_id"]
 
             # --- [新增] 根据上下文确定用于工具设置的用户ID ---
             user_id_for_settings: Optional[str] = None
@@ -312,10 +326,14 @@ class ChatService:
             # Stage 1：极简工具路由提示（无人设、无世界书、无好感度、无历史，最大化缓存命中）
             stage1_messages: Optional[List[Dict[str, Any]]] = None
             if two_stage_on:
+                tool_router_prompt = await config_override_service.get(
+                    "feature.tool_router_prompt",
+                    chat_config.TOOL_ROUTER_SYSTEM_PROMPT,
+                )
                 stage1_messages = [
                     {
                         "role": "system",
-                        "content": chat_config.TOOL_ROUTER_SYSTEM_PROMPT,
+                        "content": tool_router_prompt,
                     },
                     {"role": "user", "content": user_content},
                 ]
@@ -474,7 +492,9 @@ class ChatService:
             # self._log_rag_summary(author, final_content, world_book_entries, final_response)
 
             log.info(f"已为用户 {author.display_name} 生成AI回复: {final_response}")
-            return ChatResult(content=final_response, tools_called=_called_tools)
+            return ChatResult(
+                content=final_response, tools_called=_called_tools, ab_arm=ab_arm
+            )
 
         except Exception as e:
             log.error(f"[ChatService] 处理聊天消息时出错: {e}", exc_info=True)

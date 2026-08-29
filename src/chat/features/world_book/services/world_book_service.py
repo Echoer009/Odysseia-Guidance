@@ -8,6 +8,7 @@ import asyncio
 
 # 导入新的服务依赖
 from src.chat.services.ai.service import ai_service
+from src.chat.services.config_override_service import config_override_service
 from src import config
 from src.chat.config import chat_config
 from src.chat.features.world_book.services.incremental_rag_service import (
@@ -47,7 +48,7 @@ class WorldBookService:
         guild_id: int,
         user_name: str,  # 新增：接收提问者的名字
         conversation_history: Optional[List[Dict[str, Any]]] = None,
-        n_results: int = chat_config.RAG_N_RESULTS_DEFAULT,
+        n_results: Optional[int] = None,
         max_distance: float = 0.5,
     ) -> List[Dict[str, Any]]:
         """
@@ -58,12 +59,16 @@ class WorldBookService:
             user_id: 用户的 Discord ID。
             guild_id: 服务器的 Discord ID。
             conversation_history: (可选) 用于生成查询的特定对话历史。
-            n_results: 要返回的结果数量。
+            n_results: 要返回的结果数量（不传时使用运行时配置）。
             max_distance: RAG 搜索的距离阈值，用于过滤不相关的结果。
 
         Returns:
             一个包含最相关条目信息的字典列表。
         """
+        if n_results is None:
+            n_results = await config_override_service.get(
+                "rag.n_results_default", chat_config.RAG_N_RESULTS_DEFAULT
+            )
         if not self.is_ready() or not latest_query:
             if not latest_query:
                 log.debug("latest_query 为空，跳过 RAG 搜索。")

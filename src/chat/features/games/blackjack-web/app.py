@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.games.config import blackjack_config
 from src.chat.features.games.services.blackjack_service import blackjack_service
+from src.chat.services.config_override_service import config_override_service
 from src.chat.utils.database import chat_db_manager
 
 # 从根目录加载 .env 文件
@@ -110,21 +111,15 @@ async def log_requests(request: Request, call_next):
 # auto_error=False 允许多选的认证，这样在没有token时就不会自动触发403错误
 auth_scheme = HTTPBearer(auto_error=False)
 
-# 本地开发时使用的固定测试用户ID
-TEST_USER_ID = 999999999999999999
-
 
 async def get_current_user_id(
     token: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme),
 ) -> int:
     """
     依赖项：从Bearer Token中获取用户信息并返回用户ID。
-    在本地开发中，如果没有提供token，则返回一个固定的测试用户ID。
     """
-    # 如果没有token（例如在本地开发环境中），返回测试用户ID
     if token is None:
-        log.warning(f"未找到认证Token。回退到测试用户ID: {TEST_USER_ID}")
-        return TEST_USER_ID
+        raise HTTPException(status_code=401, detail="Missing authentication token")
 
     # 如果有token，则执行原有的Discord API验证流程
     headers = {"Authorization": f"Bearer {token.credentials}"}
@@ -219,16 +214,6 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
         # --- 新增：在加载游戏时，自动清理该用户任何卡住的旧游戏 ---
         balance = await coin_service.get_balance(user_id)
 
-        # --- 本地开发专属：为测试用户自动创建账户并补充余额 ---
-        if user_id == TEST_USER_ID and (balance is None or balance < 5000):
-            amount_to_add = 10000 - (balance or 0)
-            log.warning(
-                f"测试用户 {user_id} 余额不足或不存在。正在补充 {amount_to_add} 硬币至10000。"
-            )
-            balance = await coin_service.add_coins(
-                user_id, amount_to_add, "本地开发自动补充"
-            )
-
         # --- 安全检查和日志记录 ---
         # 如果用户的余额记录因某种原因（例如数据异常）为空，这是一个严重问题
         if balance is None:
@@ -244,7 +229,17 @@ async def get_user_info(user_id: int = Depends(get_current_user_id)):
         log.info(f"用户 {user_id} 的余额为 {balance}")
 
         # --- 从配置文件获取荷官阈值 ---
-        dealer_thresholds = blackjack_config.DEALER_BET_THRESHOLDS
+        blackjack_cfg = await config_override_service.get_json(
+            "economy.blackjack.config",
+            {
+                "player_bet_percentages": blackjack_config.PLAYER_BET_PERCENTAGES,
+                "minimum_bet_amounts": blackjack_config.MINIMUM_BET_AMOUNTS,
+                "dealer_bet_thresholds": blackjack_config.DEALER_BET_THRESHOLDS,
+            },
+        )
+        dealer_thresholds = blackjack_cfg.get(
+            "dealer_bet_thresholds", blackjack_config.DEALER_BET_THRESHOLDS
+        )
 
         return JSONResponse(
             content={

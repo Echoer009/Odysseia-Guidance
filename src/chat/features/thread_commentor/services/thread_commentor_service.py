@@ -2,6 +2,7 @@
 
 import logging
 import json
+import random
 import discord
 from typing import Optional
 from sqlalchemy.future import select
@@ -9,8 +10,8 @@ from datetime import datetime, timezone, timedelta
 
 from src.chat.services.ai.service import ai_service
 from src.chat.services.ai.providers.base import GenerationConfig
-from src.chat.config.thread_prompts import get_random_praise_prompt
-from src.chat.config.prompts import PROMPT_CONFIG
+from src.chat.services.config_override_service import config_override_service
+from src.chat.services.prompt_service import prompt_service
 from src.chat.utils.prompt_utils import replace_emojis, get_thread_commentor_persona
 from src.chat.features.odysseia_coin.service.coin_service import coin_service
 from src.chat.features.world_book.services.world_book_service import world_book_service
@@ -209,20 +210,28 @@ class ThreadCommentorService:
 
             # 5. 准备调用所需的所有信息片段
             core_persona = get_thread_commentor_persona()
-            task_prompt = get_random_praise_prompt().format(user_nickname=user_nickname)
+            warmup_messages = await config_override_service.get_json(
+                "feature.warmup_messages", chat_config.WARMUP_MESSAGES
+            )
+            consent_prompts = warmup_messages.get("consent_prompts") or (
+                chat_config.WARMUP_MESSAGES["consent_prompts"]
+            )
+            task_prompt = random.choice(consent_prompts).format(
+                user_nickname=user_nickname
+            )
 
             log.info(f"为帖子 '{title}' 构建带有破限功能的统一上下文，即将调用AI服务。")
 
             # 6. 手动构建带有“破限”逻辑的对话历史
+            jailbreak_user = await prompt_service.get_prompt_async(
+                "JAILBREAK_USER_PROMPT"
+            )
+            jailbreak_model = await prompt_service.get_prompt_async(
+                "JAILBREAK_MODEL_RESPONSE"
+            )
             conversation_history = [
-                {
-                    "role": "user",
-                    "parts": [PROMPT_CONFIG["default"]["JAILBREAK_USER_PROMPT"]],
-                },
-                {
-                    "role": "model",
-                    "parts": [PROMPT_CONFIG["default"]["JAILBREAK_MODEL_RESPONSE"]],
-                },
+                {"role": "user", "parts": [jailbreak_user or ""]},
+                {"role": "model", "parts": [jailbreak_model or ""]},
                 {"role": "user", "parts": [core_persona]},
                 {"role": "model", "parts": [f"好的，我是{BOT_NAME}，已经准备好了"]},
                 {"role": "user", "parts": [user_memory]},
@@ -248,9 +257,10 @@ class ThreadCommentorService:
             current_beijing_time = datetime.now(beijing_tz).strftime(
                 "%Y年%m月%d日 %H:%M"
             )
-            final_injection_content = PROMPT_CONFIG["default"][
+            final_injection = await prompt_service.get_prompt_async(
                 "JAILBREAK_FINAL_INSTRUCTION"
-            ].format(
+            )
+            final_injection_content = (final_injection or "").format(
                 guild_name=thread.guild.name,
                 location_name=thread.parent.name if thread.parent else "未知版区",
                 current_time=current_beijing_time,

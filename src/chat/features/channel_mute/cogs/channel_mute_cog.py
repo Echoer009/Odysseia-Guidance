@@ -9,6 +9,7 @@ import logging
 from src.chat.utils.database import chat_db_manager
 from src.chat.config.chat_config import CHANNEL_MUTE_CONFIG
 from src.chat.config import chat_config
+from src.chat.services.config_override_service import config_override_service
 from src.config import BOT_NAME
 
 log = logging.getLogger(__name__)
@@ -34,8 +35,11 @@ class ChannelMuteCog(commands.Cog):
 
         # 0. 检查是否在豁免频道
         # 检查是否在豁免频道，或当前频道是否为帖子
+        unrestricted_ids = await config_override_service.get_json(
+            "channels.unrestricted_ids", chat_config.UNRESTRICTED_CHANNEL_IDS
+        )
         is_unrestricted = (
-            channel_id in chat_config.UNRESTRICTED_CHANNEL_IDS
+            channel_id in unrestricted_ids
             or isinstance(interaction.channel, discord.Thread)
         )
         if is_unrestricted:
@@ -52,8 +56,11 @@ class ChannelMuteCog(commands.Cog):
             return
 
         # 2. 创建并发送投票 embed
-        threshold = CHANNEL_MUTE_CONFIG["VOTE_THRESHOLD"]
-        mute_duration = CHANNEL_MUTE_CONFIG["MUTE_DURATION_MINUTES"]
+        mute_cfg = await config_override_service.get_json(
+            "mute.vote_config", CHANNEL_MUTE_CONFIG
+        )
+        threshold = mute_cfg["VOTE_THRESHOLD"]
+        mute_duration = mute_cfg["MUTE_DURATION_MINUTES"]
         description = (
             f"{interaction.user.mention} 发起了投票…\n\n"
             f"如果大家投了 {threshold} 票 ✅，我就会在这个频道里“下线” {mute_duration} 分钟，不再回应任何消息和指令啦。\n\n"
@@ -64,7 +71,7 @@ class ChannelMuteCog(commands.Cog):
             description=description,
             color=discord.Color.orange(),
         )
-        duration = CHANNEL_MUTE_CONFIG["VOTE_DURATION_MINUTES"]
+        duration = mute_cfg["VOTE_DURATION_MINUTES"]
         embed.set_footer(text=f"哼，你们只有{duration}分钟时间来决定！")
 
         await interaction.response.send_message(embed=embed)
@@ -88,7 +95,10 @@ class ChannelMuteCog(commands.Cog):
             return
 
         # 2. 检查投票是否过期
-        duration = CHANNEL_MUTE_CONFIG["VOTE_DURATION_MINUTES"]
+        mute_cfg = await config_override_service.get_json(
+            "mute.vote_config", CHANNEL_MUTE_CONFIG
+        )
+        duration = mute_cfg["VOTE_DURATION_MINUTES"]
         expires_at = vote_info["created_at"] + datetime.timedelta(minutes=duration)
         if datetime.datetime.now(datetime.timezone.utc) > expires_at:
             log.info(f"投票 {payload.message_id} 已过期。")
@@ -113,7 +123,7 @@ class ChannelMuteCog(commands.Cog):
             for reaction in message.reactions:
                 if str(reaction.emoji) == "✅":
                     # 5. 检查票数是否达到阈值
-                    threshold = CHANNEL_MUTE_CONFIG["VOTE_THRESHOLD"]
+                    threshold = mute_cfg["VOTE_THRESHOLD"]
                     if reaction.count >= threshold:
                         # 尝试以原子方式移除投票消息。如果消息已被移除，
                         # 这意味着另一个并发事件已经处理了它。
@@ -123,7 +133,7 @@ class ChannelMuteCog(commands.Cog):
 
                         if vote_info_popped:
                             # 如果我们成功地弹出了消息，那么就由我们来执行禁言操作。
-                            mute_duration = CHANNEL_MUTE_CONFIG["MUTE_DURATION_MINUTES"]
+                            mute_duration = mute_cfg["MUTE_DURATION_MINUTES"]
                             await chat_db_manager.add_muted_channel(
                                 channel_id, mute_duration
                             )

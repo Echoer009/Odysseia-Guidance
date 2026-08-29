@@ -327,12 +327,18 @@ class ForumVectorDBService:
         """
         try:
             from src.chat.config.chat_config import FORUM_RAG_CONFIG
+            from src.chat.services.config_override_service import (
+                config_override_service,
+            )
 
-            top_k_vector = FORUM_RAG_CONFIG.get("TOP_K_VECTOR", 20)
-            top_k_fts = FORUM_RAG_CONFIG.get("TOP_K_FTS", 20)
-            rrf_k = FORUM_RAG_CONFIG.get("RRF_K", 60)
-            final_k = FORUM_RAG_CONFIG.get("HYBRID_SEARCH_FINAL_K", 5)
-            exact_match_boost = FORUM_RAG_CONFIG.get("EXACT_MATCH_BOOST", 1000.0)
+            rag_cfg = await config_override_service.get_json(
+                "rag.forum.config", FORUM_RAG_CONFIG
+            )
+            top_k_vector = rag_cfg.get("TOP_K_VECTOR", 20)
+            top_k_fts = rag_cfg.get("TOP_K_FTS", 20)
+            rrf_k = rag_cfg.get("RRF_K", 60)
+            final_k = rag_cfg.get("HYBRID_SEARCH_FINAL_K", 5)
+            exact_match_boost = rag_cfg.get("EXACT_MATCH_BOOST", 1000.0)
 
             # 根据配置选择使用哪个 embedding 列
             embedding_col = await get_embedding_column()

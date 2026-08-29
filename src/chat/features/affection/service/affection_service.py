@@ -7,6 +7,7 @@ import yaml
 from sqlalchemy import select, func
 
 from src.chat.config.chat_config import AFFECTION_CONFIG
+from src.chat.services.config_override_service import config_override_service
 from src.config import DEVELOPER_USER_IDS, BOT_NAME
 from src.chat.utils.time_utils import BEIJING_TZ
 from src.database.database import AsyncSessionLocal
@@ -101,21 +102,22 @@ class AffectionService:
                     session.add(new_record)
 
     async def increase_affection_on_message(self, user_id: int) -> Optional[int]:
-        if random.random() > AFFECTION_CONFIG["INCREASE_CHANCE"]:
+        cfg = await config_override_service.get_json("affection.config", AFFECTION_CONFIG)
+        if random.random() > cfg["INCREASE_CHANCE"]:
             return None
 
         affection_data = await self._get_or_create_affection(user_id)
 
         if (
             affection_data["daily_affection_gain"]
-            >= AFFECTION_CONFIG["DAILY_CHAT_AFFECTION_CAP"]
+            >= cfg["DAILY_CHAT_AFFECTION_CAP"]
         ):
             log.info(f"用户 {user_id} 今日通过聊天获取好感度已达上限。")
             return None
 
         points_to_add = min(
-            AFFECTION_CONFIG["INCREASE_AMOUNT"],
-            AFFECTION_CONFIG["DAILY_CHAT_AFFECTION_CAP"]
+            cfg["INCREASE_AMOUNT"],
+            cfg["DAILY_CHAT_AFFECTION_CAP"]
             - affection_data["daily_affection_gain"],
         )
 
@@ -132,15 +134,16 @@ class AffectionService:
         return points_to_add
 
     async def decrease_affection_on_blacklist(self, user_id: int) -> int:
+        cfg = await config_override_service.get_json("affection.config", AFFECTION_CONFIG)
         affection_data = await self._get_or_create_affection(user_id)
 
         new_points = (
-            affection_data["affection_points"] + AFFECTION_CONFIG["BLACKLIST_PENALTY"]
+            affection_data["affection_points"] + cfg["BLACKLIST_PENALTY"]
         )
 
         await self._update_affection(user_id, affection_points=new_points)
         log.warning(
-            f"用户 {user_id} 因被列入黑名单，好感度扣除了 {abs(AFFECTION_CONFIG['BLACKLIST_PENALTY'])} 点。"
+            f"用户 {user_id} 因被列入黑名单，好感度扣除了 {abs(cfg['BLACKLIST_PENALTY'])} 点。"
         )
         return new_points
 
@@ -186,6 +189,7 @@ class AffectionService:
         return new_points
 
     async def get_affection_status(self, user_id: int) -> Dict[str, Any]:
+        cfg = await config_override_service.get_json("affection.config", AFFECTION_CONFIG)
         affection_data = await self._get_or_create_affection(user_id)
 
         points = affection_data["affection_points"]
@@ -196,7 +200,7 @@ class AffectionService:
             "level_name": level_info["level_name"],
             "prompt": level_info["prompt"],
             "daily_gain": affection_data["daily_affection_gain"],
-            "daily_cap": AFFECTION_CONFIG["DAILY_CHAT_AFFECTION_CAP"],
+            "daily_cap": cfg["DAILY_CHAT_AFFECTION_CAP"],
         }
 
     def get_affection_level_info(self, points: float) -> Dict[str, Any]:
@@ -220,12 +224,13 @@ class AffectionService:
         return sorted_levels[0]
 
     async def apply_daily_fluctuation(self):
+        cfg = await config_override_service.get_json("affection.config", AFFECTION_CONFIG)
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(UserAffection))
             all_affections = result.scalars().all()
 
             for record in all_affections:
-                fluctuation = random.randint(*AFFECTION_CONFIG["DAILY_FLUCTUATION"])
+                fluctuation = random.randint(*cfg["DAILY_FLUCTUATION"])
                 record.affection_points += fluctuation
                 log.info(
                     f"用户 {record.user_id} 的好感度每日浮动: {fluctuation}，新点数: {record.affection_points}"

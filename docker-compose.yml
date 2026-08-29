@@ -136,6 +136,25 @@ services:
     depends_on:
       - db
 
+  admin_web:
+    image: echoni0n/braingirl:latest
+    container_name: ${INSTANCE_NAME:-odysseia}_web_admin
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    expose:
+      - "8004"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.admin.app:app --host 0.0.0.0 --port 8004
+    depends_on:
+      - db
+
   # Caddy 反向代理 - 提供 HTTPS
   caddy:
     image: caddy:latest
@@ -154,6 +173,7 @@ services:
       - guidance_web
       - lobby_web
       - diary_web
+      - admin_web
 
   #  config_web:
   #    build:

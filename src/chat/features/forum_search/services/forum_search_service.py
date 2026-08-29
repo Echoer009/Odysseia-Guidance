@@ -11,6 +11,7 @@ from src.chat.features.forum_search.services.forum_vector_db_service import (
     forum_vector_db_service,
 )
 from src.chat.services.regex_service import regex_service
+from src.chat.services.config_override_service import config_override_service
 from src.chat.config import chat_config as config
 from src.chat.utils.document_builder import build_forum_thread_document
 
@@ -413,11 +414,20 @@ class ForumSearchService:
                         log.warning("[FORUM_SEARCH] 无法为查询生成嵌入向量。")
                         return []
 
+                    forum_rag_cfg = await config_override_service.get_json(
+                        "rag.forum.config",
+                        {
+                            **config.FORUM_RAG_CONFIG,
+                            "MAX_DISTANCE": config.FORUM_RAG_MAX_DISTANCE,
+                        },
+                    )
                     search_results = await self.vector_db_service.search_hybrid(
                         query_embedding=query_embedding,
                         query_text=query,
                         where_filter=where_filter,
-                        max_distance=config.FORUM_RAG_MAX_DISTANCE,
+                        max_distance=forum_rag_cfg.get(
+                            "MAX_DISTANCE", config.FORUM_RAG_MAX_DISTANCE
+                        ),
                     )
 
                     # 详细日志：打印混合搜索返回的结果
