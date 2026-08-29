@@ -177,6 +177,8 @@ export type AbFeedback = {
   created_at: string
   question_text: string | null
   reply_text: string | null
+  arm_id?: number | string | null
+  model_full_id?: string | null
 }
 
 export type EditableArm = {

@@ -206,6 +206,13 @@ const feedbackColumns: DataTableColumns<AbFeedback> = [
     render: (row) => formatDateTime(row.created_at),
   },
   {
+    title: '模型',
+    key: 'arm_id',
+    width: 150,
+    render: (row) =>
+      h(NTag, { size: 'small', bordered: false, type: 'info' }, { default: () => armLabelOf(row) }),
+  },
+  {
     title: '用户',
     key: 'user_id',
     width: 110,
@@ -238,6 +245,30 @@ const feedbackColumns: DataTableColumns<AbFeedback> = [
       ]),
   },
 ]
+
+const feedbackArmFilter = ref<number | 'all'>('all')
+
+const filteredFeedback = computed(() => {
+  if (feedbackArmFilter.value === 'all') return feedback.value
+  return feedback.value.filter((row) => toNumber(row.arm_id) === feedbackArmFilter.value)
+})
+
+const feedbackReasonSummary = computed(() => {
+  const counter = new Map<string, number>()
+  for (const row of filteredFeedback.value) {
+    for (const reason of normalizeStringArray(row.reasons)) {
+      counter.set(reason, (counter.get(reason) ?? 0) + 1)
+    }
+  }
+  return Array.from(counter.entries())
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count)
+})
+
+function armLabelOf(row: AbFeedback): string {
+  const arm = arms.value.find((item) => item.arm_id === toNumber(row.arm_id))
+  return arm ? arm.label : String(row.model_full_id ?? '—')
+}
 
 watch(days, () => void load())
 
@@ -324,10 +355,27 @@ onMounted(() => void load())
         </n-descriptions>
       </n-card>
 
-      <n-card title="用户反馈" size="small" class="page-card">
+      <n-card size="small" class="page-card">
+        <template #header>
+          <n-space align="center" :size="12" wrap>
+            <span>用户反馈</span>
+            <n-radio-group v-model:value="feedbackArmFilter" size="small">
+              <n-radio-button value="all">全部</n-radio-button>
+              <n-radio-button v-for="arm in arms" :key="arm.arm_id" :value="arm.arm_id">
+                {{ arm.label }}
+              </n-radio-button>
+            </n-radio-group>
+            <n-text depth="3" size="small">共 {{ filteredFeedback.length }} 条</n-text>
+          </n-space>
+        </template>
+        <n-space v-if="feedbackReasonSummary.length > 0" :size="6" wrap style="margin-bottom: 12px">
+          <n-tag v-for="item in feedbackReasonSummary" :key="item.reason" size="small" :bordered="false">
+            {{ item.reason }} × {{ item.count }}
+          </n-tag>
+        </n-space>
         <n-data-table
           :columns="feedbackColumns"
-          :data="feedback"
+          :data="filteredFeedback"
           :row-key="(row: AbFeedback) => row.id"
           :max-height="520"
           size="small"

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.admin import auth
@@ -28,7 +28,33 @@ from src.chat.utils.database import chat_db_manager
 if not os.getenv("ADMIN_SESSION_SECRET"):
     raise RuntimeError("ADMIN_SESSION_SECRET 未设置，管理后台拒绝启动")
 
-app = FastAPI(title="类脑娘 Admin", version="1.0.0")
+MAX_SAFE_JS_INT = 9007199254740991
+
+
+def _to_js_safe(value):
+    if isinstance(value, dict):
+        return {k: _to_js_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_js_safe(v) for v in value]
+    if (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and (value > MAX_SAFE_JS_INT or value < -MAX_SAFE_JS_INT)
+    ):
+        return str(value)
+    return value
+
+
+class BigIntSafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return super().render(_to_js_safe(content))
+
+
+app = FastAPI(
+    title="类脑娘 Admin",
+    version="1.0.0",
+    default_response_class=BigIntSafeJSONResponse,
+)
 log = logging.getLogger(__name__)
 
 
