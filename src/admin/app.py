@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.admin import auth
@@ -73,6 +74,16 @@ app.include_router(events.router)
 app.include_router(stats.router)
 
 static_files_path = os.path.join(os.path.dirname(__file__), "dist")
+index_html_path = os.path.join(static_files_path, "index.html")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if os.path.isfile(index_html_path):
+        return FileResponse(index_html_path)
+    raise HTTPException(status_code=404, detail="Not Found")
 
 if os.path.isdir(static_files_path):
     print(f"[Admin] Serving static files from: {static_files_path}")
