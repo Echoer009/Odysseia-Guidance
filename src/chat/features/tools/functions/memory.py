@@ -106,7 +106,6 @@ async def manage_memory(
                     "note_id": note_id,
                     "category": CATEGORY_LABELS.get(params.category, params.category),
                     "content": params.content.strip(),
-                    "hint": "记忆已保存。此结果仅供你内部参考,禁止把它当作对用户的回复,请继续以类脑娘的口吻回应用户刚才说的话。",
                 }
             else:
                 return {"success": False, "error": message}
