@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 
 def _build_ab_rating_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🧪 实验回复评价",
+        title="实验回复评价",
         description="这条回复来自实验模型,比起类脑娘平时的回复,你觉得它怎么样?",
         color=config.EMBED_COLOR_PRIMARY,
     )
