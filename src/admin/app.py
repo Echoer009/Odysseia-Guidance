@@ -87,7 +87,11 @@ async def spa_fallback(full_path: str):
     if candidate.startswith(static_files_path) and os.path.isfile(candidate):
         return FileResponse(candidate)
     if os.path.isfile(index_html_path):
-        return FileResponse(index_html_path)
+        if os.path.splitext(full_path)[1]:
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(
+            index_html_path, headers={"Cache-Control": "no-cache"}
+        )
     raise HTTPException(status_code=404, detail="Not Found")
 
 if os.path.isdir(static_files_path):
