@@ -389,7 +389,7 @@ class AIService:
 
         # 预处理消息：对于不支持视觉的 Provider，将图片转换为文字描述
         messages = await self._preprocess_messages_for_vision(
-            messages, provider, **kwargs
+            messages, provider, model_name=model_name, **kwargs
         )
 
         # 记录完整上下文日志（如果启用）
@@ -894,17 +894,17 @@ class AIService:
 
             log.info(f"尝试故障转移到 Provider '{fallback_name}'")
 
+            # 使用故障转移 Provider 的默认模型
+            fallback_model = (
+                provider.supported_models[0] if provider.supported_models else None
+            )
+
             # 故障转移时需要重新预处理图片（不同 Provider 可能需要不同处理）
             fallback_messages = await self._preprocess_messages_for_vision(
-                messages, provider, **kwargs
+                messages, provider, model_name=fallback_model, **kwargs
             )
 
             try:
-                # 使用故障转移 Provider 的默认模型
-                fallback_model = (
-                    provider.supported_models[0] if provider.supported_models else None
-                )
-
                 # 根据 fallback provider 类型重新获取工具（解决格式不兼容问题）
                 fallback_tools = None
                 log.debug(
@@ -1011,6 +1011,7 @@ class AIService:
         self,
         messages: List[Dict[str, Any]],
         provider: BaseProvider,
+        model_name: Optional[str] = None,
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """
@@ -1030,8 +1031,11 @@ class AIService:
         Returns:
             处理后的消息列表
         """
-        # 如果 Provider 支持视觉，直接返回原消息
-        if getattr(provider, "supports_vision", False):
+        # 如果 Provider 或模型配置声明支持视觉，直接返回原消息
+        model_config = get_model_config(model_name) if model_name else None
+        if getattr(provider, "supports_vision", False) or (
+            model_config is not None and model_config.supports_vision
+        ):
             return messages
 
         # 获取是否启用视觉转译参数（默认关闭以节省内存）
