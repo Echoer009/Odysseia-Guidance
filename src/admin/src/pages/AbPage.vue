@@ -52,7 +52,11 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     const data = await api.get<AbExperiment[] | null>('ab/experiments')
-    experiments.value = Array.isArray(data) ? data : []
+    experiments.value = (Array.isArray(data) ? data : []).map((experiment) => ({
+      ...experiment,
+      enabled: !!experiment.enabled,
+      arms: (experiment.arms ?? []).map((arm) => ({ ...arm, enabled: !!arm.enabled })),
+    }))
   } catch {} finally {
     loading.value = false
   }
