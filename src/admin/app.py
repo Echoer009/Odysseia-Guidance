@@ -109,12 +109,15 @@ _legal_pages = {
 }
 
 
-async def _serve_legal_page(page: str):
+async def _serve_legal_page(page: str, app: str = ""):
     filename = _legal_pages.get(page.removesuffix(".html"))
     if not filename:
         raise HTTPException(status_code=404, detail="Not Found")
-    candidate = os.path.normpath(os.path.join(legal_files_path, filename))
-    if not candidate.startswith(legal_files_path) or not os.path.isfile(candidate):
+    base = os.path.normpath(os.path.join(legal_files_path, app)) if app else legal_files_path
+    if not base.startswith(legal_files_path):
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.normpath(os.path.join(base, filename))
+    if not candidate.startswith(base) or not os.path.isfile(candidate):
         raise HTTPException(status_code=404, detail="Not Found")
     return FileResponse(
         candidate,
@@ -125,8 +128,12 @@ async def _serve_legal_page(page: str):
 
 # 同时注册 /legal 与 /admin/legal 两种应用侧路径:
 # 反向代理剥离 /admin 前缀时命中前者,原样转发时命中后者。
+# /legal/{app}/{page} 服务同域下其他 bot(类脑关注/类脑抽卡)的法律页面。
 app.add_api_route(
     "/legal/{page}", _serve_legal_page, methods=["GET", "HEAD"], include_in_schema=False
+)
+app.add_api_route(
+    "/legal/{app}/{page}", _serve_legal_page, methods=["GET", "HEAD"], include_in_schema=False
 )
 app.add_api_route(
     "/admin/legal/{page}", _serve_legal_page, methods=["GET", "HEAD"], include_in_schema=False
