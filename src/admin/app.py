@@ -101,6 +101,37 @@ app.include_router(stats.router)
 
 static_files_path = os.path.join(os.path.dirname(__file__), "dist")
 index_html_path = os.path.join(static_files_path, "index.html")
+# --- 公开法律页面(Discord 应用验证要求公开可访问,免登录) ---
+legal_files_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "legal"))
+_legal_pages = {
+    "terms-of-service": "terms-of-service.html",
+    "privacy-policy": "privacy-policy.html",
+}
+
+
+async def _serve_legal_page(page: str):
+    filename = _legal_pages.get(page.removesuffix(".html"))
+    if not filename:
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.normpath(os.path.join(legal_files_path, filename))
+    if not candidate.startswith(legal_files_path) or not os.path.isfile(candidate):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(
+        candidate,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+# 同时注册 /legal 与 /admin/legal 两种应用侧路径:
+# 反向代理剥离 /admin 前缀时命中前者,原样转发时命中后者。
+app.add_api_route(
+    "/legal/{page}", _serve_legal_page, methods=["GET"], include_in_schema=False
+)
+app.add_api_route(
+    "/admin/legal/{page}", _serve_legal_page, methods=["GET"], include_in_schema=False
+)
+
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

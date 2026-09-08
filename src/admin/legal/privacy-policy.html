@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>隐私政策 - 类脑娘 Discord 机器人</title>
+<style>
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:820px;margin:0 auto;padding:24px;line-height:1.75;color:#2b2d31;background:#fff}
+h1{font-size:1.6em;border-bottom:2px solid #5865f2;padding-bottom:8px}
+h2{font-size:1.2em;margin-top:2em;color:#5865f2}
+.en{background:#f2f3f5;border-left:4px solid #5865f2;padding:12px 16px;font-size:.92em;color:#4e5058}
+.meta{color:#6d6f78;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.92em}
+th,td{border:1px solid #d4d6dc;padding:8px 10px;text-align:left;vertical-align:top}
+th{background:#f2f3f5}
+a{color:#5865f2}
+</style>
+</head>
+<body>
+
+<h1>隐私政策（Privacy Policy）</h1>
+<p class="meta">生效日期：2026 年 9 月 8 日 &nbsp;|&nbsp; 适用对象：类脑娘 Discord 机器人（以下简称"本机器人"）的全部用户</p>
+
+<div class="en">
+<b>English summary:</b> We collect Discord IDs, usernames, and message content you send to the bot (mentions, forum posts, or messages flagged by safety filters); AI conversation history and memory notes used to personalize replies; virtual economy data; and community content indexes for search. To generate AI replies, relevant message content is sent to third-party AI providers (e.g. Google Gemini, DeepSeek, or OpenAI-compatible endpoints) as configured by the community administrators. Data is stored in the community's self-hosted PostgreSQL database. You may request deletion of your data via the in-bot memory commands or by contacting the support server. Full details are in the Chinese text below; the Chinese version prevails.
+</div>
+
+<h2>1. 概述</h2>
+<p>本政策说明本机器人在 Discord 平台上收集、使用、存储哪些数据，以及您拥有的选择。本机器人由所在社区的管理团队自行部署与运营（开源框架），数据存储在部署者管理的服务器上，不归属于任何商业公司。</p>
+
+<h2>2. 我们收集的数据</h2>
+<p>仅在您主动使用功能时收集：</p>
+<table>
+<tr><th>类别</th><th>内容</th><th>来源场景</th></tr>
+<tr><td>Discord 公开资料</td><td>用户 ID、用户名/昵称、头像链接</td><td>使用 AI 对话、经济、游戏等功能时</td></tr>
+<tr><td>消息内容</td><td>您发送给机器人的消息文本与附件</td><td>@机器人、在帖子中与机器人互动、参与暖贴/论坛功能</td></tr>
+<tr><td>AI 对话历史与记忆</td><td>与机器人的对话记录、机器人为您生成的记忆笔记及其向量嵌入</td><td>用于让机器人记住上下文、实现个性化回复</td></tr>
+<tr><td>虚拟经济数据</td><td>余额、交易、借贷、奖励记录</td><td>签到、发言、发帖、小游戏、商店等</td></tr>
+<tr><td>社区内容索引</td><td>论坛帖子的标题、正文、作者信息</td><td>为整个社区提供帖子搜索（RAG）功能</td></tr>
+<tr><td>安全审核记录</td><td>触发关键词过滤的消息内容、黑名单记录</td><td>内容安全检测命中时</td></tr>
+<tr><td>管理面板登录</td><td>OAuth 授权返回的用户 ID 与用户名</td><td>社区管理员登录网页管理面板时</td></tr>
+</table>
+
+<h2>3. 数据用途</h2>
+<ul>
+<li>生成 AI 回复与提供个性化记忆；</li>
+<li>维持虚拟经济、小游戏与商店功能；</li>
+<li>提供社区帖子搜索；</li>
+<li>内容安全审核与防滥用；</li>
+<li>为管理员提供配置管理与统计。</li>
+</ul>
+<p>我们<b>不</b>出售数据，<b>不</b>用于广告，<b>不</b>用于用户画像售卖。</p>
+
+<h2>4. 第三方服务</h2>
+<p>为生成 AI 回复，系统会将必要的对话上下文（含您的消息内容）发送给部署者配置的 AI 服务商，可能包括 Google Gemini、DeepSeek 或其他 OpenAI 兼容接口。这些内容仅用于当场生成回复及相关摘要，受相应服务商隐私政策约束。消息中的图片可能经由图片生成/识别服务处理。除此之外不会向其他第三方提供您的数据（法律法规要求除外）。</p>
+
+<h2>5. 存储与保留</h2>
+<ul>
+<li>数据存储于部署者自托管的服务器（PostgreSQL 数据库）。</li>
+<li>对话历史与记忆：保留至您删除，或长期不活跃后由管理员清理。</li>
+<li>经济与审核记录：保留至您申请删除或服务停止运营。</li>
+<li>服务停止运营时，数据库将被删除。</li>
+</ul>
+
+<h2>6. 您的权利</h2>
+<ul>
+<li><b>查看与删除记忆</b>：在 Discord 中使用机器人提供的记忆管理命令查看、修改、删除您的记忆笔记与对话历史。</li>
+<li><b>删除全部数据</b>：通过下方支持服务器联系管理员，提供您的 Discord 用户 ID，我们将在合理期限内删除您的全部个人数据。删除后不可恢复，相关虚拟数据同时失效。</li>
+<li><b>停止收集</b>：不再 @ 机器人、不在启用了相关功能的频道互动，或请管理员将机器人移出服务器。</li>
+</ul>
+
+<h2>7. 数据安全</h2>
+<p>数据库部署在受访问控制保护的服务器上，管理面板仅授权管理员访问，机器人令牌等凭据不公开。但互联网传输不存在绝对安全，我们不担保数据绝对安全。</p>
+
+<h2>8. 未成年人</h2>
+<p>本机器人不面向低于 Discord 最低年龄要求的用户。若发现未成年人数据被收集，我们将删除。</p>
+
+<h2>9. 政策变更</h2>
+<p>政策更新后将在本页面发布并修改顶部日期。重大变更将尽量通过机器人公告或社区渠道通知。</p>
+
+<h2>10. 联系方式</h2>
+<p>数据删除申请与咨询请通过支持服务器：<a href="https://discord.gg/urzQv5WTHq" rel="noopener">discord.gg/urzQv5WTHq</a> &nbsp;|&nbsp; <a href="https://discord.gg/BZuAMRNuMM" rel="noopener">discord.gg/BZuAMRNuMM</a></p>
+
+</body>
+</html>
