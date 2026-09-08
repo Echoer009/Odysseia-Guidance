@@ -207,6 +207,16 @@ class DiscordBot(commands.Bot):
         # 将解析出的列表存储为实例属性，以便在 on_ready 中使用
         self.debug_guild_ids = debug_guilds
 
+        # 服务器白名单:设置后,不在白名单内的服务器会被自动退出
+        self.guild_allowlist: set[int] | None = (
+            config.GUILD_ALLOWLIST_IDS if config.GUILD_ALLOWLIST else None
+        )
+        if self.guild_allowlist is not None:
+            logging.getLogger(__name__).info(
+                f"服务器白名单已启用,允许 {len(self.guild_allowlist)} 个服务器"
+            )
+
+
         # 根据是否存在代理和 debug_guilds 来决定初始化参数
         init_kwargs = {
             "command_prefix": "!",
@@ -260,6 +270,24 @@ class DiscordBot(commands.Bot):
             return False
 
         return True
+
+    async def _leave_guild_if_not_allowlisted(self, guild: discord.Guild) -> None:
+        """白名单机制:不在白名单内的服务器,自动退出。"""
+        if self.guild_allowlist is None or guild.id in self.guild_allowlist:
+            return
+        log = logging.getLogger(__name__)
+        log.warning(
+            f"[白名单] 服务器 {guild.name} ({guild.id}) 不在白名单内,自动退出。"
+        )
+        try:
+            await guild.leave()
+            log.info(f"[白名单] 已退出服务器 {guild.id}")
+        except discord.HTTPException as e:
+            log.error(f"[白名单] 退出服务器 {guild.id} 失败: {e}")
+
+    async def on_guild_join(self, guild: discord.Guild):
+        """被拉入新服务器时,立即校验白名单。"""
+        await self._leave_guild_if_not_allowlisted(guild)
 
     async def setup_hook(self):
         """
@@ -321,6 +349,11 @@ class DiscordBot(commands.Bot):
         log.info("--- 机器人已上线 ---")
         if self.user:
             log.info(f"登录用户: {self.user} (ID: {self.user.id})")
+
+        # 启动/重连时全量核对白名单,清理离线期间被拉入的服务器
+        for guild in list(self.guilds):
+            await self._leave_guild_if_not_allowlisted(guild)
+
 
         # 同步并列出所有命令，包括子命令
         log.info("--- 机器人已加载的命令 ---")

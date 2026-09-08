@@ -58,6 +58,12 @@ def _parse_ids(env_var: str) -> set[int]:
 # 用于在开发时快速同步命令，请在 .env 文件中设置
 GUILD_ID = os.getenv("GUILD_ID")
 
+# --- 服务器白名单 ---
+# 逗号分隔的服务器 ID。设置后,bot 被拉入白名单之外的服务器时会自动退出;
+# 留空则不限制。
+GUILD_ALLOWLIST = os.getenv("GUILD_ALLOWLIST", "").strip()
+GUILD_ALLOWLIST_IDS = _parse_ids("GUILD_ALLOWLIST") if GUILD_ALLOWLIST else set()
+
 # --- 代理配置 ---
 PROXY_URL = os.getenv("PROXY_URL")
 
