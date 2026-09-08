@@ -5,6 +5,9 @@ echonion.org {
     handle_path /admin/* {
         reverse_proxy admin_web:8004
     }
+    handle /legal/* {
+        reverse_proxy admin_web:8004
+    }
     reverse_proxy lobby_web:8002
 }
 

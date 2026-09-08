@@ -126,10 +126,10 @@ async def _serve_legal_page(page: str):
 # 同时注册 /legal 与 /admin/legal 两种应用侧路径:
 # 反向代理剥离 /admin 前缀时命中前者,原样转发时命中后者。
 app.add_api_route(
-    "/legal/{page}", _serve_legal_page, methods=["GET"], include_in_schema=False
+    "/legal/{page}", _serve_legal_page, methods=["GET", "HEAD"], include_in_schema=False
 )
 app.add_api_route(
-    "/admin/legal/{page}", _serve_legal_page, methods=["GET"], include_in_schema=False
+    "/admin/legal/{page}", _serve_legal_page, methods=["GET", "HEAD"], include_in_schema=False
 )
 
 
