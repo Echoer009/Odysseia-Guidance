@@ -195,7 +195,7 @@ class BaseProvider(ABC):
         config: Optional[GenerationConfig] = None,
         tools: Optional[List[Any]] = None,
         tool_executor: Optional[Any] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         **kwargs,
     ) -> GenerationResult:
         """

@@ -210,7 +210,7 @@ class OpenAICompatibleProvider(BaseProvider):
         config: Optional[GenerationConfig] = None,
         tools: Optional[List[Any]] = None,
         tool_executor: Optional[Any] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         model: Optional[str] = None,
         **kwargs,
     ) -> GenerationResult:
@@ -301,12 +301,16 @@ class OpenAICompatibleProvider(BaseProvider):
                         )
                         conversation_history.append(tool_message)
 
-            # 达到最大迭代次数
-            log.warning(f"OpenAI Compatible 达到最大工具调用迭代次数 {max_iterations}")
-            return GenerationResult(
-                content="抱歉，我在处理这个请求时遇到了一些复杂的情况，请换个方式问我。",
-                model_used=model_name,
-                finish_reason=FinishReason.MAX_ITERATIONS,
+            # 达到最大迭代次数：不再判定为失败，携带全部已积累的工具结果、
+            # 去掉工具定义让模型直接作答（原"超轮即返回固定报错文案"逻辑已删除）
+            log.warning(
+                f"OpenAI Compatible 达到最大工具调用迭代次数 {max_iterations}，转为无工具直答"
+            )
+            return await self.generate(
+                messages=conversation_history,
+                config=config,
+                tools=None,
+                model=model_name,
             )
 
         except Exception as e:

@@ -441,7 +441,7 @@ class AIService:
         model: Optional[str] = None,
         tools: Optional[List[Any]] = None,
         tool_executor: Optional[Any] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         fallback: bool = True,
         user_id_for_settings: Optional[str] = None,
         allow_empty_response: bool = False,
@@ -552,7 +552,7 @@ class AIService:
         tools: Optional[List[Any]] = None,
         tool_executor: Optional[Any] = None,
         captured_tool_records: Optional[List[Dict[str, Any]]] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         user_id_for_settings: Optional[str] = None,
         **kwargs,
     ) -> GenerationResult:
@@ -755,7 +755,7 @@ class AIService:
         model: str,
         provider_name: str,
         tool_executor: Optional[Any] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         allow_empty_response: bool = False,
         **kwargs,
     ) -> GenerationResult:
@@ -836,7 +836,7 @@ class AIService:
         original_error: Exception,
         model: Optional[str] = None,
         tool_executor: Optional[Any] = None,
-        max_iterations: int = 5,
+        max_iterations: int = 25,
         user_id_for_settings: Optional[str] = None,
         **kwargs,
     ) -> GenerationResult:
