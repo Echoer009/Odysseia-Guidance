@@ -32,7 +32,9 @@ engines:
   - name: bing
     engine: bing
     shortcut: b
-    disabled: false
+    # 2026-09-12: 孟买出口 IP 上 bing 持续返回无关结果(中文查询返回日本中古车页),
+    # language=zh-CN 也无法修复,且排名靠前污染 top-5,已禁用
+    disabled: true
   - name: duckduckgo
     engine: duckduckgo
     shortcut: ddg
