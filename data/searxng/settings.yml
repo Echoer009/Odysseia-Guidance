@@ -36,7 +36,8 @@ engines:
   - name: duckduckgo
     engine: duckduckgo
     shortcut: ddg
-    disabled: false
+    # 2026-09-12: VPS 出口 IP 被 DDG 永久弹 CAPTCHA(72h 内 900 次)，已禁用
+    disabled: true
   - name: wikipedia
     engine: wikipedia
     shortcut: wp
@@ -45,6 +46,11 @@ engines:
     engine: github
     shortcut: gh
     disabled: false
+  # 2026-09-12: startpage 同样对 VPS IP 弹验证码，显式禁用(默认配置里是启用的)
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    disabled: true
   - name: karmasearch
     disabled: true
   - name: brave

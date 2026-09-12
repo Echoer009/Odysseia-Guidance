@@ -4,6 +4,7 @@
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -31,6 +32,14 @@ class SearchResponse:
     query: str = ""
     error: Optional[str] = None
 
+# 查询包含 CJK 表意文字（中日韩汉字）时，向 SearXNG 请求中文语言区域，
+# 避免 Bing 等引擎按默认 en-US 市场处理中文查询、返回完全无关的结果
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def _detect_query_language(query: str) -> Optional[str]:
+    return "zh-CN" if _CJK_RE.search(query) else None
+
 
 class WebSearchService:
     """通过 SearXNG JSON API 执行互联网搜索"""
@@ -50,12 +59,16 @@ class WebSearchService:
         max_results: int = 5,
         categories: Optional[List[str]] = None,
         engines: Optional[List[str]] = None,
+        language: Optional[str] = None,
     ) -> SearchResponse:
+        query_language = language or _detect_query_language(query)
         params = {
             "q": query,
             "format": "json",
             "pageno": 1,
         }
+        if query_language:
+            params["language"] = query_language
         if categories:
             params["categories"] = ",".join(categories)
         if engines:
@@ -96,6 +109,18 @@ class WebSearchService:
             )
             if len(results) >= max_results:
                 break
+
+        unresponsive = [
+            f"{name}({reason})" for name, reason in data.get("unresponsive_engines", [])
+        ]
+        if unresponsive:
+            log.warning(
+                f"SearXNG 引擎无响应: query='{query}', 失败引擎: {', '.join(unresponsive)}"
+            )
+        log.info(
+            f"SearXNG 搜索完成: query='{query}', language={query_language}, "
+            f"原始 {len(data.get('results', []))} 条 / 去重后保留 {len(results)} 条"
+        )
 
         return SearchResponse(
             results=results,

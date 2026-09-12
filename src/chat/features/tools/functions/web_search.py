@@ -89,6 +89,8 @@ async def web_search(
     if not valid_results:
         return ["没有找到相关结果。"]
 
+    scrape_stats = {"ok": 0, "fail": 0}
+
     async def _read_result(r) -> str:
         parts = []
         if r.title:
@@ -102,13 +104,20 @@ async def web_search(
             max_length=3000,
         )
         if scrape_result.success:
+            scrape_stats["ok"] += 1
             parts.append(f"\n--- 网页正文 ---\n{scrape_result.content}")
         else:
+            scrape_stats["fail"] += 1
+            log.warning(f"网页正文读取失败: {scrape_result.error} (url={r.url})")
             parts.append(f"\n--- 网页正文读取失败: {scrape_result.error} ---")
 
         return "\n".join(parts)
 
     output = await asyncio.gather(*[_read_result(r) for r in valid_results])
+    log.info(
+        f"web_search 完成: query='{query}', SearXNG 返回 {response.total_results} 条, "
+        f"过滤后 {len(valid_results)} 条, 正文抓取成功 {scrape_stats['ok']} / 失败 {scrape_stats['fail']}"
+    )
     return list(output)
 
 
