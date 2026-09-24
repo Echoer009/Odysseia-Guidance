@@ -75,7 +75,7 @@ class EventButton(ShopButton["SimpleShopView"]):
     """进入当前活动视图的按钮。"""
 
     def __init__(self):
-        super().__init__(label="节日活动", style=discord.ButtonStyle.primary)
+        super().__init__(label="中秋节活动", style=discord.ButtonStyle.primary, emoji="🏮")
 
     async def callback(self, interaction: discord.Interaction):
         active_event = event_service.get_active_event()
