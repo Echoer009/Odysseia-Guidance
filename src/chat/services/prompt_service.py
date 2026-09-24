@@ -386,14 +386,26 @@ class PromptService:
         if prompt_name != "SYSTEM_PROMPT":
             return prompt_template
 
+        sections = []
+
         faction_pack_content = event_service.get_system_prompt_faction_pack_content()
-        if not faction_pack_content:
+        if faction_pack_content:
+            log.debug("已为 SYSTEM_PROMPT 追加注入节日派系人设 (<festival_persona>)。")
+            sections.append(faction_pack_content)
+
+        global_addon = event_service.get_global_festival_addon()
+        if global_addon:
+            log.debug("已为 SYSTEM_PROMPT 追加全局节日提醒 (<festival_persona>)。")
+            sections.append(global_addon)
+
+        if not sections:
             return prompt_template
 
-        log.debug("已为 SYSTEM_PROMPT 追加注入节日派系人设 (<festival_persona>)。")
         return (
             f"{prompt_template}\n\n"
-            f"<festival_persona>\n{faction_pack_content}\n</festival_persona>"
+            + "\n\n".join(
+                f"<festival_persona>\n{s}\n</festival_persona>" for s in sections
+            )
         )
 
     def get_prompt(self, prompt_name: str, **kwargs) -> Optional[str]:

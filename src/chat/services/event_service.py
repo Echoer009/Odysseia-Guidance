@@ -282,6 +282,19 @@ class EventService:
         log.info("EventService: 没有检测到活动或活动提示词配置。")
         return None
 
+    def get_global_festival_addon(self) -> Optional[str]:
+        """
+        获取当前激活活动的全局节日提示附加段（来自 prompts.json 的
+        system_prompt_addon 字段，面向所有用户，无需选择派系）。
+        """
+        if self._active_event:
+            addon = (self._active_event.get("prompts") or {}).get(
+                "system_prompt_addon"
+            )
+            if isinstance(addon, str) and addon.strip():
+                return addon.strip()
+        return None
+
     def get_system_prompt_faction_pack_content(self) -> Optional[str]:
         """
         根据当前选择的派系，动态加载并返回其派系包文件内容。
