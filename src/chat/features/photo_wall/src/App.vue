@@ -330,8 +330,11 @@ async function setupDiscordSdk() {
             picture_in_picture_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
             grid_lock_state: Common.OrientationLockStateTypeObject.UNLOCKED,
         })
-    } catch (e) {
+        console.info('setOrientationLockState OK')
+        showToast('已请求横屏锁定')
+    } catch (e: any) {
         console.warn('setOrientationLockState 不支持，回退 CSS 旋转', e)
+        showToast(`横屏锁定失败: ${e?.message || e}`)
     }
     const { code } = await discordSdk.commands.authorize({
         client_id: discordSdk.clientId,
@@ -503,7 +506,9 @@ async function adminDelete(entry: PhotoEntry) {
 // --- 入口 ---
 async function main() {
     try {
-        const bridge = await setupChildBridge()
+        // Discord 内嵌 iframe 带 frame_id 参数，直接走 SDK；否则等父窗口桥接（本地预览）
+        const inDiscord = new URLSearchParams(window.location.search).has('frame_id')
+        const bridge = inDiscord ? null : await setupChildBridge()
         if (bridge?.accessToken) {
             accessToken = bridge.accessToken
         } else if (isEmbedded) {
