@@ -387,9 +387,8 @@ function shortName(n: string) {
     return n && n.length > 8 ? n.slice(0, 7) + '…' : n
 }
 
-// 输入祝福时暂时解除整页旋转：系统输入法是竖屏的，转着打字体验极差
+// 输入面板打开时滚到可视区中间
 watch(panelOpen, (open) => {
-    document.getElementById('app')?.classList.toggle('no-rotate', open)
     if (open) nextTick(() => blessPanelRef.value?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
 })
 

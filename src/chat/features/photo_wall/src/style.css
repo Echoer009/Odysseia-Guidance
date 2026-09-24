@@ -643,15 +643,6 @@ button {
         transform: rotate(90deg);
         transform-origin: top left;
     }
-
-    /* 打字时解除旋转，回到竖屏原生布局（输入法是竖屏的） */
-    #app.no-rotate {
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        transform: none;
-    }
 }
 
 /* ---------- 响应式 ---------- */
