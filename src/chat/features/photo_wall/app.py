@@ -175,7 +175,7 @@ def _placement_allowed(x: float, y: float) -> bool:
 
 # --- 本地预览模式（不影响生产）：PHOTO_DEV_MODE=1 时无 token 的请求使用固定预览用户 ---
 PHOTO_DEV_MODE = os.getenv("PHOTO_DEV_MODE") == "1"
-PHOTO_DEV_USER = {"id": 999999, "avatar": None, "username": "PreviewUser"}
+PHOTO_DEV_USER = {"id": 999999, "avatar": None, "username": "PreviewUser", "global_name": "预览用户"}
 
 # 管理员 Discord 用户 ID 列表（逗号分隔），可删除任意留影；预览用户默认视为管理员便于本地测试
 PHOTO_ADMIN_IDS = {
@@ -262,6 +262,7 @@ async def get_current_user(
                 "id": int(user_data["id"]),
                 "avatar": user_data.get("avatar"),
                 "username": user_data.get("username"),
+                "global_name": user_data.get("global_name"),
             }
             log.info("成功识别用户: %s (%s)", user["username"], user["id"])
             return user
@@ -476,8 +477,10 @@ async def upsert_photo_entry(
                     status_code=400, detail=random.choice(_OVERLAP_MESSAGES)
                 )
 
-    # 名字取 Discord 用户名（截断到存储上限），头像从 Discord CDN 抓取缓存
-    display_name = (user.get("username") or str(user["id"]))[:NAME_MAX]
+    # 名字取 Discord 昵称（global_name 优先，回退 username），截断到存储上限
+    display_name = (
+        user.get("global_name") or user.get("username") or str(user["id"])
+    )[:NAME_MAX]
     avatar_path = await _fetch_and_cache_avatar(user)
 
     row = await photo_wall_db.upsert_entry(
@@ -500,7 +503,7 @@ async def get_photo_me(user: Dict[str, Any] = Depends(get_current_user)):
     return JSONResponse(
         content={
             "user_id": str(user["id"]),
-            "username": user.get("username"),
+            "username": user.get("global_name") or user.get("username"),
             "is_admin": _is_admin(user),
             "entry": _entry_to_dict(row) if row else None,
         }

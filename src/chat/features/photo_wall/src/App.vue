@@ -357,6 +357,10 @@ async function loadMe() {
 }
 
 // --- 留影流程：点 + 填祝福 选位置 提交 ---
+function shortName(n: string) {
+    return n && n.length > 8 ? n.slice(0, 7) + '…' : n
+}
+
 function beginPlacing() {
     if (!canEdit.value || submitting.value) return
     placing.value = true
@@ -574,7 +578,7 @@ watch(strokes, () => nextTick(redrawStrokes), { deep: true })
                     <span v-else class="avatar-fallback">{{ entry.display_name.slice(0, 1) }}</span>
                 </span>
                 <span class="sticker-name" :style="{ fontSize: Math.max(9, avatarSize * 0.19) + 'px' }">
-                    {{ entry.display_name }}
+                    {{ shortName(entry.display_name) }}
                 </span>
             </button>
 

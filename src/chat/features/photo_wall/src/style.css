@@ -402,9 +402,23 @@ button {
     background: rgba(7, 11, 20, 0.78);
 }
 
+/* 触屏点击不出现蓝色高亮/焦点框 */
+button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sticker:focus,
+.sticker:focus-visible,
+.member-chip:focus,
+.member-chip:focus-visible {
+    outline: none;
+}
+
 .panel {
     width: min(420px, 100%);
+    max-height: calc(100% - 16px);
     padding: 34px 36px 30px;
+    overflow-y: auto;
     background: var(--ink-800);
     border: 1px solid var(--line-soft);
     border-top: 1px solid var(--line);
@@ -502,6 +516,10 @@ button {
     font-size: 17px;
     letter-spacing: 0.1em;
     color: var(--text-hi);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .detail-time {
@@ -586,21 +604,19 @@ button {
 
 /* ---------- 响应式 ---------- */
 
-/* ---------- 手机：操作按钮浮到物理右下角 ----------
-   竖屏触屏下 #app 整体旋转了 90°（app 坐标系 top-right = 物理右下角），
-   避开 Discord 在物理左上角的退出按钮；下载图标同步挪到 app 下右避免重叠 */
+/* ---------- 手机：操作按钮浮到右下角并尽量缩小，减少对画面的遮挡 ---------- */
 @media (pointer: coarse) and (max-width: 719px) {
     .side {
         position: fixed;
-        top: 10px;
+        top: auto;
+        bottom: 10px;
         right: 10px;
         z-index: 40;
         flex-direction: column;
         align-items: stretch;
         flex-wrap: nowrap;
-        padding: 8px;
-        min-width: 136px;
-        background: rgba(7, 11, 20, 0.88);
+        padding: 6px;
+        background: rgba(7, 11, 20, 0.72);
         border: 1px solid var(--line-soft);
         border-radius: 3px;
     }
@@ -608,21 +624,18 @@ button {
     .side-actions {
         flex-direction: column;
         align-items: stretch;
-        gap: 8px;
+        gap: 6px;
     }
 
     .btn-row > button {
         white-space: nowrap;
+        padding: 7px 14px;
+        font-size: 12px;
     }
 
     .guest-tip,
     .side-list {
         display: none;
-    }
-
-    .download-btn {
-        top: auto;
-        bottom: 10px;
     }
 }
 
