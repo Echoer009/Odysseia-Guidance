@@ -331,10 +331,8 @@ async function setupDiscordSdk() {
             grid_lock_state: Common.OrientationLockStateTypeObject.UNLOCKED,
         })
         console.info('setOrientationLockState OK')
-        showToast('已请求横屏锁定')
     } catch (e: any) {
         console.warn('setOrientationLockState 不支持，回退 CSS 旋转', e)
-        showToast(`横屏锁定失败: ${e?.message || e}`)
     }
     const { code } = await discordSdk.commands.authorize({
         client_id: discordSdk.clientId,
