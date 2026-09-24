@@ -326,3 +326,5 @@ bot_logs/
 
 # Track admin frontend build output
 !src/admin/dist/
+!src/chat/features/photo_wall/dist/
+!src/chat/features/games/riddle-web/dist/
