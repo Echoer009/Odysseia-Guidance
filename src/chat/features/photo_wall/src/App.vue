@@ -324,15 +324,29 @@ async function setupDiscordSdk() {
     await discordSdk.ready()
     // 原生锁定横屏（DC 官方 API）：输入法/坐标系全部原生横屏；
     // 不支持的旧客户端会抛错，回退到 CSS 旋转方案
+    const diag = (result: string, err?: unknown) => {
+        fetch(fullUrl('api/photo/diag'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event: 'orientation_lock',
+                result,
+                error: err ? String((err as any)?.message || err) : undefined,
+                vp: `${window.innerWidth}x${window.innerHeight}`,
+                portrait_coarse: window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches,
+                ua: navigator.userAgent,
+            }),
+        }).catch(() => {})
+    }
     try {
         await discordSdk.commands.setOrientationLockState({
             lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
             picture_in_picture_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
             grid_lock_state: Common.OrientationLockStateTypeObject.UNLOCKED,
         })
-        console.info('setOrientationLockState OK')
-    } catch (e: any) {
-        console.warn('setOrientationLockState 不支持，回退 CSS 旋转', e)
+        diag('ok')
+    } catch (e) {
+        diag('failed', e)
     }
     const { code } = await discordSdk.commands.authorize({
         client_id: discordSdk.clientId,

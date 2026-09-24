@@ -440,6 +440,17 @@ async def get_photo_entries():
     return JSONResponse(content={"entries": [_entry_to_dict(r) for r in rows]})
 
 
+@app.post("/api/photo/diag")
+async def photo_diag(request: Request):
+    """无感诊断上报：只进服务端日志，不影响用户。"""
+    try:
+        body = await request.json()
+        log.info("[DIAG] %s", json.dumps(body, ensure_ascii=False))
+    except Exception:
+        log.info("[DIAG] <unparsable>")
+    return JSONResponse(content={"ok": True})
+
+
 @app.post("/api/photo/entries")
 async def upsert_photo_entry(
     request: EntryRequest, user: Dict[str, Any] = Depends(get_current_user)
