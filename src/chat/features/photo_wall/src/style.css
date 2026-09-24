@@ -586,6 +586,46 @@ button {
 
 /* ---------- 响应式 ---------- */
 
+/* ---------- 手机：操作按钮浮到物理右下角 ----------
+   竖屏触屏下 #app 整体旋转了 90°（app 坐标系 top-right = 物理右下角），
+   避开 Discord 在物理左上角的退出按钮；下载图标同步挪到 app 下右避免重叠 */
+@media (pointer: coarse) and (max-width: 719px) {
+    .side {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 40;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        padding: 8px;
+        min-width: 136px;
+        background: rgba(7, 11, 20, 0.88);
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+    }
+
+    .side-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .btn-row > button {
+        white-space: nowrap;
+    }
+
+    .guest-tip,
+    .side-list {
+        display: none;
+    }
+
+    .download-btn {
+        top: auto;
+        bottom: 10px;
+    }
+}
+
 @media (max-width: 719px) {
     .side {
         flex-wrap: wrap;
