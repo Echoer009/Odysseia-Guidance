@@ -155,6 +155,55 @@ services:
     depends_on:
       - db
 
+  riddle_web:
+    # 猜灯谜活动暂不上线：默认不启动，需要时 docker compose --profile riddle up -d
+    profiles:
+      - riddle
+    # build:
+    #   context: .
+    #   dockerfile: .devcontainer/Dockerfile
+    image: echoni0n/braingirl:latest
+    container_name: ${INSTANCE_NAME:-odysseia}_riddle
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    #端口不再暴露到主机，通过 Caddy 代理
+    expose:
+      - "8005"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.chat.features.games.riddle-web.app:app --host 0.0.0.0 --port 8005
+    depends_on:
+      - db
+
+  photo_wall_web:
+    # build:
+    #   context: .
+    #   dockerfile: .devcontainer/Dockerfile
+    image: echoni0n/braingirl:latest
+    container_name: ${INSTANCE_NAME:-odysseia}_photo_wall
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    #端口不再暴露到主机，通过 Caddy 代理
+    expose:
+      - "8006"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    networks:
+      - bot_network
+    command: uvicorn src.chat.features.photo_wall.app:app --host 0.0.0.0 --port 8006
+    depends_on:
+      - db
+
   # Caddy 反向代理 - 提供 HTTPS
   caddy:
     image: caddy:latest
@@ -174,6 +223,7 @@ services:
       - lobby_web
       - diary_web
       - admin_web
+      - photo_wall_web
 
   #  config_web:
   #    build:

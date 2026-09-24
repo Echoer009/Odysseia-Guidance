@@ -359,7 +359,10 @@ class PromptService:
             )
             return None
 
-        # 3. 使用提供的参数格式化提示词
+        # 3. 对 SYSTEM_PROMPT 追加注入节日派系人设（主人设完整保留）
+        prompt_template = self._inject_festival_persona(prompt_name, prompt_template)
+
+        # 4. 使用提供的参数格式化提示词
         format_kwargs = kwargs.copy()
         format_kwargs.pop("model_name", None)
 
@@ -371,6 +374,27 @@ class PromptService:
                 return prompt_template
 
         return prompt_template
+
+    def _inject_festival_persona(
+        self, prompt_name: str, prompt_template: str
+    ) -> str:
+        """
+        将节日派系包内容以追加注入的方式应用到 SYSTEM_PROMPT 末尾。
+        主人设完整保留，派系包内容包裹在 <festival_persona> 标签中追加，
+        不再按标签替换主人设中的同名标签。
+        """
+        if prompt_name != "SYSTEM_PROMPT":
+            return prompt_template
+
+        faction_pack_content = event_service.get_system_prompt_faction_pack_content()
+        if not faction_pack_content:
+            return prompt_template
+
+        log.debug("已为 SYSTEM_PROMPT 追加注入节日派系人设 (<festival_persona>)。")
+        return (
+            f"{prompt_template}\n\n"
+            f"<festival_persona>\n{faction_pack_content}\n</festival_persona>"
+        )
 
     def get_prompt(self, prompt_name: str, **kwargs) -> Optional[str]:
         """
@@ -407,27 +431,8 @@ class PromptService:
             )
             return None
 
-        # 3. 对 SYSTEM_PROMPT 进行派系包处理（后应用）
-        if prompt_name == "SYSTEM_PROMPT":
-            faction_pack_content = (
-                event_service.get_system_prompt_faction_pack_content()
-            )
-            if faction_pack_content:
-                tag_overrides = dict(
-                    re.findall(r"<(\w+)>(.*?)</\1>", faction_pack_content, re.DOTALL)
-                )
-                modified_template = prompt_template
-                for tag, content in tag_overrides.items():
-                    replacement = f"<{tag}>{content}</{tag}>"
-                    pattern = re.compile(f"<{tag}>.*?</{tag}>", re.DOTALL)
-                    if pattern.search(modified_template):
-                        modified_template = pattern.sub(replacement, modified_template)
-                        log.debug(
-                            f"已为 SYSTEM_PROMPT 应用派系包中的标签 '{tag}' 覆盖。"
-                        )
-                    else:
-                        log.warning(f"在 SYSTEM_PROMPT 中未找到用于覆盖的标签: <{tag}>")
-                prompt_template = modified_template
+        # 3. 对 SYSTEM_PROMPT 追加注入节日派系人设（主人设完整保留）
+        prompt_template = self._inject_festival_persona(prompt_name, prompt_template)
 
         # 4. 使用提供的参数格式化提示词
         format_kwargs = kwargs.copy()

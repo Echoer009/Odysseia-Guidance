@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from src.chat.services.event_service import event_service
 from src.chat.utils.database import ChatDatabaseManager, chat_db_manager
@@ -70,15 +70,17 @@ class FactionService:
             log.error(f"为派系增加点数时发生错误: {e}", exc_info=True)
             return False
 
-    async def get_faction_leaderboard(self) -> List[Dict[str, Any]]:
+    async def get_faction_leaderboard(
+        self, event_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
-        获取当前激活活动的派系点数排行榜。
+        获取活动的派系点数排行榜，缺省时使用当前激活的活动。
         """
-        active_event = self.event_service.get_active_event()
-        if not active_event:
-            return []
-
-        event_id = active_event["event_id"]
+        if event_id is None:
+            active_event = self.event_service.get_active_event()
+            if not active_event:
+                return []
+            event_id = active_event["event_id"]
 
         query = """
             SELECT faction_id, total_points
@@ -95,23 +97,59 @@ class FactionService:
             for row in rows
         ]
 
-    async def determine_winner_and_end_event(self):
+    async def determine_winner_and_end_event(
+        self, event_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        决定获胜派系并通知 EventService。
+        结算活动：决定获胜派系并写入 event_settlements 结算记录。
+        已有结算记录则跳过（幂等）。若该活动仍处于激活状态，
+        仍会调用 event_service.set_winning_faction 保留内存行为。
+
+        Args:
+            event_id: 要结算的活动 ID，缺省时使用当前激活的活动。
+
+        Returns:
+            获胜派系信息 {"faction_id", "total_points"}，未结算时返回 None。
         """
         log.info("正在执行活动结算逻辑...")
-        leaderboard = await self.get_faction_leaderboard()
 
+        target_event_id: str
+        if event_id is None:
+            active_event = self.event_service.get_active_event()
+            if not active_event:
+                log.warning("当前没有激活的活动，无法结算。")
+                return None
+            target_event_id = active_event["event_id"]
+        else:
+            target_event_id = event_id
+
+        # 幂等保护：已有结算记录则跳过
+        if await self.db.get_event_settlement(target_event_id):
+            log.info(f"活动 '{target_event_id}' 已有结算记录，跳过结算。")
+            return None
+
+        leaderboard = await self.get_faction_leaderboard(target_event_id)
         if not leaderboard:
-            log.warning("排行榜为空，无法决定获胜派系。")
-            return
+            log.warning(f"活动 '{target_event_id}' 的排行榜为空，无法决定获胜派系。")
+            return None
 
         winner = leaderboard[0]
         winning_faction_id = winner["faction_id"]
 
-        log.info(f"获胜派系是: {winning_faction_id}，总点数: {winner['total_points']}")
+        log.info(
+            f"获胜派系是: {winning_faction_id}，总点数: {winner['total_points']}"
+        )
 
-        self.event_service.set_winning_faction(winning_faction_id)
+        await self.db.insert_event_settlement(
+            target_event_id, winning_faction_id, winner["total_points"]
+        )
+
+        # 保留内存行为：仅当该活动仍处于激活状态时同步设置获胜派系
+        active_event = self.event_service.get_active_event()
+        if active_event and active_event.get("event_id") == target_event_id:
+            self.event_service.set_winning_faction(winning_faction_id)
+
+        return winner
 
 
 # --- 单例实例 ---

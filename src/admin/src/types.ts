@@ -264,13 +264,55 @@ export type MutedChannel = {
   channel_id?: string | number | null
 }
 
+export type EventTheme = {
+  emoji?: string | null
+  color?: string | null
+  footer?: string | null
+  empty_leaderboard_text?: string | null
+}
+
 export type EventInfo = {
   id: string | number
   name?: string | null
+  event_name?: string | null
   is_active?: boolean | null
+  enabled?: boolean | null
+  start_date?: string | null
+  end_date?: string | null
+  description?: string | null
+  announcement_channel_id?: number | string | null
+  theme?: EventTheme | null
   start_at?: string | null
   end_at?: string | null
   start?: string | null
   end?: string | null
   files?: unknown
+  note?: string | null
+}
+
+export type FactionSummary = {
+  id: string | number
+  name?: string | null
+  icon?: string | null
+  selected?: boolean | null
+}
+
+export type LeaderboardRow = {
+  faction_id: string
+  faction_name?: string | null
+  icon?: string | null
+  total_points: number
+}
+
+export type EventSettlement = {
+  event_id: string
+  winning_faction: string
+  total_points: number
+  settled_at?: string | null
+}
+
+export type EventStats = {
+  participants: number
+  total_points: number
+  entries: number
 }

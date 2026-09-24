@@ -233,6 +233,16 @@ class ChatDatabaseManager:
                 );
             """)
 
+            # --- 活动结算记录表 ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS event_settlements (
+                    event_id TEXT PRIMARY KEY,
+                    winning_faction TEXT NOT NULL,
+                    total_points INTEGER NOT NULL,
+                    settled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
             # --- 全局设置表 ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS global_settings (
@@ -883,6 +893,33 @@ class ChatDatabaseManager:
             self._db_transaction, query, (guild_id, channel_id), fetch="one"
         )
         return row is not None
+
+    # --- 活动结算管理 ---
+    async def get_event_settlement(self, event_id: str) -> Optional[sqlite3.Row]:
+        """获取指定活动的结算记录，不存在时返回 None。"""
+        query = "SELECT * FROM event_settlements WHERE event_id = ?"
+        return await self._execute(
+            self._db_transaction, query, (event_id,), fetch="one"
+        )
+
+    async def insert_event_settlement(
+        self, event_id: str, winning_faction: str, total_points: int
+    ) -> None:
+        """插入活动结算记录（已存在则忽略，保证幂等）。"""
+        query = """
+            INSERT OR IGNORE INTO event_settlements (event_id, winning_faction, total_points)
+            VALUES (?, ?, ?);
+        """
+        await self._execute(
+            self._db_transaction,
+            query,
+            (event_id, winning_faction, total_points),
+            commit=True,
+        )
+        log.info(
+            f"已记录活动 '{event_id}' 的结算结果: 获胜派系 '{winning_faction}'，"
+            f"总点数 {total_points}。"
+        )
 
     # --- 打工游戏状态管理 ---
     async def get_user_work_status(self, user_id: int) -> Optional[sqlite3.Row]:

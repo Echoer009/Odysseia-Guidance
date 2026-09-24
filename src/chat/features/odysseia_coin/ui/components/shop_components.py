@@ -5,6 +5,7 @@
 from __future__ import annotations
 import discord
 import logging
+import os
 from typing import List, Dict, Any, TypeVar, cast, TYPE_CHECKING, Optional
 
 
@@ -74,9 +75,7 @@ class EventButton(ShopButton["SimpleShopView"]):
     """进入当前活动视图的按钮。"""
 
     def __init__(self):
-        super().__init__(
-            label="节日活动", style=discord.ButtonStyle.primary, emoji="🎃"
-        )
+        super().__init__(label="节日活动", style=discord.ButtonStyle.primary)
 
     async def callback(self, interaction: discord.Interaction):
         active_event = event_service.get_active_event()
@@ -86,9 +85,55 @@ class EventButton(ShopButton["SimpleShopView"]):
             )
             return
 
+        # 活动合集型活动（无阵营）：直接启动第一个活动（如中秋大合影）
+        factions = active_event.get("factions") or []
+        if not factions:
+            activities = active_event.get("activities") or []
+            if activities:
+                await self._launch_activity(interaction, activities[0])
+                return
+            await interaction.response.send_message(
+                "本次活动详情请见商店公告。", ephemeral=True
+            )
+            return
+
         event_view = EventPanelView(event_data=active_event, main_shop_view=self.view)
         embed = await event_view.create_event_embed()
         await interaction.response.edit_message(embeds=[embed], view=event_view)
+
+    async def _launch_activity(self, interaction: discord.Interaction, activity: Dict[str, Any]):
+        """写入用户意图并直接启动对应的 Discord 活动（与 /合影 命令同一机制）。"""
+        app_id_str = os.getenv("VITE_DISCORD_CLIENT_ID")
+        if not app_id_str or not app_id_str.strip().isdigit():
+            log.error("VITE_DISCORD_CLIENT_ID 未配置，商店活动按钮无法启动活动。")
+            await interaction.response.send_message(
+                "活动启动配置缺失，请联系管理员。", ephemeral=True
+            )
+            return
+
+        try:
+            await chat_db_manager.set_global_setting(
+                f"user_intent:{interaction.user.id}", str(activity.get("id", ""))
+            )
+            await interaction.response.launch_activity()
+            log.info(
+                f"商店按钮已为用户 {interaction.user.id} 启动活动: {activity.get('id')}"
+            )
+        except discord.InteractionResponded:
+            log.warning(f"商店活动按钮：交互已被响应（用户 {interaction.user.id}）。")
+        except Exception as e:
+            log.error(f"商店按钮启动活动失败: {e}", exc_info=True)
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        "启动活动失败，请稍后再试。", ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "启动活动失败，请稍后再试。", ephemeral=True
+                    )
+            except Exception:
+                pass
 
 
 # --- 每日速报UI组件 ---

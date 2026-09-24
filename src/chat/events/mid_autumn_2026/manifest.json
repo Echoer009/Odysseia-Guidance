@@ -1,0 +1,25 @@
+{
+    "event_id": "mid_autumn_2026",
+    "event_name": "中秋月圆夜",
+    "is_active": true,
+    "start_date": "2026-09-22T16:00:00Z",
+    "end_date": "2026-09-28T16:00:00Z",
+    "description": "月圆人团圆，类脑娘的中秋小庙会开张啦。猜灯谜赢类脑币，再把你的祝福留在大合影上。",
+    "theme": {
+        "color": "#E8B04B",
+        "footer": "但愿人长久，千里共婵娟",
+        "empty_leaderboard_text": "月宫尚无人影，快来点亮第一盏灯"
+    },
+    "entry_panel": {
+        "title": "中秋活动入口",
+        "description": "猜灯谜与大合影，双活动开启中"
+    },
+    "activities": [
+        {
+            "id": "photo",
+            "name": "中秋大合影",
+            "description": "把你的头像和祝福留在月宫合影墙上，可下载合成的大合影。",
+            "command": "/合影"
+        }
+    ]
+}

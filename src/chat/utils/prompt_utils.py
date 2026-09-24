@@ -8,11 +8,36 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def _get_faction_emoji_map(event_id: str, faction_id: str):
+    """
+    获取指定活动与派系的表情映射列表。
+    优先使用活动 emoji.json 中的配置，并与 emoji_config.FACTION_EMOJI_MAPPINGS 中的
+    硬编码回退合并（配置覆盖同名占位符）。
+    """
+    configured = (
+        event_service.get_faction_emoji_mappings(event_id).get(faction_id) or []
+    )
+    fallback = FACTION_EMOJI_MAPPINGS.get(event_id, {}).get(faction_id) or []
+
+    merged = {
+        pattern.pattern: (pattern, replacements)
+        for pattern, replacements in fallback
+    }
+    merged.update(
+        {
+            pattern.pattern: (pattern, replacements)
+            for pattern, replacements in configured
+        }
+    )
+    return list(merged.values())
+
+
 def replace_emojis(text: str) -> str:
     """
     根据 emoji_config.py 中的映射规则，
     将文本中的自定义表情占位符（如 <微笑>）替换为对应的 Discord 自定义表情（如 <:xianhua:12345>）。
-    此函数现在会根据当前活动和派系动态选择表情包。
+    此函数会根据当前活动和派系动态选择表情包：优先活动的 emoji.json 配置，
+    硬编码的 FACTION_EMOJI_MAPPINGS 作为回退（配置覆盖同名占位符）。
     """
     faction_info = event_service.get_selected_faction_info()
     processed_text = text
@@ -23,7 +48,7 @@ def replace_emojis(text: str) -> str:
         faction_id = faction_info.get("faction_id")
 
         if event_id and faction_id:
-            faction_map = FACTION_EMOJI_MAPPINGS.get(event_id, {}).get(faction_id)
+            faction_map = _get_faction_emoji_map(event_id, faction_id)
             if faction_map:
                 log.info(
                     f"prompt_utils: 正在为事件 '{event_id}' 的派系 '{faction_id}' 应用专属表情包。"

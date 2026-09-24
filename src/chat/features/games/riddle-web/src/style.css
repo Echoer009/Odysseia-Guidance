@@ -1,0 +1,540 @@
+/* ============================================================
+   中秋 · 月下问谜
+   设计基调：纯色、克制。与照片墙同一套暗夜蓝 + 月光金
+   ============================================================ */
+
+:root {
+    --ink-950: #070b14;
+    --ink-900: #0a0f1c;
+    --ink-800: #101724;
+    --ink-700: #151d2e;
+    --ink-600: #1c2538;
+    --gold: #d4af6a;
+    --gold-bright: #e6c787;
+    --gold-deep: #9c7f45;
+    --text-hi: #f0ead9;
+    --text-mid: #a8a292;
+    --text-low: #6f6a60;
+    --line: rgba(212, 175, 106, 0.32);
+    --line-soft: rgba(240, 234, 217, 0.08);
+    --danger: #cf7d7d;
+    --serif: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+    --sans: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+    height: 100%;
+}
+
+body {
+    font-family: var(--sans);
+    background: var(--ink-950);
+    color: var(--text-hi);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+}
+
+button {
+    font-family: inherit;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+#app-root {
+    position: relative;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: var(--ink-950);
+}
+
+/* ---------- 背景：一轮素月 ---------- */
+
+.scene {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.moon {
+    position: absolute;
+    top: 9%;
+    right: 13%;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: #ded2b2;
+    opacity: 0.85;
+}
+
+/* ---------- 居中画面（加载/错误） ---------- */
+
+.center-view {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    text-align: center;
+}
+
+.loading-seal {
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    font-family: var(--serif);
+    font-size: 30px;
+    color: var(--gold-bright);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    animation: seal-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes seal-breathe {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+.center-view h1 {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.28em;
+    color: var(--text-mid);
+}
+
+.center-view p {
+    font-size: 12.5px;
+    letter-spacing: 0.16em;
+    color: var(--text-low);
+}
+
+/* ---------- 面板通用 ---------- */
+
+.panel {
+    position: relative;
+    z-index: 1;
+    width: min(560px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding: 42px 44px 38px;
+    text-align: center;
+    background: var(--ink-800);
+    border: 1px solid var(--line-soft);
+    border-top: 1px solid var(--line);
+}
+
+.kicker {
+    font-size: 12px;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    color: var(--gold);
+}
+
+.start-panel h1 {
+    margin-top: 14px;
+    font-family: var(--serif);
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-indent: 0.24em;
+}
+
+.subtitle {
+    margin-top: 12px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    color: var(--text-mid);
+}
+
+.rule {
+    margin: 4px 0 22px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--text-low);
+}
+
+/* ---------- 统计卡 ---------- */
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 28px 0 6px;
+}
+
+.stat-card {
+    display: grid;
+    gap: 8px;
+    padding: 18px 6px 14px;
+    background: var(--ink-900);
+    border: 1px solid var(--line-soft);
+}
+
+.stat-card .value {
+    font-family: var(--serif);
+    font-size: 22px;
+    color: var(--gold-bright);
+}
+
+.stat-card .label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--text-low);
+}
+
+/* ---------- 按钮 ---------- */
+
+.primary {
+    padding: 12px 34px;
+    margin-top: 20px;
+    font-size: 14px;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
+    color: var(--ink-950);
+    background: var(--gold);
+    transition: background 0.2s;
+}
+
+.primary:hover:not(:disabled) {
+    background: var(--gold-bright);
+}
+
+.primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.panel > button:not(.primary) {
+    padding: 12px 26px;
+    margin-top: 20px;
+    margin-left: 12px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    color: var(--text-mid);
+    border: 1px solid var(--line-soft);
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.panel > button:not(.primary):hover:not(:disabled) {
+    color: var(--text-hi);
+    border-color: var(--line);
+}
+
+.panel > button:not(.primary):disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ---------- 答题画面 ---------- */
+
+.play-panel {
+    padding-top: 34px;
+}
+
+.play-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    color: var(--text-mid);
+}
+
+.flames {
+    display: inline-flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.flame {
+    width: 6px;
+    height: 20px;
+    border-radius: 40%;
+    background: var(--gold);
+    transition: opacity 0.4s, background 0.4s;
+}
+
+.flame.out {
+    background: var(--ink-600);
+    opacity: 0.6;
+}
+
+.flame-hint {
+    margin-top: 10px;
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-low);
+}
+
+.question {
+    margin: 28px 0 8px;
+    font-family: var(--serif);
+    font-size: 21px;
+    line-height: 1.9;
+    letter-spacing: 0.08em;
+    color: var(--text-hi);
+    min-height: 66px;
+    display: grid;
+    place-items: center;
+}
+
+.hint {
+    margin: 10px auto 0;
+    padding: 9px 18px;
+    display: inline-block;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    color: var(--gold-bright);
+    border: 1px solid var(--line);
+}
+
+.feedback {
+    margin: 14px auto 0;
+    max-width: 92%;
+    padding: 9px 16px;
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+}
+
+.feedback.success {
+    color: #a3cfa3;
+    background: rgba(120, 190, 120, 0.07);
+    border: 1px solid rgba(120, 190, 120, 0.22);
+}
+
+.feedback.error {
+    color: var(--danger);
+    background: rgba(207, 125, 125, 0.07);
+    border: 1px solid rgba(207, 125, 125, 0.22);
+}
+
+.feedback.info {
+    color: var(--text-mid);
+    background: var(--ink-900);
+    border: 1px solid var(--line-soft);
+}
+
+input[type='text'] {
+    width: 100%;
+    margin-top: 22px;
+    padding: 13px 16px;
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    color: var(--text-hi);
+    background: var(--ink-950);
+    border: 1px solid var(--line-soft);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input[type='text']::placeholder {
+    color: var(--text-low);
+    opacity: 0.7;
+}
+
+input[type='text']:focus {
+    border-color: var(--gold);
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 22px;
+    flex-wrap: wrap;
+}
+
+.controls .primary {
+    margin-top: 0;
+}
+
+.controls button:not(.primary) {
+    padding: 12px 22px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--text-mid);
+    border: 1px solid var(--line-soft);
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.controls button:not(.primary):hover:not(:disabled) {
+    color: var(--text-hi);
+    border-color: var(--line);
+}
+
+.controls button:not(.primary):disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.controls .danger {
+    color: var(--danger) !important;
+    border-color: rgba(207, 125, 125, 0.3) !important;
+}
+
+.controls .danger:hover:not(:disabled) {
+    background: rgba(207, 125, 125, 0.07) !important;
+}
+
+/* ---------- 奖励飘字 ---------- */
+
+.coin-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.coin-pop {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    transform: translateX(-50%);
+    font-family: var(--serif);
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    color: var(--gold-bright);
+    animation: coin-rise 1.7s ease-out forwards;
+}
+
+@keyframes coin-rise {
+    0% { opacity: 0; transform: translate(-50%, 12px) scale(0.94); }
+    18% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -64px); }
+}
+
+/* ---------- 答错抖动 ---------- */
+
+.shake {
+    animation: shake-x 0.45s ease-in-out;
+}
+
+@keyframes shake-x {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-9px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(3px); }
+}
+
+/* ---------- 排行榜 ---------- */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(7, 11, 20, 0.78);
+}
+
+.lb-panel {
+    width: min(420px, 100%);
+    text-align: left;
+}
+
+.lb-panel h2 {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-align: center;
+}
+
+.lb-empty {
+    margin-top: 22px;
+    padding: 22px 0;
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--text-low);
+}
+
+.lb-row {
+    display: grid;
+    grid-template-columns: 44px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 6px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.lb-rank {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--gold);
+}
+
+.lb-user {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: var(--text-mid);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lb-solved {
+    font-size: 13px;
+    color: var(--text-hi);
+}
+
+.lb-streak {
+    font-size: 11.5px;
+    color: var(--text-low);
+}
+
+.lb-panel > button {
+    display: block;
+    margin: 26px auto 0;
+    padding: 10px 26px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    color: var(--text-mid);
+    border: 1px solid var(--line-soft);
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.lb-panel > button:hover {
+    color: var(--text-hi);
+    border-color: var(--line);
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 560px) {
+    .panel {
+        padding: 32px 22px 28px;
+    }
+
+    .stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .start-panel h1 {
+        font-size: 27px;
+    }
+
+    .moon {
+        width: 88px;
+        height: 88px;
+        right: 8%;
+    }
+}

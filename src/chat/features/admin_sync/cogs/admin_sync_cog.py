@@ -40,7 +40,7 @@ class AdminSyncCog(commands.Cog):
         try:
             if await self._consume_flag("event_reload_pending"):
                 log.info("[AdminSync] 检测到活动重载标记，开始重新扫描活动配置。")
-                event_service._load_and_check_events()
+                event_service.refresh()
 
                 faction_value = await chat_db_manager.get_global_setting(
                     "event_selected_faction"

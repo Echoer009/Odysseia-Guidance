@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone, date, timedelta
 import logging
 import re
@@ -45,47 +45,82 @@ class EventService:
         self.selected_faction_info = (
             None  # 用于存储当前选择的派系信息 {'event_id': str, 'faction_id': str}
         )
-        self._load_and_check_events()
+        # 按活动 ID 缓存的派系表情映射（来自各活动的 emoji.json）
+        self._emoji_mappings_cache: Dict[str, Dict[str, List[Tuple[re.Pattern, List[str]]]]] = {}
+        self.refresh()
 
-    def _load_and_check_events(self):
+    def refresh(self):
         """
-        从文件系统加载所有活动配置，并找出当前激活的活动。
-        这个方法可以在服务初始化时调用，也可以通过定时任务定期调用以刷新状态。
+        重扫活动配置目录，根据时间窗口自动上线/下线活动。
+        is_active 作为总开关：仅 is_active=true 且 start_date <= now < end_date 的活动会被激活，
+        管理员可通过将其置为 false 强制禁用活动。
+        刷新不会清除用户手动选择的派系，除非该派系已不存在。
         """
+        previous_event_id = (
+            self._active_event.get("event_id") if self._active_event else None
+        )
         now = datetime.now(timezone.utc)
+
         if not os.path.exists(EVENTS_DIR):
             log.warning(f"活动配置目录不存在: {EVENTS_DIR}")
             return
 
+        # 清空表情配置缓存，使后续访问重新加载最新的 emoji.json
+        self._emoji_mappings_cache.clear()
+
+        new_event = None
         for event_id in os.listdir(EVENTS_DIR):
             manifest_path = os.path.join(EVENTS_DIR, event_id, "manifest.json")
-
             if not os.path.exists(manifest_path):
                 continue
 
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-
-            is_active_flag = manifest.get("is_active", False)
-            if not is_active_flag:
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+                start_date = datetime.fromisoformat(
+                    manifest["start_date"].replace("Z", "+00:00")
+                )
+                end_date = datetime.fromisoformat(
+                    manifest["end_date"].replace("Z", "+00:00")
+                )
+            except (json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+                log.error(f"解析活动配置 '{manifest_path}' 失败，已跳过: {e}")
                 continue
 
-            start_date = datetime.fromisoformat(
-                manifest["start_date"].replace("Z", "+00:00")
-            )
-            end_date = datetime.fromisoformat(
-                manifest["end_date"].replace("Z", "+00:00")
-            )
+            # 总开关：is_active=false 的活动即使在时间窗内也不激活
+            if not manifest.get("is_active", False):
+                continue
 
             if start_date <= now < end_date:
-                self._active_event = self._load_full_event_config(event_id)
-                log.info(f"活动已激活: {self._active_event['event_name']}")
+                new_event = self._load_full_event_config(event_id)
                 # 假设一次只有一个活动是激活的
-                return
+                break
 
-        # 如果没有找到激活的活动
-        self._active_event = None
-        log.info("当前没有激活的活动。")
+        if new_event:
+            if new_event.get("event_id") != previous_event_id:
+                log.info(
+                    f"活动已上线: {new_event.get('event_name')} ({new_event.get('event_id')})"
+                )
+            else:
+                log.debug("活动仍在时间窗内，已重新加载其配置。")
+            self._active_event = new_event
+        else:
+            if previous_event_id:
+                log.info(f"活动 '{previous_event_id}' 已下线（到期或被禁用）。")
+            self._active_event = None
+
+        # 校验手动选择的派系是否仍然存在，不存在时才清除
+        if self.selected_faction_info:
+            faction_id = self.selected_faction_info.get("faction_id")
+            if faction_id and not any(
+                f["faction_id"] == faction_id for f in self.get_event_factions()
+            ):
+                log.warning(f"派系 '{faction_id}' 已不存在，清除手动选择的派系。")
+                self.selected_faction_info = None
+
+    def _load_and_check_events(self):
+        """向后兼容的旧名称别名，内部委托给 refresh()。"""
+        self.refresh()
 
     def _load_full_event_config(self, event_id: str) -> Dict[str, Any]:
         """
@@ -128,7 +163,61 @@ class EventService:
 
             config["system_prompt_faction_pack_content"] = loaded_packs
 
+        # --- 加载派系表情配置 (emoji.json) ---
+        config["emoji_mappings"] = self._load_emoji_config(event_id)
+
         return config
+
+    def _load_emoji_config(
+        self, event_id: str
+    ) -> Dict[str, List[Tuple[re.Pattern, List[str]]]]:
+        """
+        加载并编译指定活动的派系表情配置 (emoji.json)，结果按活动 ID 缓存。
+        schema: {"factions": {"<faction_id>": {"<害羞>": ["<:hai_xiu:ID>"], ...}}}
+        """
+        if event_id in self._emoji_mappings_cache:
+            return self._emoji_mappings_cache[event_id]
+
+        mappings: Dict[str, List[Tuple[re.Pattern, List[str]]]] = {}
+        emoji_path = os.path.join(EVENTS_DIR, event_id, "emoji.json")
+        if os.path.exists(emoji_path):
+            try:
+                with open(emoji_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                for faction_id, placeholders in (data.get("factions") or {}).items():
+                    compiled = []
+                    for placeholder, replacements in placeholders.items():
+                        name = placeholder.strip("<>")
+                        if not name or not isinstance(replacements, list) or not replacements:
+                            log.warning(
+                                f"emoji.json 中存在无效的表情占位符配置: "
+                                f"{event_id}/{faction_id}/{placeholder}，已跳过。"
+                            )
+                            continue
+                        compiled.append(
+                            (re.compile(rf"\<{re.escape(name)}\>"), list(replacements))
+                        )
+                    mappings[faction_id] = compiled
+
+                log.info(
+                    f"已加载活动 '{event_id}' 的派系表情配置，共 {len(mappings)} 个派系。"
+                )
+            except (json.JSONDecodeError, OSError) as e:
+                log.error(f"解析活动 '{event_id}' 的 emoji.json 失败: {e}")
+
+        self._emoji_mappings_cache[event_id] = mappings
+        return mappings
+
+    def get_faction_emoji_mappings(
+        self, event_id: str
+    ) -> Dict[str, List[Tuple[re.Pattern, List[str]]]]:
+        """
+        获取指定活动的派系表情映射（来自 emoji.json），
+        结构与 emoji_config.FACTION_EMOJI_MAPPINGS 同构：
+        {faction_id: [(compiled_regex, [替换列表]), ...]}
+        """
+        return self._load_emoji_config(event_id)
 
     def get_active_event(self) -> Optional[Dict[str, Any]]:
         """

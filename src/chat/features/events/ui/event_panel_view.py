@@ -9,6 +9,28 @@ from src.config import CURRENCY_NAME
 
 log = logging.getLogger(__name__)
 
+# --- 活动主题默认值（保持与旧版万圣节面板一致） ---
+_DEFAULT_THEME_EMOJI = "🎃"
+_DEFAULT_THEME_FOOTER = "夜幕已至，选择你的命运吧..."
+_DEFAULT_EMPTY_LEADERBOARD_TEXT = "👻 各大派系仍在暗中积蓄力量...快来打响第一枪！"
+
+
+def _parse_theme_color(color: Any) -> discord.Color:
+    """
+    解析 manifest theme 中的 color 字段，支持 hex 字符串（如 "#E8B04B"）或整数，
+    缺省或解析失败时回退为默认橙色。
+    """
+    if color is None:
+        return discord.Color.orange()
+    if isinstance(color, int):
+        return discord.Color(color)
+    if isinstance(color, str):
+        try:
+            return discord.Color(int(color.lstrip("#"), 16))
+        except ValueError:
+            log.warning(f"无法解析活动主题颜色 '{color}'，回退为默认橙色。")
+    return discord.Color.orange()
+
 
 class EventPanelView(discord.ui.View):
     """
@@ -84,15 +106,20 @@ class EventPanelView(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
     async def create_event_embed(self) -> discord.Embed:
-        """创建活动主界面的 Embed，兼具美观和信息。"""
+        """创建活动主界面的 Embed，兼具美观和信息。主题样式优先读取 manifest 的 theme 字段。"""
         event_name = self.event_data.get("event_name", "特别活动")
         description = self.event_data.get("description", "欢迎来到活动！")
         panel_config = self.event_data.get("entry_panel", {})
+        theme = self.event_data.get("theme") or {}
 
+        theme_emoji = theme.get("emoji", _DEFAULT_THEME_EMOJI)
+        title = (
+            f"{theme_emoji} {event_name} {theme_emoji}" if theme_emoji else event_name
+        )
         embed = discord.Embed(
-            title=f"🎃 {event_name} 🎃",
+            title=title,
             description=f"*{description}*",
-            color=discord.Color.orange(),
+            color=_parse_theme_color(theme.get("color")),
         )
 
         if panel_config.get("thumbnail_url"):
@@ -114,7 +141,9 @@ class EventPanelView(discord.ui.View):
                     f"{rank_emoji} **{faction_name}**: {entry['total_points']} 点贡献\n"
                 )
         else:
-            leaderboard_text = "👻 各大派系仍在暗中积蓄力量...快来打响第一枪！"
+            leaderboard_text = theme.get(
+                "empty_leaderboard_text", _DEFAULT_EMPTY_LEADERBOARD_TEXT
+            )
 
         embed.add_field(name="🏆 实时阵营榜", value=leaderboard_text, inline=False)
 
@@ -126,7 +155,7 @@ class EventPanelView(discord.ui.View):
             inline=False,
         )
 
-        embed.set_footer(text="夜幕已至，选择你的命运吧...")
+        embed.set_footer(text=theme.get("footer", _DEFAULT_THEME_FOOTER))
         return embed
 
     async def back_to_shop_callback(self, interaction: discord.Interaction):
