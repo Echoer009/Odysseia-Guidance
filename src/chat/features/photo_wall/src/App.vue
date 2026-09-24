@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { DiscordSDK } from '@discord/embedded-app-sdk'
+import { DiscordSDK, Common } from '@discord/embedded-app-sdk'
 import { setupChildBridge } from './child-bridge'
 
 interface PhotoEntry {
@@ -81,6 +81,7 @@ const brushSize = ref(0.03)
 const painting = ref(false)
 const savingZones = ref(false)
 const strokeCanvasRef = ref<HTMLCanvasElement | null>(null)
+const blessPanelRef = ref<HTMLElement | null>(null)
 let currentPoints: Pt[] = []
 let bgW = 4
 let bgH = 3
@@ -195,9 +196,23 @@ function redrawStrokes() {
 function canvasPoint(e: PointerEvent): Pt | null {
     const rect = strokeCanvasRef.value?.getBoundingClientRect()
     if (!rect) return null
+    return normPoint(rect, e.clientX, e.clientY)
+}
+
+// 竖屏触屏时 #app 被 CSS 整体旋转 90°，getBoundingClientRect 拿到的是
+// 旋转后的视觉包围盒，必须换算回应用坐标系，否则点击位置会转置错位
+const rotatedMedia = window.matchMedia('(orientation: portrait) and (pointer: coarse)')
+
+function normPoint(rect: DOMRect, clientX: number, clientY: number): Pt {
+    if (rotatedMedia.matches) {
+        return [
+            Math.min(1, Math.max(0, (clientY - rect.top) / rect.height)),
+            Math.min(1, Math.max(0, (rect.right - clientX) / rect.width)),
+        ]
+    }
     return [
-        Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
-        Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+        Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)),
+        Math.min(1, Math.max(0, (clientY - rect.top) / rect.height)),
     ]
 }
 
@@ -307,6 +322,17 @@ async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
 async function setupDiscordSdk() {
     const discordSdk = new DiscordSDK(clientId!)
     await discordSdk.ready()
+    // 原生锁定横屏（DC 官方 API）：输入法/坐标系全部原生横屏；
+    // 不支持的旧客户端会抛错，回退到 CSS 旋转方案
+    try {
+        await discordSdk.commands.setOrientationLockState({
+            lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
+            picture_in_picture_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
+            grid_lock_state: Common.OrientationLockStateTypeObject.UNLOCKED,
+        })
+    } catch (e) {
+        console.warn('setOrientationLockState 不支持，回退 CSS 旋转', e)
+    }
     const { code } = await discordSdk.commands.authorize({
         client_id: discordSdk.clientId,
         response_type: 'code',
@@ -361,6 +387,16 @@ function shortName(n: string) {
     return n && n.length > 8 ? n.slice(0, 7) + '…' : n
 }
 
+// 输入祝福时暂时解除整页旋转：系统输入法是竖屏的，转着打字体验极差
+watch(panelOpen, (open) => {
+    document.getElementById('app')?.classList.toggle('no-rotate', open)
+    if (open) nextTick(() => blessPanelRef.value?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+})
+
+function blessFocus() {
+    blessPanelRef.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
 function beginPlacing() {
     if (!canEdit.value || submitting.value) return
     placing.value = true
@@ -394,8 +430,7 @@ async function onCanvasClick(e: MouseEvent) {
     if (editZones.value) return // 编辑禁区时由画笔指针事件接管
     const rect = canvasRef.value?.getBoundingClientRect()
     if (!rect) return
-    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
+    const [x, y] = normPoint(rect, e.clientX, e.clientY)
 
     if (!placing.value || panelOpen.value) return
     if (!placementAllowed(x, y)) {
@@ -490,7 +525,24 @@ async function main() {
     }
 }
 
-onMounted(main)
+// 键盘弹出时把实际可视高度写进 CSS 变量，弹窗随之抬到键盘上方，
+// 「继续，选择位置」按钮始终可见无需滚动
+function trackKeyboard() {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+        const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+        document.documentElement.style.setProperty('--kb', `${Math.round(kb)}px`)
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    update()
+}
+
+onMounted(() => {
+    trackKeyboard()
+    main()
+})
 
 // 画布尺寸或禁区状态变化时重绘笔划
 watch([canvasBox, editZones, placing], () => nextTick(redrawStrokes))
@@ -588,7 +640,7 @@ watch(strokes, () => nextTick(redrawStrokes), { deep: true })
 
         <!-- 祝福输入面板 -->
         <div v-if="panelOpen" class="overlay" @click.self="cancelPlacing">
-            <div class="panel">
+            <div ref="blessPanelRef" class="panel">
                 <h2 class="panel-title">{{ isEditing ? '调整你的祝福' : '留下一句祝福' }}</h2>
                 <p class="panel-sub">头像与名字来自你的 Discord 账号，只需写下祝福</p>
                 <textarea
@@ -597,6 +649,7 @@ watch(strokes, () => nextTick(redrawStrokes), { deep: true })
                     rows="3"
                     maxlength="100"
                     placeholder="例如：但愿人长久，千里共婵娟"
+                    @focus="blessFocus"
                 ></textarea>
                 <div class="panel-actions">
                     <button class="ghost-btn" @click="cancelPlacing">返回</button>

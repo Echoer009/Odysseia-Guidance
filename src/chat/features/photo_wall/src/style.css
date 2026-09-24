@@ -399,12 +399,51 @@ button {
     display: grid;
     place-items: center;
     padding: 24px;
+    /* 键盘高度感知：弹窗整体抬到键盘上方 */
+    padding-bottom: calc(24px + var(--kb, 0px));
     background: rgba(7, 11, 20, 0.78);
 }
 
 /* 触屏点击不出现蓝色高亮/焦点框 */
 button {
     -webkit-tap-highlight-color: transparent;
+}
+
+/* 手机上弹窗可滚动、靠上排布，键盘弹出时确认按钮不需要滑很远 */
+@media (pointer: coarse) {
+    .overlay {
+        place-items: start center;
+        align-content: start;
+        overflow-y: auto;
+        padding: 14px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .panel {
+        padding: 18px 16px 14px;
+    }
+
+    .panel-title {
+        font-size: 16px;
+    }
+
+    .panel-sub {
+        display: none;
+    }
+
+    .blessing-input {
+        margin-top: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+
+    .panel-actions {
+        margin-top: 12px;
+    }
+
+    .panel-actions button {
+        padding: 9px 18px;
+    }
 }
 
 .sticker:focus,
@@ -415,10 +454,11 @@ button {
 }
 
 .panel {
+    display: flex;
+    flex-direction: column;
     width: min(420px, 100%);
-    max-height: calc(100% - 16px);
+    max-height: 100%;
     padding: 34px 36px 30px;
-    overflow-y: auto;
     background: var(--ink-800);
     border: 1px solid var(--line-soft);
     border-top: 1px solid var(--line);
@@ -441,6 +481,8 @@ button {
 }
 
 .blessing-input {
+    flex: 1;
+    min-height: 64px;
     width: 100%;
     margin-top: 22px;
     padding: 14px 16px;
@@ -469,6 +511,7 @@ button {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
+    flex-shrink: 0;
     margin-top: 28px;
 }
 
@@ -599,6 +642,15 @@ button {
         height: 100vw;
         transform: rotate(90deg);
         transform-origin: top left;
+    }
+
+    /* 打字时解除旋转，回到竖屏原生布局（输入法是竖屏的） */
+    #app.no-rotate {
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        transform: none;
     }
 }
 
