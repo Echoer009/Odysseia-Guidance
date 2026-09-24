@@ -141,8 +141,8 @@ class SimpleShopView(discord.ui.View):
             )
             embeds.append(announcement_embed)
 
-        # 2. 活动推广 Embed
-        if self.shop_data.active_event:
+        # 2. 活动推广 Embed（仅派系对战型活动；合集型活动详情由公告位承载）
+        if self.shop_data.active_event and self.shop_data.active_event.get("factions"):
             # EventPanelView 现在不需要 main_shop_view，因为它通过 interaction.view 访问
             event_panel = EventPanelView(
                 event_data=self.shop_data.active_event, main_shop_view=self
