@@ -8,6 +8,9 @@ echonion.org {
     handle_path /photo/* {
         reverse_proxy photo_wall_web:8006
     }
+    handle /v1/* {
+        reverse_proxy new-api:3000
+    }
     reverse_proxy lobby_web:8002
 }
 
@@ -24,4 +27,14 @@ guidance.echonion.org {
 diary.echonion.org {
     uri strip_prefix /diary
     reverse_proxy diary_web:8003
+}
+
+103.181.176.74.sslip.io {
+    @api path /v1 /v1/*
+    handle @api {
+        reverse_proxy new-api:3000
+    }
+    handle {
+        respond 404
+    }
 }
